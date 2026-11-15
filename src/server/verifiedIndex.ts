@@ -157,6 +157,17 @@ export function keyHits(projectId: string, key: string, datasets: readonly strin
   });
 }
 
+/** The ids of the questions on `datasetId`, newest first: the reference's order (`listTagged`). */
+export function datasetHits(projectId: string, datasetId: string, rowsUnder: RowsUnder): Promise<string[] | null> {
+  return built(projectId, rowsUnder, async (c, org) => {
+    const r = await c.query(
+      'SELECT id FROM verified_keys WHERE org_id = $1 AND project_id = $2 AND ord = 0 AND dataset_id = $3 ORDER BY updated DESC, id',
+      [org, projectId, datasetId],
+    );
+    return r.rows.map((x: { id: string }) => x.id);
+  });
+}
+
 export interface ExampleOrder { asked: readonly string[]; datasetId?: string; first?: readonly string[] }
 
 /**

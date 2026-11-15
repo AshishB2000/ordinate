@@ -38,6 +38,7 @@ import type { AnswerSpec } from './answerSpec';
 import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
 import { sanitizeGuidance, type TurnGuidance } from './turnGuidance';
+import { sanitizeSnapshot, type AnswerSnapshot } from './answerSnapshot';
 import * as recordFs from '../app/recordFs';
 import { ctx, serverDataDir } from '../server/context';
 import * as rows from './copilotRows';
@@ -60,12 +61,14 @@ export interface CopilotTurn {
   text: string;
   createdAt: string;                 // ISO timestamp
   provenance?: CopilotProvenance;    // assistant turns only
-  /**
-   * The CHART this assistant turn answered with (./answerSpec). The spec is
-   * stored, never its figures: the card recomputes them on every render, like a
-   * dashboard's metric cards, so a refreshed dataset moves the answer with it.
-   */
+  /** The CHART this assistant turn answered with (./answerSpec): what Refresh computes again. */
   answer?: AnswerSpec;
+  /**
+   * The card as it was computed, its time and the access it was computed under (./answerSnapshot). SERVER ONLY:
+   * ../ipc/answerSnapshots `turnsForBrowser` drops it, and sends its card only while that access still holds.
+   * Only beside `answer`.
+   */
+  snapshot?: AnswerSnapshot;
   /** "Did you mean": what a REFUSED chart may have meant, each option a complete spec (./answerSuggest). Never beside `answer`. */
   suggest?: AnswerSuggest;
   /** The name an answer run from a "Did you mean" option can offer to remember (./answerSuggest `sanitizeLearn`). Only beside `answer`. */
@@ -117,6 +120,8 @@ export interface NewCopilotTurn {
   text: string;
   provenance?: CopilotProvenance;
   answer?: AnswerSpec;
+  /** Its `firstAsked` becomes the turn's createdAt. */
+  snapshot?: AnswerSnapshot;
   suggest?: AnswerSuggest;
   learn?: AnswerLearn;
   guidance?: TurnGuidance;
@@ -249,6 +254,8 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     const learn = answer ? sanitizeLearn(t.learn, answer) : undefined;
     if (learn) turn.learn = learn;
     if (answer && isValidId(t.savedVisualId)) turn.savedVisualId = t.savedVisualId;
+    const snapshot = answer ? sanitizeSnapshot(t.snapshot) : undefined; // a corrupt one is dropped: the card computes again
+    if (snapshot) turn.snapshot = snapshot;
     const guidance = role === 'assistant' ? sanitizeGuidance(t.guidance) : undefined;
     if (guidance) turn.guidance = guidance;
     const outside = role === 'assistant' && !answer ? sanitizeOutside(t.outside) : undefined;
@@ -487,10 +494,27 @@ function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => P
 // not the one to evict just because you started it first.
 async function writeThreads(projectId: string, threads: CopilotThread[]): Promise<CopilotThread[]> {
   const capped = capThreads(threads);
+  keepSnapshotBudget(capped);
   const file: CopilotFile = { projectId, threads: capped, schemaVersion: 2 };
   await fs.promises.mkdir(path.join(getProjectsBase(), projectId), { recursive: true });
   await writeJsonAtomic(copilotFilePath(projectId), file);
   return capped;
+}
+
+// shortcut: copilot.json is ONE record under the 8 MiB cap, so its answers' snapshots share this budget, the least
+// recently touched given up first (those cards compute again on their next open). The rows have no such cap.
+const FILE_SNAPSHOT_BUDGET = 2 * 1024 * 1024;
+function keepSnapshotBudget(threads: CopilotThread[]): void {
+  let left = FILE_SNAPSHOT_BUDGET;
+  for (let i = threads.length - 1; i >= 0; i--) {
+    for (let j = threads[i].turns.length - 1; j >= 0; j--) {
+      const t = threads[i].turns[j];
+      if (!t.snapshot) continue;
+      const n = JSON.stringify(t.snapshot).length;
+      if (n <= left) left -= n;
+      else delete t.snapshot;
+    }
+  }
 }
 
 // Load ONE thread's turns in order — the most recent thread when no threadId is
@@ -529,6 +553,8 @@ export async function appendTurn(
   if (prov) record.provenance = prov;
   const answer = role === 'assistant' ? sanitizeStoredSpec(turn && turn.answer) : undefined;
   if (answer) record.answer = answer;
+  const snapshot = answer ? sanitizeSnapshot(turn && turn.snapshot) : undefined;
+  if (snapshot) record.snapshot = { ...snapshot, firstAsked: record.createdAt };
   const suggest = role === 'assistant' && !answer ? sanitizeSuggest(turn && turn.suggest) : undefined;
   if (suggest) record.suggest = suggest;
   const learn = answer ? sanitizeLearn(turn && turn.learn, answer) : undefined;
@@ -599,6 +625,29 @@ export async function markSaved(projectId: string, threadId: string, turnId: str
     const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
     if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
     turn.savedVisualId = visualId;
+    await writeThreads(projectId, threads);
+    return true;
+  });
+}
+
+// One assistant turn of the caller's conversation `threadId` (never their latest instead), or null.
+export async function findTurn(projectId: string, threadId: string, turnId: string): Promise<CopilotTurn | null> {
+  if (!isValidId(projectId) || (await threadFor(projectId, threadId))?.id !== threadId) return null;
+  return (await loadHistory(projectId, threadId)).find((t) => t.id === turnId && t.role === 'assistant') ?? null;
+}
+
+// An answer's snapshot replaced (./answerSnapshot; null: none kept), on one of the CALLER's threads, on an assistant
+// turn whose stored answer is still `spec`, the chart it was computed from. False: nothing changed.
+export async function setSnapshot(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, snap: AnswerSnapshot | null): Promise<boolean> {
+  if (!isValidId(projectId)) return false;
+  const kept = snap ? sanitizeSnapshot(snap) : undefined;
+  if (snap && !kept) return false;
+  if (rows.on()) return rows.setSnapshot(projectId, threadId, turnId, spec, kept);
+  return changeThreads(projectId, async (threads) => {
+    const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
+    if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
+    if (kept) turn.snapshot = kept;
+    else delete turn.snapshot;
     await writeThreads(projectId, threads);
     return true;
   });

@@ -33,6 +33,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'analysis:tiles': 'GATE',
   'answer:card': 'GATE',
   'answer:explain': 'GATE',
+  'answer:refresh': 'GATE',
   'answer:rerun': 'GATE',
   'asset:read': 'META',
   'boundary:get': 'META',
@@ -64,7 +65,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'connectors:logos': 'META',
   'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts
   'copilot:deleteThread': 'META',
-  'copilot:history': 'META',
+  'copilot:history': 'REDACT', // a kept answer card is not sent once a column is hidden from the caller since (src/ipc/answerSnapshots.ts `accessPrint`); test-answerSnapshots
   'copilot:newThread': 'META',
   'copilot:renameThread': 'META',
   'copilot:threads': 'META',

@@ -58,8 +58,9 @@ its org too (`src/server/db/inOrg.ts`). Where this departs from the proposed sha
 - **`owner` may be NULL**: a desktop import's conversation, which belongs to nobody on a server today
   and stays that way. It is moved, not dropped.
 - **`body` is text, not jsonb.** It holds the turn's other fields (provenance, answer spec, suggest,
-  learn, savedVisualId, guidance) as the JSON they are today, and is sanitized again on every read
-  by the file store's own `normalizeTurns`. jsonb would refuse a `\u0000` inside any of them.
+  learn, savedVisualId, guidance, and since "Answers keep the figures they had" the card an answer kept,
+  `snapshot`, at most 64 KB: src/ai/answerSnapshot.ts) as the JSON they are today, and is sanitized again
+  on every read by the file store's own `normalizeTurns`. jsonb would refuse a `\u0000` inside any of them.
 - **`seq` is unique within its conversation.** An append numbers its turn highest + 1 while it holds
   the conversation's row `FOR UPDATE`; the index makes a writer that skipped that fail instead of
   numbering two turns alike, and serves the turn list and the 200-turn cap in index order. The move

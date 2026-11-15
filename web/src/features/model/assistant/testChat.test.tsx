@@ -48,7 +48,7 @@ function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'viewer' 
     'verified:list': body({ ok: true, broken: 0, questions }),
     'ai:status': body(READY),
     'copilot:threads': body({ ok: true, threads: [] }),
-    'answer:card': body(CARD),
+    'answer:refresh': body(CARD), // a turn that kept no card is drawn now, and keeps one
     ...routes,
   });
 }

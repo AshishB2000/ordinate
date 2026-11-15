@@ -65,6 +65,7 @@ import { allowedAction, NO_ACTION } from '../ai/suggestedAction';
 import { agentNames, agentRef } from '../ai/agentAccess';
 import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk';
 import { keepReads } from './askMemo';
+import { snapshotFor, turnsForBrowser } from './answerSnapshots';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -443,11 +444,13 @@ export function register() {
 
   // Load ONE conversation's turns (survives reload). threadId is optional — omit it
   // and main resolves the most recent thread, which is what the pre-threads
-  // renderer does by simply not sending the field.
-  ipcMain.handle('copilot:history', async (_e, { projectId, threadId }: any = {}) => {
+  // renderer does by simply not sending the field. Each answer comes with the card
+  // it kept, while the caller's access is what it was computed under (./answerSnapshots):
+  // reopening runs no figure query.
+  ipcMain.handle('copilot:history', keepReads(async (_e, { projectId, threadId }: any = {}) => {
     try {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
-      const turns = await copilot.loadHistory(projectId, tid);
+      const turns = await turnsForBrowser(projectId, await copilot.loadHistory(projectId, tid));
       // Which thread the turns actually CAME from: an absent or stale id resolves
       // to the most recent thread, so the renderer learns what it is now looking
       // at instead of guessing. Its title too: a renamed conversation's name is
@@ -459,7 +462,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to load Copilot history' };
     }
-  });
+  }));
 
   // List a project's conversations for the thread sidebar — newest-touched first,
   // no turn bodies, one page at a time: `next` is the cursor of the page after
@@ -615,7 +618,7 @@ export function register() {
           await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
           const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, outside: outside.outside, guidance: guided.used }, target);
           return {
-            ok: true, answer: outside.text, provenance: facts.provenance, turns: stored || [], threadId: target || null, suggestedAction: NO_ACTION,
+            ok: true, answer: outside.text, provenance: facts.provenance, turns: await turnsForBrowser(projectId, stored || []), threadId: target || null, suggestedAction: NO_ACTION,
             ledger, numberAudit: { ok: true, violations: [] }, guidance: guided.used, agent: await agentRef(projectId, kept),
           };
         }
@@ -646,12 +649,14 @@ export function register() {
         // An agent that fell back says so above the answer (rule 12): the app's line, after the audit of the model's words.
         const text = scope.note ? `${scope.note}\n\n${guarded.text}` : guarded.text;
 
+        const snapshot = built ? await snapshotFor(projectId, built.card, built.spec) : undefined; // the card as computed, kept with the turn
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const stored = await copilot.appendTurn(projectId, {
           role: 'assistant',
           text,
           provenance: built ? built.provenance : facts.provenance,
           answer: built ? built.spec : undefined,
+          snapshot,
           // A refused chart's "Did you mean" (./answers): the app's options, kept so a reload still offers them.
           suggest: answer && !answer.ok ? answer.suggest : undefined,
           guidance: guided.used,
@@ -663,7 +668,7 @@ export function register() {
         // from disk truth as prose only, which is the existing rule.
         return {
           ok: true, answer: text, provenance: facts.provenance,
-          turns: stored || [], threadId: target || null,
+          turns: await turnsForBrowser(projectId, stored || []), threadId: target || null,
           // An answer is fully handled here, so it proposes nothing further.
           suggestedAction: answer ? NO_ACTION : action,
           // App-side records, for tests and the fidelity gate. The renderer shows

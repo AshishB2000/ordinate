@@ -15,6 +15,7 @@
 //   5. NEGATIVE CONTROL: a key changed behind the index's back makes the differential FAIL.
 //   6. A failing index query: the answer comes from the records.
 //   7. A deleted project leaves no rows and no marker.
+//   8. A card's "✓ Verified" reads the questions on its dataset only (`verifiedOn`), the reference's list in its order (in 1).
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-verifiedIndex.js
 
@@ -153,6 +154,11 @@ async function differential(w: World, label: string): Promise<boolean> {
       const ref = await lookup.referenceExamples(w.P, a);
       if (!sameExamples(idx, ref)) { all = false; console.log(`  ${label} examples differ:`, JSON.stringify(a), idx?.ids, ref.ids); }
     }
+    // A card's "✓ Verified" (src/ipc/verifiedMark.ts): the questions on its dataset, newest first.
+    for (const d of [w.orders, w.stores, w.scratch, crypto.randomUUID()]) {
+      const [idx, ref] = [(await lookup.verifiedOn(w.P, d)).map((q) => q.id), (await lookup.referenceOn(w.P, d)).map((q) => q.id)];
+      if (idx.length !== ref.length || idx.some((id, i) => !Object.is(id, ref[i]))) { all = false; console.log(`  ${label} a dataset's questions differ:`, d, idx, ref); }
+    }
     return all;
   });
 }
@@ -180,6 +186,8 @@ async function dbLeg(pool: Pool): Promise<void> {
   const ref = await as(() => reads(() => lookup.referenceHit(P, 'revenue by region last year', null)));
   ok('NEGATIVE CONTROL: the reference lists and reads every one', ref.lists === 1 && ref.files === w.all.length, JSON.stringify({ ...ref, out: null }));
   const viaAsk = await as(() => reads(() => lookup.verifiedHit(P, 'sales by city?', null)));
+  const marks = await as(() => reads(() => lookup.verifiedOn(P, w.orders)));
+  ok('a card\'s mark reads only its dataset\'s questions: nothing listed', marks.lists === 0 && marks.batched === marks.out.length && marks.out.length > 0 && marks.out.length < w.all.length, JSON.stringify({ ...marks, out: marks.out.length }));
   ok('verifiedHit (what copilot:ask calls) takes the index', viaAsk.out?.question === 'Sales by city' && viaAsk.lists === 0 && viaAsk.batched === 1);
 
   // ── 3. on write: found by the next lookup, no rebuild ──────────────────

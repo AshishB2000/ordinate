@@ -19,6 +19,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'analysis:tiles': 'DOOR',
   'answer:card': 'DOOR',
   'answer:explain': 'DOOR',
+  'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced
   'answer:rerun': 'DOOR',
   'asset:read': 'META',
   'boundary:get': 'META',
@@ -50,7 +51,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'connectors:logos': 'META',
   'copilot:ask': 'EXPLICIT',
   'copilot:deleteThread': 'META',
-  'copilot:history': 'META',
+  'copilot:history': 'EXPLICIT', // a kept answer card is sent only while the caller's row lock and hidden columns on its dataset match the ones it was computed under (src/ipc/answerSnapshots.ts); test-answerSnapshots
   'copilot:newThread': 'META',
   'copilot:renameThread': 'META',
   'copilot:threads': 'META',

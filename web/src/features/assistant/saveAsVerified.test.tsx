@@ -43,7 +43,7 @@ function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'viewer' 
     'copilot:history': body({ ok: true, turns: TURNS, threadId: THREAD }),
     'dataset:list': body([{ id: 'd1', name: 'Orders' }]),
     'verified:list': body({ ok: true, broken: 0, questions: [] }),
-    'answer:card': body(CARD),
+    'answer:refresh': body(CARD), // a turn that kept no card is drawn now, and keeps one
     'projects:overview': body([{ id: PID, name: 'Ledger', updatedAt: NOW, lastOpenedAt: null, archived: false, datasets: 0, dashboards: 0, sample: false }]),
     'recent:list': body([]),
     'starred:get': body([]),
@@ -107,7 +107,7 @@ describe('Save as verified', () => {
   });
 
   it('NEGATIVE CONTROL: a card that is already verified shows no button', async () => {
-    serve({ 'answer:card': { body: { ...CARD, verified: { id: 'v1', question: 'Revenue by region', by: 'priya@x', at: NOW } } } });
+    serve({ 'answer:refresh': { body: { ...CARD, verified: { id: 'v1', question: 'Revenue by region', by: 'priya@x', at: NOW } } } });
     const dock = await openDock();
     await within(dock).findByText(/Verified · priya@x/);
     expect(within(dock).getByRole('button', { name: 'Save as visual' })).toBeTruthy();

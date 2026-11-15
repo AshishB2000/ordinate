@@ -49,6 +49,7 @@ const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckd
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
+const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const semFake: typeof import('./semanticFake') = require('./semanticFake');
 
@@ -140,6 +141,14 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     return { metricId };
   };
   const recs = { live: await mk(seed.live), extract: await mk(seed.extract), gone: await mk(seed.gone) };
+  // An answer turn on each dataset, for `answer:refresh`: the caller's own turn, its card computed again through the answer door.
+  const kept: Record<string, { threadId: string; turnId: string }> = {};
+  const keepTurn = (d: string) => context.runInContext(ADMIN, `turn-${d}`, async () => {
+    const t = (await copilot.createThread(P))!;
+    const answer = { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Sales by region' };
+    kept[d] = { threadId: t.id, turnId: (await copilot.appendTurn(P, { role: 'assistant', text: '', answer: answer as never }, t.id))!.at(-1)!.id };
+  });
+  for (const d of [seed.live, seed.extract, seed.gone]) await keepTurn(d);
   ok('a metric can be DEFINED on a Live dataset (a definition is metadata)', /^[0-9a-f-]{36}$/.test(recs.live.metricId), JSON.stringify(recs.live));
 
   // The key check counts one declared column: a key is set on each dataset first. A save never asks the warehouse (D2), so the
@@ -202,6 +211,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     ['answer: explain a tile', 'answer:explain', { projectId: P, tile: { datasetId: d, encoding: enc, filters: [], chartType: 'bar', name: 'Sales by region' } }],
     ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
+    ['answer: refresh', 'answer:refresh', { projectId: P, ...kept[d] }],
     // "Save as visual" rebuilds the card it saves — the warehouse's on a Live dataset — with a top-N and a value filter to resolve.
     ['answer: save as visual', 'answer:saveVisual', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ column: 'region', op: '!=', value: 'R1' }], top: 3 } }],
     // A verified question is drawn once before it is kept (semantic part 3 D7): the warehouse's card on a Live dataset.
@@ -233,7 +243,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
-    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual', 'verified save',
+    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: refresh', 'answer: save as visual', 'verified save',
     'alert test: threshold', 'key check (catalog:checkKey)', 'drill down']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {
@@ -273,6 +283,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     const m = (await (require('../src/analysis/metrics') as typeof import('../src/analysis/metrics')).saveMetric(P, { name: 'Layer revenue', datasetId: d.id, definition: { external: 'revenue', additive: true, layer: 'fake' } }))!;
     return { id: d.id, metricId: m.id };
   });
+  await keepTurn(sem.id);
   await post('catalog:setTable', { projectId: P, datasetId: sem.id, patch: { key: 'region' } });
   for (const [label, channel, payload] of ROW_READERS(sem.id, seed.extract, sem.metricId)) {
     const r = await post(channel, payload);

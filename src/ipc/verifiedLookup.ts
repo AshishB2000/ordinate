@@ -12,11 +12,12 @@
 // records read, the same way on both paths.
 
 import { rowsUnder } from '../app/recordFs';
+import { perAsk } from './askMemo';
 import { logger } from '../app/logger';
 import { orgDb } from '../server/db/inOrg';
 import * as index from '../server/verifiedIndex';
 import * as datasets from '../data/datasets';
-import { readManyTagged, verifiedFromBody } from '../analysis/verifiedQuestions';
+import { listVerified, readManyTagged, verifiedFromBody } from '../analysis/verifiedQuestions';
 import type { Tagged } from '../app/editConflict';
 import { questionKey, type VerifiedQuestion } from '../analysis/verifiedRules';
 import { listTerms } from '../analysis/terms';
@@ -83,6 +84,24 @@ export async function indexedHit(projectId: string, question: string, scope: Rea
 export async function verifiedHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<VerifiedQuestion | null> {
   const r = await indexedOr(() => indexedHit(projectId, question, scope, exclude), async () => ({ q: await referenceHit(projectId, question, scope, exclude) }));
   return r.q;
+}
+
+// ── a card's "✓ Verified": the questions on its dataset ─────────────────
+
+/** REFERENCE: every question of the project, then those on `datasetId`, newest first. */
+export async function referenceOn(projectId: string, datasetId: string): Promise<VerifiedQuestion[]> {
+  return (await listVerified(projectId)).filter((q) => q.spec.datasetId === datasetId);
+}
+
+/**
+ * The questions on `datasetId`, newest first: with a database only those records are read (./verifiedMark). Once per
+ * dataset in a kept call (./askMemo): a reopened conversation marks every card. Its readers never change the list.
+ */
+export function verifiedOn(projectId: string, datasetId: string): Promise<VerifiedQuestion[]> {
+  return perAsk(`verifiedOn\0${projectId}\0${datasetId}`, () => indexedOr(async () => {
+    const ids = await index.datasetHits(projectId, datasetId, rowsUnder);
+    return ids && (await readManyTagged(projectId, ids)).map((t) => t.rec);
+  }, () => referenceOn(projectId, datasetId)));
 }
 
 // ── step 3: the examples ────────────────────────────────────────────────

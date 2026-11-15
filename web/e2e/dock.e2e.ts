@@ -165,11 +165,25 @@ if (!dbUrl) {
     assert.match(href, new RegExp(`^/visuals/${pid}/[0-9a-f-]{36}$`));
     await shots('dock-saved-visual');
     // A reload forgets the page, not the save: the turn records the visual, so the card links to it again.
+    const drawn: string[] = []; // a card drawn again on the server: none, the answer kept its own
+    page.on('request', (r) => {
+      const at = decodeURIComponent(new URL(r.url()).pathname);
+      if (/^\/api\/rpc\/answer:(card|refresh)$/.test(at)) drawn.push(at);
+    });
     await page.reload();
     await settled(page);
     const again = dock.getByTestId('answer-card').last().getByRole('link', { name: 'Open in Visuals' });
     await again.waitFor();
     assert.equal(await again.getAttribute('href'), href, 'after a reload the card links to the same visual');
+    // …and it is the card the answer kept, dated, drawn with no call; Refresh has the server compute it again.
+    const keptLine = dock.getByTestId('answer-card').last().getByTestId('answer-kept');
+    assert.match((await keptLine.textContent()) ?? '', /^As of /);
+    assert.deepEqual(drawn, [], 'reopening draws no card on the server');
+    const refreshed = page.waitForResponse((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/answer:refresh');
+    await dock.getByTestId('answer-card').last().getByRole('button', { name: 'Refresh' }).click();
+    assert.equal((await refreshed).status(), 200);
+    await dock.getByTestId('answer-card').last().getByRole('button', { name: 'Refresh' }).waitFor(); // back from "Refreshing…"
+    await keptLine.waitFor();
 
     // A visual of the project now, made by the server from the card: its title, its type, its encoding.
     const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
