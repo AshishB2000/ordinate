@@ -92,21 +92,23 @@ export async function lockedUpdate<T>(
   });
   if (saved) {
     const tag = contentTag(kind, saved);
-    if (tag !== before) announce({ projectId: at.projectId, type: kind, id: at.id, tag });
+    if (tag !== before) announce({ projectId: at.projectId, type: kind, id: at.id, tag }, saved);
   }
   return saved;
 }
 
 /**
- * To the open tabs of the project's WRITERS — only they can have an editor open.
- * Ids and a hash only. Never throws. Cost: one writers lookup and one push per
- * writer for each save that changed what an editor holds.
+ * To the open tabs of the project's WRITERS — only they can have an editor open — and, for a dashboard or a record on
+ * a dataset, only those who may edit it (shared folders D17). Ids and a hash only. Never throws. Cost: one writers
+ * lookup and one push per writer for each save that changed what an editor holds.
  */
-function announce(s: Saved): void {
+function announce(s: Saved, rec: unknown): void {
   if (serverDataDir() === null) return; // the desktop's self-checks: no tabs
+  const ds = (rec as { datasetId?: unknown } | null)?.datasetId;
+  const anchor = s.type === 'dashboard' ? { kind: 'dashboard' as const, id: s.id } : typeof ds === 'string' && ds ? { kind: 'dataset' as const, id: ds } : undefined;
   try {
     // Lazy, as comments and alerts push: that module reaches the job runner and the pool.
-    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToWriters(s.projectId, SAVED_CHANNEL, s);
+    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToWriters(s.projectId, SAVED_CHANNEL, s, anchor);
   } catch (_) {
     // Outside a request (no org to address): nobody to tell. The 409 is the guarantee.
   }

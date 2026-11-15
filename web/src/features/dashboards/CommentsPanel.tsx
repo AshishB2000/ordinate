@@ -140,7 +140,7 @@ function Thread({ c, projectId, onJump, targetName, mentions }: { c: Comment; pr
             if (editing.trim()) run({ channel: 'comment:edit', input: { projectId: pid, id: c.id, body: editing.trim() } }, () => setEditing(null));
           }}
         >
-          <MentionInput projectId={pid} enabled={mentions.on} label="Edit comment" value={editing} onValueChange={setEditing} rows={3} autoFocus />
+          <MentionInput projectId={pid} target={c.target} enabled={mentions.on} label="Edit comment" value={editing} onValueChange={setEditing} rows={3} autoFocus />
           <div className={s.composerRow}>
             <Button size="sm" variant="ghost" type="button" onClick={() => setEditing(null)}>
               Cancel
@@ -213,6 +213,7 @@ function Thread({ c, projectId, onJump, targetName, mentions }: { c: Comment; pr
         >
           <MentionInput
             projectId={pid}
+            target={c.target}
             enabled={mentions.on}
             label="Reply"
             value={reply}
@@ -330,6 +331,7 @@ export function CommentsDrawer({ projectId, target, dashboard, title: titleIn, o
           )}
           <MentionInput
             projectId={projectId}
+            target={one.id ? one : undefined}
             enabled={mentions.on}
             label="New comment"
             value={draft}

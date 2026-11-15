@@ -3,7 +3,9 @@
 // Ops (team Ops: view; Ops leads: edit), Ops/Returns, Finance (team Finance: view) and HR (no grants, no reach).
 //
 // HR holds the canaries — a dataset `HRCANARY Salaries` with a column `hrcanary_bonus` and HRCANARY_ values, and
-// what follows it: a visual, a metric, a term, a verified question, an alert rule, and a dashboard `HRCANARY board`.
+// what follows it: a visual, a metric, a term, a verified question, an alert rule, a dashboard `HRCANARY board`, a
+// story, a scorecard, a scenario, a report, a comment mentioning opsViewer and padmin (written while HR was open), a trashed
+// chart, version history, a topic member (`hrcanary_bonus`) and the HR metric and scorecard opsViewer follows.
 // Ops holds their twins (`Orders`, the same columns but `ops_bonus`), so every payload asked of HR — which names
 // only ids and the shared columns, never a canary — can be asked of Ops (a control) and of an unknown id
 // (section 3), by swapping ids. Everyone holds `Plain`. An Ops dashboard published and then
@@ -38,7 +40,7 @@ export type Person = (typeof PEOPLE)[number];
 
 export interface Reply { status: number; body: any; text: string } // any: each channel's own reply
 /** One set of records: a dataset and what follows it, and a dashboard showing it. */
-export interface Items { ds: string; visual: string; metric: string; term: string; verified: string; rule: string; board: string }
+export interface Items { ds: string; visual: string; metric: string; term: string; verified: string; rule: string; board: string; story: string; scorecard: string; scenario: string; report: string; comment: string }
 export interface World {
   P: string;
   folders: { ops: string; returns: string; fin: string; hr: string };
@@ -51,8 +53,16 @@ export interface World {
   hrDim: string;
   /** A visual on Orders labelled from hrDim, its custom order naming HR's labels. */
   labelled: string;
+  /** A topic naming HR's dataset (its `hrcanary_bonus` field), metric and term beside Orders. */
+  topic: string;
+  /** HR's version keys (its visual's and report's first), for a payload that names one. */
+  versions: { visual: string; report: string };
+  teams: { ops: string; leads: string; fin: string };
+  uid: Record<Person, string>;
   pool: Pool;
   call(who: Person, channel: string, payload?: unknown): Promise<Reply>;
+  /** One JSON-RPC message to POST /api/mcp with a personal token: the reply as text. */
+  mcp(token: string, body: object): Promise<string>;
   /** Runs `fn` in the org's context as `who` (their org role; the rest is their grants). */
   as<T>(who: Person, fn: () => Promise<T>): Promise<T>;
   /** Writes the folder rows: until then P has no folder besides Everyone. */
@@ -106,6 +116,8 @@ export async function world(label: string): Promise<World | null> {
     }
     return { status: r.statusCode, body, text: r.body };
   };
+  const mcp = async (token: string, body: object): Promise<string> =>
+    (await app.inject({ method: 'POST', url: '/api/mcp', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, payload: JSON.stringify(body), remoteAddress: '127.0.0.1' })).body;
   const must = <T>(what: string, v: T | null | undefined | ''): T => {
     if (!v) throw new Error(`setup: ${what}`);
     return v;
@@ -149,7 +161,19 @@ export async function world(label: string): Promise<World | null> {
     const b = await call('boss', 'analysis:create', { projectId: P, name: `${word} board`, sheets });
     const board = must('board', String(b.body?.id ?? b.body?.analysis?.id ?? ''));
     await call('boss', 'analysis:publish', { projectId: P, id: board });
-    return { ds, visual, metric, term, verified, rule, board };
+    // What follows every dataset it reads (D3), and a comment on the dataset itself.
+    const st = await call('boss', 'story:create', { projectId: P, name: `${word} story`, blocks: [{ kind: 'visual', visualId: visual }, { kind: 'metric', metricId: metric }] });
+    const story = must(`story ${st.text}`, String(st.body?.id ?? ''));
+    const sc = await call('boss', 'scorecard:create', { projectId: P, name: `${word} scorecard`, rows: [{ metricId: metric }] });
+    const scorecard = must(`scorecard ${sc.text}`, String(sc.body?.scorecard?.id ?? ''));
+    const sn = await call('boss', 'scenario:create', { projectId: P, input: { name: `${word} scenario`, baseMetricIds: [metric], drivers: [] } });
+    const scenario = must(`scenario ${sn.text}`, String(sn.body?.scenario?.id ?? ''));
+    const rp = await call('boss', 'reports:create', { projectId: P, analysisId: board });
+    const report = must(`report ${rp.text}`, String(rp.body?.report?.id ?? ''));
+    const mention = word === 'HRCANARY' ? ' for @(opsviewer@acme.test) and @(padmin@acme.test)' : '';
+    const cm = await call('boss', 'comment:add', { projectId: P, target: { kind: 'dataset', id: ds }, body: `${word} comment${mention}` });
+    const comment = must(`comment ${cm.text}`, String((cm.body?.comments as Array<{ id: string; body: string }> | undefined)?.find((c) => c.body.startsWith(`${word} comment`))?.id ?? ''));
+    return { ds, visual, metric, term, verified, rule, board, story, scorecard, scenario, report, comment };
   };
   const hrDs = await save('HRCANARY Salaries', 'hrcanary_bonus', 'HRCANARY');
   const opsDs = await save('Orders', 'ops_bonus', 'p');
@@ -158,6 +182,14 @@ export async function world(label: string): Promise<World | null> {
   const hr = await itemsOn(hrDs, 'HRCANARY');
   const ops = await itemsOn(opsDs, 'Ops');
   await call('boss', 'analysis:update', { projectId: P, id: ops.board, name: 'OPSDRAFTCANARY board' }); // its draft, past its copy
+  // opsViewer follows HR's metric and scorecard while HR is open; a chart on HR goes to the Trash; a topic spans both.
+  for (const [kind, id] of [['metric', hr.metric], ['scorecard', hr.scorecard]]) must(`follow ${kind}`, (await call('opsViewer', 'numbers:follow', { projectId: P, kind, id, on: true })).body?.ok === true);
+  const gone = await call('boss', 'visual:save', { projectId: P, datasetId: hrDs, name: 'HRCANARY trashed chart', chartType: 'bar', encoding: { category: 'dept', values: [{ column: 'salary', aggregation: 'sum' }] } });
+  must('trashed chart', (await call('boss', 'visual:delete', { projectId: P, id: String(gone.body?.visual?.id ?? gone.body?.id ?? '') })).body?.ok === true);
+  const tp = await call('boss', 'topic:save', { projectId: P, topic: { name: 'Mixed topic', datasets: [{ id: hrDs, fields: ['hrcanary_bonus', 'salary'] }, { id: opsDs }], metricIds: [hr.metric, ops.metric], termIds: [hr.term] } });
+  const topic = must(`topic ${tp.text}`, String(tp.body?.topic?.id ?? ''));
+  const firstKey = async (type: string, id: string): Promise<string> => must(`${type} version`, String((await call('boss', 'versions:list', { projectId: P, type, id })).body?.[0]?.key ?? ''));
+  const versions = { visual: await firstKey('visual', hr.visual), report: await firstKey('report', hr.report) };
   // A catalog note and a colour the HR chart dealt: values a project-wide reply could carry.
   must('catalog note', (await call('boss', 'catalog:set', { projectId: P, ref: `dataset:${hrDs}`, patch: { description: 'HRCANARY note', tags: ['HRCANARY tag'] } })).status === 200);
   must('colour', (await call('boss', 'format:colors:assign', { projectId: P, column: 'person', values: ['HRCANARY_0'] })).status === 200);
@@ -187,7 +219,7 @@ export async function world(label: string): Promise<World | null> {
     await place('dashboard', ops.board, folders.ops);
   };
   return {
-    P, folders, hr, ops, plain, opsBoard: ops.board, hrDim, labelled, pool, call, as, plantFolders,
+    P, folders, hr, ops, plain, opsBoard: ops.board, hrDim, labelled, topic, versions, teams: T, uid: uid as Record<Person, string>, pool, call, mcp, as, plantFolders,
     async close() {
       await app.close();
       await pool.end();
@@ -207,7 +239,7 @@ export function refused(r: Reply, reason = 'closed'): boolean {
 // ── Payloads, from each contract's own input schema ──────────────────────────
 
 type ZodLike = { def: any; shape?: Record<string, ZodLike>; safeParse(v: unknown): { success: boolean } }; // any: zod's own definition
-const FAMILY: Array<[RegExp, keyof Items]> = [[/^(analysis|dashboard|subscription|embed|publish|report)/, 'board'], [/^visual/, 'visual'], [/^(metric|numbers)/, 'metric'], [/^term/, 'term'], [/^verified/, 'verified'], [/^alerts/, 'rule']];
+const FAMILY: Array<[RegExp, keyof Items]> = [[/^reports?:/, 'report'], [/^story/, 'story'], [/^scorecard/, 'scorecard'], [/^scenario/, 'scenario'], [/^comment/, 'comment'], [/^(analysis|dashboard|subscription|embed|publish)/, 'board'], [/^visual/, 'visual'], [/^(metric|numbers)/, 'metric'], [/^term/, 'term'], [/^verified/, 'verified'], [/^alerts/, 'rule']];
 
 /** Values by field name, for a channel, on `it` (HR's, Ops's): what a payload for that channel names — ids and shared columns, no canary. */
 export function valuesFor(P: string, it: Items, channel: string): Record<string, unknown> {

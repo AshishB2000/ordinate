@@ -20,6 +20,11 @@
 //   budget     the `mention` bucket holds; the row and the push still go
 //   access     a reader who loses access before the send gets nothing (control:
 //              one who still has access gets all three)
+//   folders    a mention of a project reader who cannot open the target (a dataset
+//              in a folder their teams were not given) is refused in a non-reader's
+//              words, the picker on it leaves them out, Home drops one written
+//              before the move (controls: a member who opens it is named and told;
+//              the same reader is named on a target in Everyone)
 //   names      comment:list's `people`, Home's snippet (labelled before its cut),
 //              a report's discussion page: "@Name" / "@former member"
 //   gone       deleting a comment or a reply deletes its mention rows; a mention
@@ -55,6 +60,7 @@ const smtp: typeof import('../src/server/mail/smtp') = require('../src/server/ma
 const mailEnv: typeof import('../src/server/mail/mailEnv') = require('../src/server/mail/mailEnv');
 const email: typeof import('../src/server/mail/emailChannel') = require('../src/server/mail/emailChannel');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const drafts: typeof import('../src/analysis/publishDashboard') = require('../src/analysis/publishDashboard');
 const notify: typeof import('../src/server/mentions/notify') = require('../src/server/mentions/notify');
 const store: typeof import('../src/server/mentions/store') = require('../src/server/mentions/store');
@@ -271,6 +277,36 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     await b.run(me('ann'), () => notify.notifyMentions({ projectId: pid, commentId: piece2, id: piece2, target: target as never, author: at('ann'), body: `late ${m('bea')} ${m('cal')}` }, [at('bea'), at('cal')]));
     ok('access: a reader who lost access before the send gets nothing', JSON.stringify([pushesTo('cal'), mailsTo('cal'), await rowsOf('cal')]) === JSON.stringify(lc));
     ok('access CONTROL: one who still has access gets the push, the email and the row', pushesTo('bea') === lb[0] + 1 && mailsTo('bea') === lb[1] + 1 && (await rowsOf('bea')) === lb[2] + 1);
+
+    // ── folders: a mention of someone who cannot open the target (docs/team-folders D17) ──
+    // A dataset in a folder only team Fin (bea) is given: ann, a project viewer in no team, cannot open it.
+    const fin: string = (await as('boss').call('admin:createTeam', { name: 'Fin' })).body.id;
+    await as('boss').call('admin:teamMember', { teamId: fin, userId: await b.uid('bea'), member: true });
+    const ds = (await b.run(BOSS, () => datasets.saveDataset(pid, { name: 'Payroll', sourceKind: 'csv', columns: [{ name: 'k', type: 'text' }], rows: [['a']] })))!.id;
+    const onDs = { kind: 'dataset', id: ds };
+    // Written while the dataset is in Everyone, so both may be named; then it moves to the folder.
+    await as('boss').call('comment:add', { projectId: pid, target: onDs, body: `before the move ${m('ann')} ${m('bea')}` });
+    await settle();
+    const folder = randomUUID();
+    await b.pool.query(`INSERT INTO folders (org_id, project_id, id, parent_id, name, created_by) VALUES ($1, $2, $3, NULL, 'Finance', 'boss@acme.test')`, [ORG, pid, folder]);
+    await b.pool.query(`INSERT INTO folder_grants (org_id, project_id, folder_id, team_id, level) VALUES ($1, $2, $3, $4, 'view')`, [ORG, pid, folder, fin]);
+    await b.pool.query(`INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, 'dataset', $3, $4, 'boss@acme.test')`, [ORG, pid, ds.toLowerCase(), folder]);
+    const f0 = [await count(), await rowsOf('ann')];
+    const closedTo = await as('boss').call('comment:add', { projectId: pid, target: onDs, body: `look ${m('ann')}` });
+    ok('folders: a mention of a project reader who cannot open the target is refused, in a non-reader\'s words, nothing stored',
+      closedTo.body.ok === false && closedTo.body.error === msg.notAReader() && JSON.stringify([await count(), await rowsOf('ann')]) === JSON.stringify(f0), show(closedTo.body));
+    const pp = [pushesTo('bea'), await rowsOf('bea')];
+    ok('folders CONTROL: one who can open it (bea, in Fin) is named and told', (await as('boss').call('comment:add', { projectId: pid, target: onDs, body: `look ${m('bea')}` })).body.ok === true
+      && (await until(async () => pushesTo('bea') === pp[0] + 1 && (await rowsOf('bea')) === pp[1] + 1, 5000)));
+    ok('folders CONTROL: ann is still named on a target in Everyone', (await as('boss').call('comment:add', { projectId: pid, target, body: `here ${m('ann')}` })).body.ok === true);
+    await settle();
+    const offered = async (t?: object) => ((await as('boss').call('comment:mentionable', { projectId: pid, q: '', ...(t ? { target: t } : {}) })).body.people as Array<{ email: string }>).map((p) => p.email);
+    const [onIt, anyhere] = [await offered(onDs), await offered()];
+    ok('folders: the picker on the dataset offers bea and not ann; with no target, both', onIt.includes(at('bea')) && !onIt.includes(at('ann')) && anyhere.includes(at('ann')), show([onIt, anyhere]));
+    const homeOf = async (w: string) => ((await as(w).call('mentions:list')).body.items as Array<{ snippet: string }>).some((x) => x.snippet.startsWith('before the move'));
+    ok('folders: Home drops a mention whose target ann can no longer open (bea, who can, keeps it)', !(await homeOf('ann')) && (await homeOf('bea')));
+    await b.pool.query('DELETE FROM folder_items WHERE org_id = $1 AND project_id = $2', [ORG, pid]);
+    await b.pool.query('DELETE FROM folders WHERE org_id = $1 AND project_id = $2', [ORG, pid]);
 
     // ── names ─────────────────────────────────────────────────────────────
     const listed = (await as('bea').call('comment:list', { projectId: pid })).body;

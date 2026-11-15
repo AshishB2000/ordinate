@@ -17,6 +17,9 @@
 // (T6.3): an alert carries the project's figures and a refresh its dataset's
 // name, and an org member with no grant on the project must see neither. A
 // failed refresh's push says which dataset, never why: its error can quote a value or a warehouse table.
+// Not every reader either (shared folders D17): each goes to those who open what
+// it is about — an event's rule's dashboard or dataset, the refreshed dataset —
+// one push per reader with only theirs, so without folders it is today's push.
 //
 // A SUCCESSFUL refresh is announced by refreshAsJob itself (data/refreshEvents,
 // L0.1) — for every door, the tick's included — so the tick's reporter pushes
@@ -39,6 +42,8 @@ import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
 import type { Pool } from 'pg';
 import { readerEmails, writerEmails } from '../authz/index';
+import { openers } from '../authz/folderGate';
+import type { PlacedKind } from '../authz/folders';
 import { audit } from '../authz/audit';
 import { ctx } from '../context';
 import { publish } from '../sse';
@@ -62,20 +67,47 @@ export async function toReaders(pool: Pool, everyone: boolean, projectId: string
   for (const user of await (writersOnly ? writerEmails : readerEmails)(pool, org, projectId)) publish({ org, user }, channel, payload);
 }
 
+export type Anchor = { kind: PlacedKind; id: string };
+
+/**
+ * `items` to each member who opens their anchor at `min` (shared folders D17), ONE push per member carrying only
+ * theirs, in order (`wrap` builds it): with no folder besides Everyone, every reader gets every item, as `toReaders`.
+ */
+export async function toOpeners<T>(pool: Pool, everyone: boolean, projectId: string, channel: string, items: readonly T[], anchorOf: (x: T) => Anchor, wrap: (mine: T[]) => unknown, min: 'view' | 'edit' = 'view'): Promise<void> {
+  const org = ctx().org.id;
+  if (everyone) return publish({ org }, channel, wrap([...items]));
+  const groups = new Map<string, { anchor: Anchor; items: Set<T> }>();
+  for (const x of items) {
+    const a = anchorOf(x);
+    const key = `${a.kind}:${a.id.toLowerCase()}`;
+    (groups.get(key) ?? groups.set(key, { anchor: a, items: new Set() }).get(key)!).items.add(x);
+  }
+  const mine = new Map<string, Set<T>>();
+  for (const g of groups.values()) {
+    for (const user of await openers(pool, org, projectId, g.anchor, min)) {
+      const set = mine.get(user) ?? mine.set(user, new Set()).get(user)!;
+      for (const x of g.items) set.add(x);
+    }
+  }
+  for (const [user, set] of mine) publish({ org, user }, channel, wrap(items.filter((x) => set.has(x))));
+}
+
 /**
  * `toReaders` for a handler outside the tick (an "evaluate now", a comment
  * written — T2.9). Without Postgres there are no grants and the one identity is
- * the dev admin, so the org's tabs are the readers.
+ * the dev admin, so the org's tabs are the readers. `anchor`: only those who open it (D17).
  */
-export function pushToReaders(projectId: string, channel: string, payload: unknown): void {
+export function pushToReaders(projectId: string, channel: string, payload: unknown, anchor?: Anchor): void {
   if (!readersVia) return publish({ org: ctx().org.id }, channel, payload);
-  void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload).catch(() => undefined);
+  const done = anchor ? toOpeners(readersVia.pool, readersVia.devAuth, projectId, channel, [payload], () => anchor, ([p]) => p) : toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload);
+  void done.catch(() => undefined);
 }
 
-/** `pushToReaders` for the members who may WRITE the project — "someone else saved this" (src/app/editConflict.ts). */
-export function pushToWriters(projectId: string, channel: string, payload: unknown): void {
+/** `pushToReaders` for the members who may WRITE the project — "someone else saved this" (src/app/editConflict.ts); `anchor`: who may edit it (D17). */
+export function pushToWriters(projectId: string, channel: string, payload: unknown, anchor?: Anchor): void {
   if (!readersVia) return publish({ org: ctx().org.id }, channel, payload);
-  void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload, true).catch(() => undefined);
+  const done = anchor ? toOpeners(readersVia.pool, readersVia.devAuth, projectId, channel, [payload], () => anchor, ([p]) => p, 'edit') : toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload, true);
+  void done.catch(() => undefined);
 }
 
 /** What a failed scheduled refresh tells every reader's tabs: which dataset, never why (the web reads `ok`, `projectId`, `datasetId`). A driver's error quotes the relation it could not find. */
@@ -86,9 +118,21 @@ export function failedRefreshPayload(o: AutoRefreshOutcome): Omit<AutoRefreshOut
 
 type Push = (projectId: string, channel: string, payload: unknown) => void;
 
-/** The bell's push for fired events: every reader's tabs, and no figure from a dataset with row access rules (docs/row-policy, "Pushes"). Never rejects. */
-export function pushFired(projectId: string, events: AlertEvent[], push: Push = pushToReaders): Promise<void> {
-  return alertStore.pushableEvents(projectId, events).then((ev) => push(projectId, 'alerts:fired', { projectId, events: ev })).catch(() => undefined);
+/** What a fired event is about (D17): its rule's dashboard when it was made from one, else its dataset — alertStore.load's rule. */
+export const eventAnchor = (e: AlertEvent): Anchor => (e.analysisId ? { kind: 'dashboard', id: e.analysisId } : { kind: 'dataset', id: e.datasetId });
+
+/** Each reader's tabs, with the events whose rule they open (D17). */
+async function firedToOpeners(projectId: string, events: AlertEvent[]): Promise<void> {
+  if (!readersVia) return publish({ org: ctx().org.id }, 'alerts:fired', { projectId, events });
+  await toOpeners(readersVia.pool, readersVia.devAuth, projectId, 'alerts:fired', events, eventAnchor, (mine) => ({ projectId, events: mine }));
+}
+
+/**
+ * The bell's push for fired events: each reader's tabs with the events they open, and no figure from a dataset with
+ * row access rules (docs/row-policy, "Pushes"). `push`: a test's own, sent the whole list. Never rejects.
+ */
+export function pushFired(projectId: string, events: AlertEvent[], push?: Push): Promise<void> {
+  return alertStore.pushableEvents(projectId, events).then((ev) => (push ? push(projectId, 'alerts:fired', { projectId, events: ev }) : firedToOpeners(projectId, ev))).catch(() => undefined);
 }
 
 /**
@@ -98,14 +142,14 @@ export function pushFired(projectId: string, events: AlertEvent[], push: Push = 
  * the same sentence and figure (../subscriptions/alertPosts.ts), at most once per event id across paths and pods.
  * `pushed` may be awaited (a request path does, so the bell is right when it answers); `posted` never is.
  */
-export function deliverFired(projectId: string, events: AlertEvent[], push: Push = pushToReaders): { pushed: Promise<void>; posted: Promise<number> } {
+export function deliverFired(projectId: string, events: AlertEvent[], push?: Push): { pushed: Promise<void>; posted: Promise<number> } {
   // Lazy: that module reaches back here (through ./run) for `toReaders`.
   const { postFiredAlerts } = require('../subscriptions/alertPosts') as typeof import('../subscriptions/alertPosts');
   return { pushed: pushFired(projectId, events, push), posted: postFiredAlerts(projectId, events) };
 }
 
 /** A tick's fired alerts, per project, through `deliverFired`. Returns the posts in flight, for a test to wait on. */
-export function deliverTickAlerts(batches: TickAlerts[], push: Push): Promise<number>[] {
+export function deliverTickAlerts(batches: TickAlerts[], push?: Push): Promise<number>[] {
   return batches.map((b) => deliverFired(b.projectId, b.events, push).posted);
 }
 
@@ -117,14 +161,11 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
   if (wired) return;
   wired = true;
   readersVia = { pool, devAuth };
-  const push = (projectId: string, channel: string, payload: unknown): void => {
-    void toReaders(pool, devAuth, projectId, channel, payload).catch(() => undefined);
-  };
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
     // A failure's text can quote a value (row-policy N2) or a warehouse relation (D13): no reader's tab gets it.
-    if (!o.ok) push(o.projectId, 'hub:dataset-refreshed', failedRefreshPayload(o));
+    if (!o.ok) void toOpeners(pool, devAuth, o.projectId, 'hub:dataset-refreshed', [failedRefreshPayload(o)], () => ({ kind: 'dataset', id: o.datasetId }), ([p]) => p).catch(() => undefined);
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
     const { org, user, requestId } = ctx(); // the tick's: the job identity, for this org
@@ -136,7 +177,7 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
     await alertStore.syncWatchRules(projectId);
     return alertStore.evaluateProject(projectId, datasetId);
   });
-  scheduler.onTickAlerts((batches) => deliverTickAlerts(batches, push));
+  scheduler.onTickAlerts((batches) => deliverTickAlerts(batches)); // each event to those who open it (pushFired)
   // ponytail: ipc/pipelines adds this same hook when registered; it is not
   // registered on the server yet — drop this when it is. (ipc/trash is, since
   // T2.2: its own afterTick hook runs the 30-day Trash purge.)

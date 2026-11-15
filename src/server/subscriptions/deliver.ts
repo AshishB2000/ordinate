@@ -128,7 +128,8 @@ async function postToChannel(channelId: string, channelName: string, payload: un
 export type Delivery =
   | { kind: 'test' }
   | { kind: 'dashboard'; projectId: string; analysisId: string; message: MessageModel }
-  | { kind: 'alert'; projectId: string; ruleId: string; message: MessageModel }
+  /** `anchor`: what the rule is about — its dashboard, else its dataset — whose openers alone may get its email (team-folders D17). */
+  | { kind: 'alert'; projectId: string; ruleId: string; message: MessageModel; anchor: { kind: 'dashboard' | 'dataset'; id: string } }
   /** A comment's words to the person it names: no figure (no dataset to refuse), its own budget kind and reason line. */
   | { kind: 'mention'; projectId: string; message: MessageModel; reason: string };
 

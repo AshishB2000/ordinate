@@ -19,6 +19,11 @@
 // started with `void`, so a mention never delays or fails the comment. The list
 // says whether mentions are on, and names the mentioned people who can read the
 // project now (`people`) — no one else.
+//
+// SHARED FOLDERS (docs/team-folders, "What lives where"): a thread follows its
+// target. A caller a folder restricts reads no thread, and writes none, on a
+// target their own stores do not name — answered as for a missing one — and a
+// new mention may name only someone who can open the target (D17).
 
 import { ipcMain } from './bus';
 import { aggWord } from '../data/aggregations';
@@ -33,6 +38,7 @@ import * as stories from '../analysis/stories';
 import type { Comment } from '../app/commentModel';
 import type { Card } from '../analysis/dashboards';
 import { currentReaders, mentionGate, mentionsOn, peopleFor } from '../server/mentions/people';
+import { targetReaders } from '../server/mentions/targetReaders';
 import { forgetPieces } from '../server/mentions/store';
 import { logger } from '../app/logger';
 
@@ -77,10 +83,27 @@ export async function targetNames(projectId: string, list: Comment[]): Promise<R
  * dashboard or card their dashboards — the published copies, which targetNames reads for them — do not have.
  */
 export async function readableComments(projectId: string, list: Comment[]): Promise<Comment[]> {
-  // An editor with Can view on a dashboard's folder reads its published copy too (docs/team-folders D8): the same check.
-  if (!(await analysis.readsPublishedOnly(projectId)) && !(await levelsOf(projectId, 'dashboard'))) return list;
+  // Shared folders: a caller they restrict reads threads only on targets their stores name (an editor with Can view on a
+  // dashboard's folder reads its published copy, D8; a closed dataset, chart, story or dashboard names nothing).
+  const foldered = !!(await levelsOf(projectId, 'dataset'));
+  if (!foldered && !(await analysis.readsPublishedOnly(projectId))) return list;
   const shown = await targetNames(projectId, list);
-  return list.filter((c) => (c.target.kind !== 'analysis' && c.target.kind !== 'card') || !!shown[`${c.target.kind}:${c.target.id}`]);
+  return list.filter((c) => (!foldered && c.target.kind !== 'analysis' && c.target.kind !== 'card') || !!shown[`${c.target.kind}:${c.target.id}`]);
+}
+
+/** A thread the caller cannot read (its target closed to them): its writes answer as for a missing one. No read without folders. */
+async function hiddenThread(projectId: string, cid: string): Promise<boolean> {
+  if (!(await levelsOf(projectId, 'dataset'))) return false;
+  const r = await comments.list(projectId);
+  return !r.ok || !(await readableComments(projectId, r.comments)).some((c) => c.id === cid);
+}
+
+/** A new thread's target the caller's stores do not name (closed to them, or gone) — refused as one with nothing to be about. */
+async function hiddenTarget(projectId: string, target: unknown): Promise<boolean> {
+  const t = target as Comment['target'] | null;
+  if (!(await levelsOf(projectId, 'dataset')) || !t || typeof t !== 'object') return false;
+  const id = String(t.id || '').toLowerCase();
+  return !(await targetNames(projectId, [{ target: { kind: t.kind, id } } as Comment]))[`${t.kind}:${id}`];
 }
 
 async function answer(projectId: string, res: comments.Result): Promise<unknown> {
@@ -108,10 +131,23 @@ function tell(projectId: string, res: comments.Written): void {
   void notifyMentions({ projectId, commentId: c.id, id: res.piece.id, target: c.target, author: comments.author(), body }, res.mentioned);
 }
 
-/** The gate for a write by the caller: the project's readers, read before the lock. */
-async function gateFor(projectId: string): Promise<comments.MentionGate> {
+/**
+ * The gate for a write by the caller: the project's readers, read before the lock — narrowed, when the body names
+ * someone, to those who can open the target (`target`, or thread `cid`'s; shared folders D17).
+ */
+async function gateFor(projectId: string, body: unknown, on: { target?: unknown; cid?: string }): Promise<comments.MentionGate> {
   // No answer from the directory: no one is a reader, so a new mention is refused (fail closed), the rest of the write goes on.
-  return mentionGate(await currentReaders(projectId).catch(() => null), comments.author());
+  const readers = async (): Promise<Set<string> | null> => {
+    if (!String(body ?? '').includes('@(')) return currentReaders(projectId);
+    const target = on.cid ? await threadTarget(projectId, on.cid) : (on.target as Comment['target']);
+    return target && typeof target === 'object' ? targetReaders(projectId, { kind: target.kind, id: String(target.id || '').toLowerCase() }) : currentReaders(projectId);
+  };
+  return mentionGate(await readers().catch(() => null), comments.author());
+}
+
+async function threadTarget(projectId: string, cid: string): Promise<Comment['target'] | null> {
+  const r = await comments.list(projectId);
+  return (r.ok && r.comments.find((c) => c.id === cid)?.target) || null;
 }
 
 export function register(): void {
@@ -132,38 +168,42 @@ export function register(): void {
 
   // ponytail: IPC payloads are JSON envelopes; every field is re-checked in app/comments
   ipcMain.handle('comment:list', async (_e, { projectId }: any = {}) => answer(pid(projectId), await comments.list(pid(projectId))));
+  /** A write on a thread the caller cannot read answers as for a missing one; else `fn`. */
+  const onThread = async (projectId: string, cid: string, fn: () => Promise<unknown>): Promise<unknown> =>
+    (await hiddenThread(projectId, cid)) ? { ok: false, error: comments.THREAD_GONE } : fn();
   ipcMain.handle('comment:add', async (_e, { projectId, target, body }: any = {}) => {
-    const res = await comments.add(pid(projectId), target, body, await gateFor(pid(projectId)));
+    if (await hiddenTarget(pid(projectId), target)) return { ok: false, error: comments.NO_TARGET };
+    const res = await comments.add(pid(projectId), target, body, await gateFor(pid(projectId), body, { target }));
     tell(pid(projectId), res);
     return write(pid(projectId), res);
   });
-  ipcMain.handle('comment:reply', async (_e, { projectId, id: cid, body }: any = {}) => {
-    const res = await comments.reply(pid(projectId), id(cid), body, await gateFor(pid(projectId)));
+  ipcMain.handle('comment:reply', async (_e, { projectId, id: cid, body }: any = {}) => onThread(pid(projectId), id(cid), async () => {
+    const res = await comments.reply(pid(projectId), id(cid), body, await gateFor(pid(projectId), body, { cid: id(cid) }));
     tell(pid(projectId), res);
     return write(pid(projectId), res);
-  });
-  ipcMain.handle('comment:edit', async (_e, { projectId, id: cid, body }: any = {}) => {
-    const res = await comments.edit(pid(projectId), id(cid), body, await gateFor(pid(projectId)));
+  }));
+  ipcMain.handle('comment:edit', async (_e, { projectId, id: cid, body }: any = {}) => onThread(pid(projectId), id(cid), async () => {
+    const res = await comments.edit(pid(projectId), id(cid), body, await gateFor(pid(projectId), body, { cid: id(cid) }));
     tell(pid(projectId), res);
     return write(pid(projectId), res);
-  });
+  }));
   ipcMain.handle('comment:resolve', async (_e, { projectId, id: cid }: any = {}) =>
-    write(pid(projectId), await comments.resolve(pid(projectId), id(cid))));
+    onThread(pid(projectId), id(cid), async () => write(pid(projectId), await comments.resolve(pid(projectId), id(cid)))));
   ipcMain.handle('comment:reopen', async (_e, { projectId, id: cid }: any = {}) =>
-    write(pid(projectId), await comments.reopen(pid(projectId), id(cid))));
+    onThread(pid(projectId), id(cid), async () => write(pid(projectId), await comments.reopen(pid(projectId), id(cid)))));
   // A deleted piece is no one's mention any more: its rows go too (a failure only leaves them for Home to skip).
   const forget = (projectId: string, which: Parameters<typeof forgetPieces>[1]) =>
     forgetPieces(projectId, which).catch((err: unknown) => logger.warn('[mentions] rows of a deleted comment not removed:', err instanceof Error ? err.message : String(err)));
-  ipcMain.handle('comment:delete', async (_e, { projectId, id: cid }: any = {}) => {
+  ipcMain.handle('comment:delete', async (_e, { projectId, id: cid }: any = {}) => onThread(pid(projectId), id(cid), async () => {
     const res = await comments.remove(pid(projectId), id(cid));
     if (res.ok) await forget(pid(projectId), { commentId: id(cid) });
     return write(pid(projectId), res);
-  });
-  ipcMain.handle('comment:deleteReply', async (_e, { projectId, id: cid, replyId }: any = {}) => {
+  }));
+  ipcMain.handle('comment:deleteReply', async (_e, { projectId, id: cid, replyId }: any = {}) => onThread(pid(projectId), id(cid), async () => {
     const res = await comments.removeReply(pid(projectId), id(cid), id(replyId));
     if (res.ok) await forget(pid(projectId), { pieceId: id(replyId) });
     return write(pid(projectId), res);
-  });
+  }));
 
   // ── Settings → General → Collaboration ──
   ipcMain.handle('profile:setDisplayName', async (_e, name: unknown) => {

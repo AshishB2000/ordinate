@@ -14,9 +14,12 @@ export function register(): void {
   ipcMain.handle('topic:get', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const t = await topics.readTopic(projectId, id);
     if (!t) return { ok: false, error: topicNotFound() };
-    // `topic` as stored; `kept`, what readers get (gone members dropped): the drawer starts from it, saying `stale` went.
-    const { topic: kept, stale } = await topics.topicForReaders(projectId, t.rec);
-    return { ok: true, topic: t.rec, tag: t.tag, stale, kept };
+    // `topic` as stored — without the members in folders the caller cannot open, and then with the tag of what was sent,
+    // so a save from it refuses (409) instead of dropping them (docs/team-folders); `kept`, what readers get (gone members
+    // dropped): the drawer starts from it, saying `stale` went.
+    const sent = await topics.withoutClosed(projectId, t.rec);
+    const { topic: kept, stale } = await topics.topicForReaders(projectId, sent);
+    return { ok: true, topic: sent, tag: sent === t.rec ? t.tag : contentTag('topic', sent), stale, kept };
   });
 
   // `base`: the drawer's tag — a stale one is 409 record_changed (../app/editConflict); `tag` is the next base.

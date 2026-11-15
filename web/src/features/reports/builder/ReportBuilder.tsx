@@ -29,6 +29,7 @@ import { SettingsPane } from './SettingsPane';
 import s from './Builder.module.css';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
 import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
+import { useFolderClosed } from '../../live/folderClosed';
 
 const FORMAT_WORD = { pdf: 'PDF', pptx: 'PowerPoint', docx: 'Word' } as const;
 
@@ -243,13 +244,14 @@ export default function ReportBuilderPage() {
   const { projectId = '', reportId = '' } = useParams();
   useAdoptProject(projectId);
   const q = useOpenReport(projectId, reportId);
+  const folder = useFolderClosed(projectId, 'report', reportId, q.isSuccess && !q.data.ok); // nothing: in a folder the caller cannot open? (team-folders D12)
   const { gen, reload } = useReload(['reports:open', projectId, reportId]);
   useDropOnLeave(['reports:open', projectId, reportId]);
-  if (q.isPending) return <PageSkeleton />;
+  if (q.isPending || folder.pending) return <PageSkeleton />;
   if (q.isError || !q.data.ok) {
     return (
       <div className={s.builder}>
-        <ErrorState title="That report could not be opened" message={q.isError ? q.error.message : q.data.ok ? '' : q.data.error} onRetry={() => void q.refetch()} />
+        <ErrorState title="That report could not be opened" message={q.isError ? q.error.message : folder.sentence ?? (q.data.ok ? '' : q.data.error)} onRetry={() => void q.refetch()} />
       </div>
     );
   }

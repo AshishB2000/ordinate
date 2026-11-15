@@ -1,9 +1,10 @@
-// Sections 2–5 and 7 of the folder safety net (docs/team-folders/00-design.md), over the real RPC route as the
-// note's people, in a scratch Postgres (./folderHarness). scripts/test-folderSafetyNet.ts runs them after
-// section 1; not a test file itself (no `test-` prefix).
+// Sections 0, 2–5 and 7 of the folder safety net (docs/team-folders/00-design.md), over the real RPC route as the
+// note's people, in a scratch Postgres (./folderHarness), then 9–10 (./folderNetSends) in the same world.
+// scripts/test-folderSafetyNet.ts runs them after section 1; not a test file itself (no `test-` prefix).
 //
 // 0. INERT: with no folder besides Everyone, every steady reply (the same on two runs) is identical with the
-//    folder checks on and off (src/server/authz/folderGate's seam), for every person.
+//    folder checks on and off (src/server/authz/folderGate's seam), for every person; and projects:overview over 51
+//    projects costs at most one statement more than no folder code (./folderNetCost; NEGATIVE CONTROL: per project).
 // 2. THE SWEEP: every read contract with one payload each (naming HR's ids where it takes one), as opsViewer,
 //    opsLead, opsEditorView, finViewer and ed: no reply carries an HR canary — but those in LATER, each a later
 //    PR's, and each must still leak (so the list only shrinks). D8: no reply to Ops's Can-view callers carries
@@ -21,18 +22,23 @@
 //    policyClosed; every wholeProject() call site is on WHOLE_PROJECT. NEGATIVE CONTROL: without wholeProject
 //    the walk differs.
 //
-// Reach (section 4's `figures_only`, the Finance board) is E5's; sections 6 and 8–11 are E3–E7's.
+// The sweep covers E3's readers too (comments, mentions, stories, scorecards, scenarios, reports, Trash, versions,
+// topics, Recent, Home, the switcher), on HR's planted records. Reach (section 4's `figures_only`, the Finance
+// board) is E5's; sections 6, 8 and 11 are E4, E6 and E7's.
 
 import { randomUUID } from 'crypto';
 import { ok } from './selfcheck';
 import { READS } from './folderReaders';
 import * as H from './folderHarness';
+import { sendSections } from './folderNetSends';
+import * as cost from './folderNetCost';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
 const folders: typeof import('../src/server/authz/folders') = require('../src/server/authz/folders');
+const { mentionsSettled }: typeof import('../src/server/mentions/notify') = require('../src/server/mentions/notify');
 type Contract = import('../src/api/contract').Contract;
 type Person = H.Person;
 
@@ -43,13 +49,11 @@ const LATER: Readonly<Record<string, string>> = {
   'copilot:threads': 'E4 — the same conversation\'s title',
 };
 /** ITEM channels a later PR makes answer as for an unknown id. Edit only to remove a line. */
-const LATER_BY_ID: Readonly<Record<string, string>> = {
-  'comment:add': 'E3 — comments follow the record they are on: a comment on a closed dataset is refused',
-};
+const LATER_BY_ID: Readonly<Record<string, string>> = {};
 /** Read contracts no payload of ids satisfies, and no hand payload asks: org lists and the caller's own state. */
-const UNSWEPT = new Set(['projects:list', 'projects:overview', 'projects:roles', 'recent:list', 'starred:get', 'onboarding:status', 'jobs:list', 'jobs:clear',
+const UNSWEPT = new Set(['projects:list', 'projects:roles', 'onboarding:status', 'jobs:list', 'jobs:clear',
   'prefs:get', 'numbers:follow', 'tokens:list', 'connectors:catalog', 'connectors:logos', 'key:status', 'captureDataset:status', 'formula:functions', 'branding:logo',
-  'calendar:today', 'themes:list', 'ai:status', 'channel:list', 'rebuild:read', 'embed:status', 'mentions:list', 'mentions:seen', 'mentions:prefs',
+  'calendar:today', 'themes:list', 'ai:status', 'channel:list', 'rebuild:read', 'embed:status', 'mentions:seen', 'mentions:prefs',
   'mentions:setPrefs']); // setPrefs: the caller's own email switches (#525 made its input a union the sampler does not reach)
 /** Every wholeProject() call site (D14): a security walk, a uniqueness check, or upkeep that is never a reply. */
 const WHOLE_PROJECT: Readonly<Record<string, number>> = {
@@ -67,9 +71,11 @@ const WHOLE_PROJECT: Readonly<Record<string, number>> = {
 };
 const SPARED: Person[] = ['opsViewer', 'opsLead', 'opsEditorView', 'finViewer', 'ed'];
 /** Channels whose padmin reply must carry a canary: the walk can see what it guards. */
-const CORE = ['an Ops visual labelled from HR', 'dataset:list', 'dataset:columns', 'analysis:gallery', 'analysis:open', 'visual:list', 'visual:get', 'metric:list', 'metric:get', 'term:list', 'term:get', 'verified:list', 'alerts:list', 'grid page', 'answer card', 'format:colors:get', 'catalog:list', 'catalog:get', 'catalog:columns', 'catalog:getTable', 'catalog:tags'];
+const CORE = ['an Ops visual labelled from HR', 'dataset:list', 'dataset:columns', 'analysis:gallery', 'analysis:open', 'visual:list', 'visual:get', 'metric:list', 'metric:get', 'term:list', 'term:get', 'verified:list', 'alerts:list', 'grid page', 'answer card', 'format:colors:get', 'catalog:list', 'catalog:get', 'catalog:columns', 'catalog:getTable', 'catalog:tags',
+  // E3: what follows them — comments and mentions, stories, scorecards, scenarios, reports, Trash, versions, topics, Home and Recent.
+  'comment:list', 'mentions:list', 'story:list', 'story:get', 'scorecard:list', 'scenario:list', 'reports:list', 'reports:get', 'trash:list', 'a visual version', 'a report version', 'topic with HR members', 'recent:list', 'home:overview'];
 
-const HAND = (P: string, it: H.Items, labelled: string): Array<[string, string, unknown]> => {
+const HAND = (P: string, it: H.Items, labelled: string, more: Pick<H.World, 'topic' | 'versions'>): Array<[string, string, unknown]> => {
   const enc = { category: 'dept', values: [{ column: 'salary', aggregation: 'sum' }] };
   return [
     ['chart batch', 'visual:dataBatch', { projectId: P, items: [{ datasetId: it.ds, encoding: enc }] }],
@@ -91,13 +97,21 @@ const HAND = (P: string, it: H.Items, labelled: string): Array<[string, string, 
     ['segments: RFM', 'segments:rfm', { projectId: P, datasetId: it.ds, spec: { id: 'person', date: 'day', amount: 'salary' } }],
     ['snapshot diff', 'snapshots:diff', { projectId: P, datasetId: it.ds, stamp: '2024-01-01T00-00-00-000Z' }],
     ['an Ops visual labelled from HR', 'visual:get', { projectId: P, id: labelled }],
+    ['topic with HR members', 'topic:get', { projectId: P, id: more.topic }],
+    ['visual history', 'versions:list', { projectId: P, type: 'visual', id: it.visual }],
+    ['a visual version', 'versions:get', { projectId: P, type: 'visual', id: it.visual, key: more.versions.visual }],
+    ['a report version', 'versions:get', { projectId: P, type: 'report', id: it.report, key: more.versions.report }],
+    ['recent:list', 'recent:list', { limit: 50 }],
+    ['mentions:list', 'mentions:list', undefined],
+    ['projects:overview', 'projects:overview', undefined],
+    ['starred:get', 'starred:get', undefined],
     ['subscription preview', 'subscription:preview', { projectId: P, draft: { name: 'Weekly', analysisId: it.board, content: { mode: 'all', cardIds: [] }, schedule: { kind: 'weekly', weekday: 1, hour: 9, minute: 0 }, timezone: 'UTC', channelIds: [], message: { title: '', note: '', includeLink: true }, conditions: { skipUnchanged: false, onlyWhenRefreshed: false } } }],
   ];
 };
 
 /** One call per label: the generic sweep (each read contract's schema, filled with `it`'s ids), then the hand payloads. */
-function calls(P: string, it: H.Items, labelled: string): { list: Array<[string, string, unknown]>; unswept: string[] } {
-  const hand = HAND(P, it, labelled);
+function calls(P: string, it: H.Items, labelled: string, more: Pick<H.World, 'topic' | 'versions'>): { list: Array<[string, string, unknown]>; unswept: string[] } {
+  const hand = HAND(P, it, labelled, more);
   const list: Array<[string, string, unknown]> = [];
   const unswept: string[] = [];
   for (const [ch, c] of Object.entries(api.contracts as unknown as Record<string, Contract>)) {
@@ -124,7 +138,8 @@ export async function databaseSections(): Promise<void> {
   const { P, hr, ops } = W;
   const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
   try {
-    const { list, unswept } = calls(P, hr, W.labelled);
+    await mentionsSettled(); // the HR comment's mention row, written as the world was made
+    const { list, unswept } = calls(P, hr, W.labelled, W);
     const newUnswept = unswept.filter((ch) => !UNSWEPT.has(ch));
     ok(`the sweep: ${list.length} calls; every read contract is asked but the ${UNSWEPT.size} UNSWEPT ones (org lists, the caller's own state)`, newUnswept.length === 0, newUnswept.join(' '));
     const sweep = async (who: Person, l = list): Promise<Map<string, H.Reply>> => {
@@ -148,6 +163,10 @@ export async function databaseSections(): Promise<void> {
     const moved = steady.filter((k) => off.get(k) !== on1.get(k));
     ok(`inert: with no folder, ${steady.length} of ${on1.size} replies are steady, and each is the same with the folder checks off`, steady.length > on1.size * 0.8 && moved.length === 0,
       moved.slice(0, 3).map((k) => `${k}: ${around(on1.get(k) ?? '', off.get(k) ?? '')}`).join('\n'));
+
+    // …and in cost: the switcher over 51 projects asks which have a folder once, and reads no tree (./folderNetCost).
+    const spare = await cost.moreProjects(W, 50);
+    await cost.bare(W, spare.length + 1);
 
     await W.plantFolders();
 
@@ -261,6 +280,9 @@ export async function databaseSections(): Promise<void> {
     ok('NEGATIVE CONTROL: without wholeProject, opsViewer\'s walk of HR\'s dashboard differs (it reads as gone)', narrowed !== (await walk('padmin', hr.board)), narrowed.slice(0, 120));
     const sites = wholeProjectSites();
     ok('walks: every wholeProject() call site is on WHOLE_PROJECT, as many times as listed', JSON.stringify(sites) === JSON.stringify(WHOLE_PROJECT), JSON.stringify(sites));
+
+    await sendSections(W); // 9–10 (E3): pushes, sends, mentions, counts; MCP and the model's prompts
+    await cost.foldered(W, spare); // 9: with folders on P and one more, the switcher reads those two trees only
   } finally {
     await W.close();
   }

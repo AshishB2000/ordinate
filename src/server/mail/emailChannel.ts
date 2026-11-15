@@ -8,7 +8,8 @@
 // through a team of this org, who can read the project now (an org admin, or a
 // grantee directly or through a team — authz.readerEmails' predicate), then
 // sign-in's own domain rule and the strict address pattern. A test goes to the
-// calling admin alone; it never runs the query.
+// calling admin alone; it never runs the query. A dashboard's or an alert's send
+// then keeps only those who open what it is about (shared folders D17, `audience`).
 //
 // LIMITS (./budget.ts, per pod): each batch is held against the org's hourly
 // bucket and the project's half of it, per kind, and what the relay did not
@@ -39,6 +40,7 @@ import { buildMime, MailError, type MailErrorKind } from './mime';
 import { hold, projectShare, resetBudgetsForTest, sendBuckets, testBucket, type Bucket, type Hold } from './budget';
 import { MAX_RCPT, sendOnce, useRelay } from './smtp';
 import { logger } from '../../app/logger';
+import { openers } from '../authz/folderGate';
 
 export { TEST_EMAILS_PER_HOUR } from './budget';
 
@@ -107,6 +109,15 @@ export async function recipients(to: EmailTo, projectId: string): Promise<string
   if (!isValidId(projectId)) throw new Error('a send names no project');
   const r = await db().query<{ email: string }>(`SELECT u.email ${PICKED} ${READS_PROJECT} ORDER BY u.email`, [ctx().org.id, to.userIds, to.teamIds, projectId]);
   return deliverable(r.rows.map((x) => x.email));
+}
+
+/** `recipients`, narrowed for a dashboard's or an alert's send to those who can open its dashboard or dataset (D17). */
+export async function audience(to: EmailTo, d: Exclude<Delivery, { kind: 'test' }>): Promise<string[]> {
+  const all = await recipients(to, d.projectId);
+  const anchor = d.kind === 'dashboard' ? { kind: 'dashboard' as const, id: d.analysisId } : d.kind === 'alert' ? d.anchor : null;
+  if (!anchor || !all.length) return all; // a mention's one person was checked against its target already (mentions/notify)
+  const open = new Set(await openers(db(), ctx().org.id, d.projectId, anchor, 'view'));
+  return all.filter((e) => open.has(e));
 }
 
 /** How many people the channel names today (no project asked): what a test reports. */
@@ -233,7 +244,7 @@ export async function sendEmail(c: Channel, d: Delivery, message: MessageModel):
       to = me ? [me] : [];
       body = { ...message, note: [message.note, testEmailBody(c.name, await reach(c.to))].filter(Boolean).join(' ') };
     } else {
-      to = await recipients(c.to, d.projectId);
+      to = await audience(c.to, d);
     }
   } catch (err) {
     log.warn({ channel: c.id, error: err instanceof Error ? err.message : String(err) }, 'email recipients could not be read');

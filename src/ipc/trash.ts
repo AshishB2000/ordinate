@@ -5,6 +5,9 @@ import { readsPublishedOnly } from '../analysis/analysis';
 import { rankOn } from '../server/authz/caller';
 import { ADMIN_RANK } from '../ai/agentAccess';
 import { agentRestoreAdminOnly } from '../ai/agentMessages';
+import { levelsOf } from '../server/authz/folderGate';
+import { opensRecord } from '../app/recordOpen';
+import { readEntry } from '../app/trashStore';
 
 // Trash IPC — list, restore, delete for good, empty. The deletes that PUT
 // things here are the record types' own `*:delete` handlers, each of which now
@@ -20,10 +23,17 @@ export function register(): void {
 
   // A deleted dashboard is a draft now (nothing publishes it): not a viewer's to see (docs/analysis/00-model.md).
   ipcMain.handle('trash:list', async (_e, { projectId }: any = {}) => {
-    const items = await trash.list(String(projectId || ''));
+    const pid = String(projectId || '');
+    const items = await trash.list(pid);
+    const foldered = !!(await levelsOf(pid, 'dataset'));
     const out = [];
-    // Per dashboard: a caller with Can view on its folder is a viewer of it too (docs/team-folders D8).
-    for (const e of items) if (e.type !== 'dashboard' || !(await readsPublishedOnly(String(projectId || ''), String(e.id)))) out.push(e);
+    // Per dashboard: a caller with Can view on its folder is a viewer of it too (docs/team-folders D8). An entry follows
+    // what its record did (its dataset, its dashboard): one in a folder the caller cannot open is not listed.
+    for (const e of items) {
+      if (e.type === 'dashboard' && (await readsPublishedOnly(pid, String(e.id)))) continue;
+      if (foldered && !(await opensRecord(pid, e.type, await readEntry(pid, e.type, e.id)))) continue;
+      out.push(e);
+    }
     return out;
   });
 

@@ -255,10 +255,69 @@ paths that checked Edit first (D18).
   it stores (`visualForCaller`'s `withoutLabels`), to editors too, with the tag of what was sent: a save from that
   copy refuses 409 instead of writing the labels away.
 - **`folder:of`** (`src/api/folders.ts`, the first of E7's file) takes `dataset` and `dashboard`; the dataset and
-  dashboard pages ask it when they load nothing (`web/src/features/live/folderClosed.ts`). Stories and reports join
-  when their stores follow their datasets.
+  dashboard pages ask it when they load nothing (`web/src/features/live/folderClosed.ts`). Stories and reports joined
+  in E3 (below).
 - **The budget**: a restricted viewer's ask runs the resolver once: one transaction, three statements (BEGIN with
   `set_config`, the tree, COMMIT); `test-askBudget`'s viewer moved 114 → 117 queries, the admin cases not at all.
+
+### What follows them, as built (E3)
+
+- **Stories, scorecards, scenarios and reports follow what they name** (`src/analysis/followsOpen.ts`): every id under
+  a visual, metric, dataset, dashboard or scorecard key must be open; a report with a dashboard follows that dashboard
+  alone. Their lists skip, and their reads by id (the tagged reads too) answer `null`, so a guarded save refuses as for
+  a missing one. A named visual or metric the caller's stores do not return counts as closed: a hide, never a leak (a
+  story with a block on a deleted chart is hidden from a caller a folder restricts, from no one else). The first test
+  in a request reads the visual and metric lists once; with no folder, none. `folder:of` takes `story` and `report`,
+  and their pages ask it when they load nothing.
+- **Comments follow their target**: for a caller a folder restricts, `readableComments` keeps a thread only on a target
+  their stores name (every kind, not only dashboards and cards); `comment:add` on another target answers as one with
+  nothing to be about, and a reply, edit, resolve, reopen or delete on a thread they cannot read answers *That comment
+  is no longer here.* — as for missing ones (section 3 holds them `Object.is`-equal).
+- **Mentions** (`src/server/mentions/targetReaders.ts`): who a mention on a target may name and tell is the project's
+  current readers who open its anchors (the dataset; the dashboard, a card's; a visual's dataset; every dataset and
+  dashboard a story shows), through `openers`. Anyone else is refused in a non-reader's words; the picker takes the
+  comment's `target` (optional: without it, the project's readers, as before) and the web sends it; the notice reads
+  them again at send time; `mentions:list` reads threads through `readableComments`, so a row whose target the caller
+  can no longer open is gone for them (marked seen, as an edited-away one is). A body that names no one reads nothing
+  more.
+- **Trash and versions** (`src/app/recordOpen.ts`): `trash:list` lists an entry only when the caller opens what its
+  record follows, read from its Trash copy (a dataset or dashboard keeps its placement there). A record closed to the
+  caller — live in their store, else its Trash copy — has the history of a record with none (`versions:list` `[]`,
+  `versions:get` `null`, `diff` and `figures` *gone*).
+- **Topics**: a member in a closed folder is no member for the caller (`membersOf`) and never counts as stale;
+  `topic:get` sends the record without such members, then with the tag of what was sent, so a save from that copy
+  refuses (409) instead of dropping them (E2's pattern for labels). Navigation, agents and the Assistant's topic
+  context read the same members.
+- **Captures** follow the dataset they were saved into (`history.loadAllSummaries` for a project), so Home, Recent,
+  lineage and the Captures tab leave one out with its dataset.
+- **Home, Recent, lineage and "Your numbers"** are built on the filtered stores and needed no code of their own.
+  `projects:overview` asks once which of the listed projects have a folder besides Everyone (`foldersRestrict`: one
+  round trip, `readOnceInOrg`, none for an admin) and remembers the rest as bare for the request, so only those run the
+  resolver; there it counts the dataset files the caller opens and dashboards as `listAnalyses` lists them (D8). Over
+  51 bare projects that is 516 statements for an editor and 570 for a viewer, against E2's 515 and 773 (callerOn now
+  seeds the rank the resolver asks for); a per-project resolver was 719 for the editor. `starred:get` keeps the caller's own keys
+  — ids, no names — so a pin comes back with access; Home draws Starred from `recent:list`.
+- **Pushes** (`toOpeners`, `src/server/jobs/schedules.ts`): one push per reader carrying only the items whose anchor
+  they open — `alerts:fired` (each event's rule's dashboard, else its dataset), `hub:dataset-refreshed` (success and
+  failure), `hub:record-saved` (Edit-level openers of a dashboard, or of a record's dataset). With no folder besides
+  Everyone every reader gets today's push. E5 adds the dataset's reachers to the refresh push.
+- **Recipients**: an email send's recipients, resolved at send time, keep only `openers` of the subscription's dashboard
+  or the alert's anchor (`emailChannel.audience`; the alert `Delivery` carries its `anchor`). A mention's one recipient
+  was narrowed by its notice. Slack and Teams are unchanged. The dialog's *2 recipients can't open this dashboard* waits
+  for E7, when a folder can exist.
+- **`openers`** (`folderGate.ts`) is `openerEmails` behind the net's seam, so its negative controls can turn the
+  narrowing off. **MCP** needed nothing: every tool reads through the stores (section 10 calls each read-only tool).
+- **The net**: sections 9–10 (`scripts/folderNetSends.ts`), the switcher's cost in sections 0 and 9
+  (`scripts/folderNetCost.ts`: at most one statement over no folder code with no folder anywhere, two tree reads with
+  folders on two of 51 projects; NEGATIVE CONTROL: resolved per project), and the sweep over E3's planted canaries (a comment with
+  mentions, a story, scorecard, scenario and report, a trashed chart, version history, a topic member, followed
+  numbers). `LATER_BY_ID` is empty (`comment:add` left it); `UNSWEPT` lost `recent:list`, `starred:get`,
+  `projects:overview` and `mentions:list`; `WHOLE_PROJECT` is unchanged.
+- **The budget**: no change — `test-askBudget` measures 92 / 88 / 75 / 120 / 112 / 22 queries (home, dataset, agent,
+  restricted viewer, dashboard, reopen) on E2 and on E3 alike.
+- **Left for later**: notebooks and metric trees following their datasets; writes on closed items beyond what a store's
+  `null` refuses — `trash:restore`, `trash:purge` and `trash:empty` on a closed entry, a `topic:save` sent with no
+  `base` (a closed member is refused as gone, but a whole replacement would drop it) — are E6's.
 
 ### Indexes: inside the query
 

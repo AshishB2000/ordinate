@@ -35,7 +35,8 @@ import { deliver } from '../subscriptions/deliver';
 import { orgDb } from '../db/inOrg';
 import { writerEmails } from '../authz/index';
 import { asAudience } from '../../analysis/analysis';
-import { currentReaders, labelFor, peopleIn } from './people';
+import { labelFor, peopleIn } from './people';
+import { targetReaders } from './targetReaders';
 import { recipient, recordMentions } from './store';
 import { logger } from '../../app/logger';
 
@@ -78,7 +79,7 @@ export function notifyMentions(piece: Piece, emails: string[]): Promise<void> {
 
 async function run(piece: Piece, emails: string[]): Promise<void> {
   if (!emails.length || !orgDb()) return;
-  const readers = await currentReaders(piece.projectId);
+  const readers = await targetReaders(piece.projectId, piece.target); // who can open what it is on, now (shared folders D17)
   let still = emails.filter((e) => readers !== null && readers.has(e));
   if (!still.length) return;
   // A dashboard's draft is its editors' (docs/analysis/00-model.md): the notice names what viewers can open, and one

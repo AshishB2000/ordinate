@@ -12,6 +12,7 @@ import * as datasets from '../data/datasets';
 import * as inputStore from '../data/inputTable/store';
 import { safetyBackup } from './backups';
 import * as versionDiff from './versionDiff';
+import { historyClosed } from '../app/recordOpen';
 
 // Version history IPC — list a record's saves, read one, restore one.
 //
@@ -77,7 +78,9 @@ export function register(): void {
   versionDiff.register();
   // A dashboard's history is its draft's: a viewer gets none of it — the replies of a record with no history.
   // Per dashboard: a caller with Can view on its folder reads none either (docs/team-folders D8).
-  const draftHistory = async (projectId: unknown, type: unknown, id: unknown) => type === 'dashboard' && analysis.readsPublishedOnly(String(projectId || ''), String(id || ''));
+  // Shared folders: a record in a folder the caller cannot open has none either (docs/team-folders, "What lives where").
+  const draftHistory = async (projectId: unknown, type: unknown, id: unknown) =>
+    (type === 'dashboard' && (await analysis.readsPublishedOnly(String(projectId || ''), String(id || '')))) || historyClosed(String(projectId || ''), String(type || ''), String(id || ''));
   ipcMain.handle('versions:list', async (_e, { projectId, type, id }: any = {}) =>
     (await draftHistory(projectId, type, id)) ? [] : versions.list(String(projectId || ''), String(type || ''), String(id || '')));
 

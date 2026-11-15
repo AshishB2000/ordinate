@@ -18,6 +18,7 @@ import type { StoryBlock } from './storyModel';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
+import { followsAll, openOrNull } from './followsOpen'; // shared folders: a story follows every chart and metric it shows (docs/team-folders D3)
 
 export interface Story {
   id: string;
@@ -98,6 +99,7 @@ export async function listStories(projectId: string): Promise<StorySummary[]> {
     return [];
   }
   const out: StorySummary[] = [];
+  const opens = await followsAll(projectId); // null: nothing restricts the caller
   for await (const r of records) {
     const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue;
@@ -105,6 +107,7 @@ export async function listStories(projectId: string): Promise<StorySummary[]> {
       const data = JSON.parse(r.text());
       if (!data || typeof data.id !== 'string') continue;
       const s = normalize(data, projectId);
+      if (opens && !(await opens(s))) continue; // in a folder the caller cannot open: not listed
       out.push({ id: s.id, name: s.name, blockCount: s.blocks.length, excerpt: excerptOf(s.blocks), updatedAt: s.updatedAt });
     } catch (err: any) {
       if (err.code !== 'ENOENT') logger.error('[stories] Skipping corrupt or unreadable story:', id, err.message);
@@ -119,7 +122,7 @@ export async function getStory(projectId: string, id: string): Promise<Story | n
   try {
     const data = JSON.parse(await recordFs.readFile(storyFilePath(projectId, id), 'utf8'));
     if (!data || typeof data.id !== 'string') return null;
-    return normalize(data, projectId);
+    return await openOrNull(projectId, normalize(data, projectId)); // closed: as missing (D12)
   } catch (_) {
     return null;
   }
@@ -148,7 +151,7 @@ export async function saveStory(projectId: string, input: { name?: unknown; bloc
 /** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
 export async function readStory(projectId: string, id: string): Promise<Tagged<Story> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('story', storyFilePath(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null));
+  return openOrNull(projectId, await readTagged('story', storyFilePath(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null)), (t) => t.rec); // closed: as missing, so its guarded save refuses too
 }
 
 /** Replace-or-keep, like updateAnalysis: `blocks` is replaced wholesale, never merged. Holds the

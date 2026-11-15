@@ -10,6 +10,7 @@ import * as appPaths from './paths';
 import * as recordFs from './recordFs';
 import { sniffImage } from './projectAssets';
 import { logger } from './logger';
+import { openOnly } from '../server/authz/folderGate';
 
 const isPng = (buf: Buffer): boolean => sniffImage(buf) === 'png';
 
@@ -178,7 +179,8 @@ export async function loadAllSummaries(projectId?: string): Promise<ThreadSummar
     });
   }
   summaries.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return summaries;
+  // A capture follows the dataset it was saved into (docs/team-folders, "What lives where"): closed with it. One without is Everyone's.
+  return projectId ? openOnly(projectId, 'dataset', summaries, (s) => s.datasetId ?? '') : summaries;
 }
 
 // Record which dataset a capture was saved into, so the Captures grid can badge

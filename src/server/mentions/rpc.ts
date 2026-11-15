@@ -12,6 +12,7 @@ import { mailReady } from '../mail/emailChannel';
 import { aDeletedRecord, mentionsOff } from '../mentionMessages';
 import { registry } from '../rpc';
 import { currentReaders, labelFor, mentionsOn, peopleIn } from './people';
+import { targetReaders } from './targetReaders';
 import { emailMe, listMine, markGone, markSeen, setEmailMe, unseenCount } from './store';
 import { askEditors, listAsks, requestEmail, setRequestEmail, type AskReason } from './asks';
 
@@ -24,9 +25,9 @@ const HOME_READ = 60;
 export const HOME_PROJECTS = 10;
 const SNIPPET = 200;
 
-/** Up to PICKER_MAX current readers matching `q`: filtered first (match, not the caller, a token can carry them), then cut. */
-export async function mentionable(projectId: string, q: string): Promise<{ available: boolean; people: Array<{ email: string; name: string }> }> {
-  const readers = await currentReaders(projectId);
+/** Up to PICKER_MAX current readers matching `q` (who can open `target`, when named): filtered first (match, not the caller, a token can carry them), then cut. */
+export async function mentionable(projectId: string, q: string, target?: Pick<Comment['target'], 'kind' | 'id'>): Promise<{ available: boolean; people: Array<{ email: string; name: string }> }> {
+  const readers = target ? await targetReaders(projectId, { kind: target.kind, id: target.id.toLowerCase() }) : await currentReaders(projectId);
   if (!readers) return { available: false, people: [] };
   const me = normalize(ctx().user.email);
   const query = normalize(String(q ?? '').trim()).replace(/^@/, '');
@@ -63,14 +64,15 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
   // One call reads at most HOME_PROJECTS projects' comments (the rows' first ones, unseen first): rows on others wait.
   const projects = new Set<string>();
   const rows = (await listMine(HOME_READ)).filter((r) => projects.has(r.projectId) || (projects.size < HOME_PROJECTS && !!projects.add(r.projectId)));
-  const { targetNames } = require('../../ipc/comments') as typeof import('../../ipc/comments'); // lazy: that module starts the notices
+  const { readableComments, targetNames } = require('../../ipc/comments') as typeof import('../../ipc/comments'); // lazy: that module starts the notices
   const found = new Map<string, { c: Comment; body: string }>(); // project + piece → the comment as it is now
   const gone: Array<{ projectId: string; pieceId: string }> = [];
   const names = new Map<string, Record<string, { name: string; analysisId?: string }>>();
   const readersOf = new Map<string, Set<string> | null>();
   for (const pid of projects) {
     const r = await comments.list(pid).catch(() => null);
-    const list = r && r.ok ? r.comments : [];
+    // A thread on a target the caller can no longer open (shared folders) is gone for them, as a deleted one is.
+    const list = r && r.ok ? await readableComments(pid, r.comments) : [];
     const threads = new Map<string, Comment>();
     for (const row of rows) {
       if (row.projectId !== pid) continue;
@@ -105,7 +107,7 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
 }
 
 export function register(): void {
-  registry.handle('comment:mentionable', async (_e, { projectId, q }: { projectId: string; q: string }) => ({ ok: true as const, ...(await mentionable(projectId, q)) }));
+  registry.handle('comment:mentionable', async (_e, { projectId, q, target }: { projectId: string; q: string; target?: Comment['target'] }) => ({ ok: true as const, ...(await mentionable(projectId, q, target)) }));
   // The bell's two lists of the caller's own: comments that name them, and viewers' asks of a project they edit (./asks).
   registry.handle('mentions:list', async () => ({ ok: true as const, ...(await homeMentions()), asks: mentionsOn() ? await listAsks(HOME_MAX) : [] }));
   registry.handle('mentions:seen', async (_e, input: { projectId: string; id: string } | { through: string }) => {

@@ -17,6 +17,7 @@ import type { Scorecard, ScorePeriod } from './scorecardModel';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
+import { followsAll, openOrNull } from './followsOpen'; // shared folders: it follows every metric it scores (docs/team-folders D3)
 
 export type { Scorecard } from './scorecardModel';
 
@@ -93,13 +94,16 @@ export async function listScorecards(projectId: string): Promise<ScorecardSummar
     return [];
   }
   const out: ScorecardSummary[] = [];
+  const opens = await followsAll(projectId); // null: nothing restricts the caller
   for await (const r of records) {
     const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue;
     try {
       const data = JSON.parse(r.text());
       if (!data || typeof data.id !== 'string') continue;
-      out.push(summaryOf(normalize(data, projectId)));
+      const sc = normalize(data, projectId);
+      if (opens && !(await opens(sc))) continue; // in a folder the caller cannot open: not listed
+      out.push(summaryOf(sc));
     } catch (err: any) {
       if (err.code !== 'ENOENT') logger.error('[scorecards] Skipping corrupt or unreadable scorecard:', id, err.message);
     }
@@ -113,7 +117,7 @@ export async function getScorecard(projectId: string, id: string): Promise<Score
   try {
     const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
     if (!data || typeof data.id !== 'string') return null;
-    return normalize(data, projectId);
+    return await openOrNull(projectId, normalize(data, projectId)); // closed: as missing (D12)
   } catch (_) {
     return null;
   }
@@ -134,7 +138,7 @@ export async function saveScorecard(
 /** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
 export async function readScorecard(projectId: string, id: string): Promise<Tagged<Scorecard> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('scorecard', file(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null));
+  return openOrNull(projectId, await readTagged('scorecard', file(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null)), (t) => t.rec); // closed: as missing, so its guarded save refuses too
 }
 
 /** Replace-or-keep per field; `rows` is replaced wholesale, never merged. Holds the record while it
