@@ -21,6 +21,8 @@ import type { LiveDialectId, LiveParam } from '../../connectors/types';
 
 export type CompileDialectId = LiveDialectId | 'duckdb';
 export type TruncUnit = 'week' | 'month' | 'quarter' | 'year';
+/** A set operation of SQL on Live datasets (docs/live-data/01-live-sql.md): `except`/`intersect` are the DISTINCT forms only. */
+export type SetKind = 'union' | 'unionAll' | 'except' | 'intersect';
 
 /**
  * Exactly the characters JS `String.prototype.trim()` removes — enumerated by
@@ -135,6 +137,24 @@ export interface SqlDialect {
   ceil(x: string): string;
   /** A DATE's year, month, day of month or quarter, as an integer. */
   datePart(d: string, part: DatePart): string;
+  // ── What SQL on Live datasets needs (docs/live-data/01-live-sql.md, ./sql/print.ts) ──
+  /** The set operator between two SELECTs. Required: ClickHouse's bare UNION follows a setting, BigQuery has none. */
+  setOp(kind: SetKind): string;
+  /** One ORDER BY key with an EXPLICIT null order. Required: Postgres puts NULL first in DESC, DuckDB last. */
+  nullOrder(x: string, desc: boolean, nullsFirst: boolean): string;
+}
+
+/** The standard spelling of each set operator (DISTINCT is the default): DuckDB, Postgres, Redshift, Snowflake, Databricks. */
+export const STANDARD_SET_OPS: Readonly<Record<SetKind, string>> = { union: 'UNION', unionAll: 'UNION ALL', except: 'EXCEPT', intersect: 'INTERSECT' };
+
+/** Every mode spelled out: BigQuery (no bare form) and ClickHouse (a bare form follows `union_default_mode`). */
+export const EXPLICIT_SET_OPS: Readonly<Record<SetKind, string>> = {
+  union: 'UNION DISTINCT', unionAll: 'UNION ALL', except: 'EXCEPT DISTINCT', intersect: 'INTERSECT DISTINCT',
+};
+
+/** `x ASC|DESC NULLS FIRST|LAST`: every dialect's ORDER BY, in a statement and in a window. */
+export function orderKey(x: string, desc: boolean, nullsFirst: boolean): string {
+  return `${x} ${desc ? 'DESC' : 'ASC'} NULLS ${nullsFirst ? 'FIRST' : 'LAST'}`;
 }
 
 export type DatePart = 'year' | 'month' | 'day' | 'quarter';

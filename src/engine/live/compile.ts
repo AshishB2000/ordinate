@@ -118,8 +118,8 @@ function badName(name: unknown): boolean {
   return typeof name !== 'string' || name === '' || hasNul(name);
 }
 
-/** The source as a FROM item. A defining query sits on its own lines (rule F3). */
-function fromItem(d: SqlDialect, src: LiveSource): string | LiveRefusal {
+/** The source as a FROM item. A defining query sits on its own lines (rule F3). Also a Live SQL view's FROM (./sql/view.ts). */
+export function fromItem(d: SqlDialect, src: LiveSource): string | LiveRefusal {
   if (!src || typeof src !== 'object') return refuse('badSource');
   if (src.kind === 'table') {
     if (!Array.isArray(src.parts) || src.parts.length === 0) return refuse('badSource');

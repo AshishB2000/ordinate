@@ -12,7 +12,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, doubleQuoted, extractPart, finiteBySubtraction } from '../dialect';
+import { doubleQuoted, extractPart, finiteBySubtraction, JS_WHITESPACE, orderKey, STANDARD_SET_OPS } from '../dialect';
 
 const TEXT = 'VARCHAR(65535)';
 
@@ -56,4 +56,6 @@ export const redshiftDialect: SqlDialect = {
   floor: (x) => `FLOOR(${x})`,
   ceil: (x) => `CEIL(${x})`,
   datePart: extractPart,
+  setOp: (kind) => STANDARD_SET_OPS[kind],
+  nullOrder: orderKey,
 };

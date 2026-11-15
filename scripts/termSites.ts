@@ -109,6 +109,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   // liveBaseOf: a base filter through adaptFilter, which throws on a term (a base list is sanitized to plain filters first)
   'src/engine/live/liveBase.ts': { count: 1, how: 'throws' },
   'src/engine/live/liveSpec.ts': { count: 8, how: 'throws' },
+  'src/engine/live/sql/view.ts': { count: 1, how: 'throws' }, // a Live SQL view adapts the caller's lock through liveSpec's adaptFilter, which throws on a term step
   'src/engine/live/semantic/semanticSpec.ts': { count: 1, how: 'throws' }, // a semantic dataset's KPI filters through liveSpec's adaptFilters, which throws on a term step
   'src/engine/lodResident.ts': { count: 1, how: 'throws' },
   'src/engine/pivotResident.ts': { count: 3, how: 'throws' },

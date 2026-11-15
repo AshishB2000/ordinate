@@ -272,6 +272,79 @@ Each PR carries its tests, classifies what it touches in `scripts/rowPolicyReade
 
 F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs D, F6 needs E8.
 
+### F1 as built
+
+- **Files, one job each** (file-size.md): `src/engine/live/sql/ir.ts` (the IR's types), `shapes.ts`
+  (the allow-list as data: `SHAPES` node shape → key → `read`, `any` or the one default it must hold,
+  `REFUSED` whole constructs by name, `FUNCTIONS` name → IR), `scope.ts` (the typed refusal, name
+  resolution, literal typing), `tree.ts` (`parseSql`, `translate`: statements, CTEs, set operations,
+  SELECT, FROM), `treeExpr.ts` (expressions, windows, subqueries), `view.ts` (a dataset's view CTE),
+  `print.ts` (`printLiveSql`: the IR per dialect). Sentences: `src/engine/liveSqlMessages.ts`, 22
+  catalog keys, translated in the four drafts (their 90% floor would not take 22 nulls).
+- **The IR** (`LiveSqlIR`): `views` (each dataset read once, with the columns read from it — F3's
+  `columnsNamed`), `rels` (CTEs and FROM subqueries, hoisted in dependency order as `q<i>`), `main`, and
+  a display name per output. Expressions are 29 closed node kinds; a column is an index into a FROM
+  instance (`t<n>`), a literal a typed parameter. Kinds are DuckDB's over the view: number, text,
+  date, `ts` (what `date_trunc` returns in DuckDB), `bool` (a condition, never a returned column).
+- **The allow-list:** 31 node shapes and 186 keys classified, 15 shapes refused by name, 26 function
+  names (aggregates, the seven window functions, abs/floor/ceil, date_trunc, date_part, nullif, the
+  four arithmetic operators, LIKE and NOT LIKE). The census over the whole corpus (330 statements)
+  meets every classified key and finds none unclassified.
+- **Narrower than the table above, each a sentence and a refusal-table row:** a text literal met by a
+  number (DuckDB would cast it) and a number met by text; `CAST(number AS VARCHAR)` (DuckDB writes
+  `7.0`); arithmetic on a `date_trunc` result (an INTERVAL in DuckDB); `CROSS JOIN` and comma joins;
+  `SELECT *` over `USING`; HAVING, WHERE or window clauses naming a returned column's alias; a FROM
+  subquery or CTE body reading an enclosing query's column (DuckDB would read it as LATERAL); a frame on
+  a rank or a shift. On **ClickHouse** the printer refuses a correlated subquery and
+  lag/lead/first_value/last_value (`lagInFrame` reads frames and NULL its own way) until F7 pins them.
+- **Choices the note left open:** a view projects only the columns the statement reads, not every
+  visible one, so a calculated field it does not read is never computed (a broken one refuses only the
+  statements that read it) and BigQuery reads less. Relations' outputs are `o<i>_<j>`, the statement's
+  `o_<j>`: a GROUP BY name that is also an input column is the input column on Postgres, so no output
+  alias ever shares a name with one. A GROUP BY item prints as its output alias only when it binds a
+  value (two placeholders never match as one expression), else as the expression. `/` prints as
+  `l / NULLIF(r, 0)`: DuckDB answers Infinity, which a copy's reply reads as empty; Postgres raises.
+  `count(DISTINCT …) OVER`, `IGNORE NULLS` and a lag default are refused keys.
+- **Tests** (`test-liveSqlCompile`, 253 checks, DuckDB's parser in-process): golden statements for the
+  six dialects (`scripts/liveSqlGolden.ts`) and per-dialect fragments (set operators, frames, null
+  order); 35 adversarial literals × 6 forms per dialect print the same text as a sentinel (a NUL is
+  refused by DuckDB's parser); hostile aliases, quoting, comments and case print exactly as the plain
+  statement; a record's hostile column names reach the text only through `ident()`; the refusal
+  table, 131 rows (R-L12 5, R-L14 44, R-L15 17, F1 65), each with a passing twin. CONTROLS: an
+  inlining printer fails the literal suite; a view built without the lock fails the lock-clause check
+  on all six dialects; a key planted in a real tree (on the SELECT node, and deep in an expression) is
+  refused and named by the census; and 37 rows whose guard is a table entry (a function, a defaulted
+  key such as `at_clause` or `sample`) stop being refused for it when that entry is widened.
+
+### F2 as built
+
+- **Files:** `scripts/liveSqlCorpus.ts` (61 statements over the parity fixture as `orders` and an
+  eight-row `targets` with every awkward text; the hostile literals; the refusal table),
+  `scripts/liveSqlDiff.ts` (the reference, the Live run, the comparison), `scripts/liveSqlPins.ts`,
+  `test-liveSqlParity` (DuckDB, every `npm test`), `test-liveSqlParityPostgres` (needs `DATABASE_URL`).
+- **The reference** is phase B's lane itself: `runSql` (compile(), the gate, our Parquet) runs the
+  model's text with each table a named view over the extract projecting as the Live view does, and
+  the lock a byte-equal WHERE. "Today" is the reference engine's own `current_date`, given to the
+  translator (pin P5).
+- **Results:** all 61 statements agree cell for cell, unlocked and locked to East, on DuckDB and on
+  Postgres through the real `amazon-redshift` connector (byte-ordered scratch database, zone UTC+14),
+  and the 35 hostile literals bind and agree on both. Pins, each checked still to exist: P1
+  `date_trunc` is a TIMESTAMP in DuckDB (compared by its day), P2 the bridge drops the reference's
+  leading U+FEFF (Live keeps it), P3 division by zero, P4 `CAST('Alpha' AS DOUBLE)` raises in DuckDB and
+  is NULL on Live, P5 `current_date` binds the given day, R4 −0 (2 cells on Postgres, read as 0).
+- **CONTROLS**, each disagreeing on both engines: the lock dropped from the view (51 of 61 locked
+  statements), `LEFT` printed as `INNER`, the `''` fold removed, the null order flipped; and on Postgres
+  a count with no `toDouble` divides as an integer (353, not 353.33).
+- **What F3 needs from here:** `parseSql` in the caller's org worker; a `SqlEnv` of the caller's
+  vocabulary (folded slug → record id and VISIBLE columns) and today's UTC day (`todayIso` reads the
+  local calendar); per `ir.views[i]`, `liveTarget` and `withLockOf(…, ir.views[i].columns)` into a
+  `ViewInput` (`target.env`, `lock?.steps ?? []`), one connection for all; `printLiveSql` with the
+  target's dialect; rows read positionally, −0 as 0 and a non-finite number as NULL, a date output
+  already ISO text. Worth adding there: DuckDB's binder over empty typed views (DESCRIBE), so a
+  statement DuckDB would not bind (a column neither grouped nor aggregated) is refused before any
+  warehouse reads it. The threat-model rows R-L12…R-L15 go in with F3, when a statement first reaches
+  a warehouse through this path.
+
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15
 (43735675013) skipped both warehouses for want of them. They must be added (on

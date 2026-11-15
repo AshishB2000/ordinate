@@ -9,7 +9,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, extractPart, sqlPercent } from '../dialect';
+import { EXPLICIT_SET_OPS, extractPart, JS_WHITESPACE, orderKey, sqlPercent } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'STRING', number: 'FLOAT64', boolean: 'BOOL', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -54,4 +54,6 @@ export const bigqueryDialect: SqlDialect = {
   floor: (x) => `FLOOR(${x})`,
   ceil: (x) => `CEIL(${x})`,
   datePart: extractPart,
+  setOp: (kind) => EXPLICIT_SET_OPS[kind],
+  nullOrder: orderKey,
 };

@@ -27,6 +27,9 @@ export const COUNT_SITES: Readonly<Record<string, { count: number; how: CountSit
   // Live: compute branches; countd has its own part `d` beside each (engine/live/compileDistinct)
   'src/engine/live/compile.ts': { count: 3, how: 'countOnly' },
   'src/engine/live/shape.ts': { count: 2, how: 'countOnly' }, // the fold, and the series name
+  // SQL on Live datasets: DuckDB's own `count` function in a model's statement; a distinct count is its DISTINCT flag, never countd
+  'src/engine/live/sql/print.ts': { count: 3, how: 'countOnly' },
+  'src/engine/live/sql/treeExpr.ts': { count: 3, how: 'countOnly' },
   // Prepare: the SQL group step bails countd to the fold; the pivot step never takes it (stepsSanitize)
   'src/engine/sqlGen.ts': { count: 1, how: 'countOnly' },
   'src/engine/sqlGenReshape.ts': { count: 1, how: 'countOnly' },

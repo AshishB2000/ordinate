@@ -8,7 +8,8 @@
 // 2. The profile names a base column even past PROFILE_MAX_COLUMNS, and refuses one it does not declare.
 // 3. The inventory, by source scan (the test-liveUsage pattern): every file under src/ that makes a
 //    ParamSink builds statements, and every builder function in one ends its statement through
-//    `whereOf` (the compiler) or `sampledFrom` (the profile) — the two places the base is AND-ed in —
+//    `whereOf` (the compiler), `sampledFrom` (the profile) or `viewBody` (a Live SQL view, sql/view.ts) — the
+//    three places the base is AND-ed in —
 //    or is on the exempt list (it reads no rows, or the base reached it another way). A new builder fails here until
 //    it carries the base.
 //    NEGATIVE CONTROL: a planted builder without either is found.
@@ -111,7 +112,7 @@ function builders(files: Map<string, string>): { finishers: [string, number][]; 
     finishers.push([file, (text.match(/\.finish\(/g) ?? []).length]);
     for (const chunk of text.split(/\n(?=(?:export )?function )/)) {
       const name = /^(?:export )?function (\w+)/.exec(chunk)?.[1];
-      if (name && /\.finish\(/.test(chunk) && !/\b(whereOf|sampledFrom)\(/.test(chunk) && !EXEMPT.has(name) && !EXEMPT.has(`${file}:${name}`)) unbased.push(`${file}:${name}`);
+      if (name && /\.finish\(/.test(chunk) && !/\b(whereOf|sampledFrom|viewBody)\(/.test(chunk) && !EXEMPT.has(name) && !EXEMPT.has(`${file}:${name}`)) unbased.push(`${file}:${name}`);
     }
   }
   return { finishers, unbased };
@@ -120,9 +121,11 @@ const found = builders(srcFiles());
 // compile.ts ×7: PR 01's compileKeyCheck is the seventh. formulaSql.ts (release A, p8-03) makes a ParamSink to check a
 // formula at save and finishes no statement: counted, with 0, so a statement it starts to finish fails here. The
 // Snowflake semantic encoder (c1) finishes one SEMANTIC_VIEW statement.
-ok('inventory: the builders are exactly compile.ts ×7, formulaSql.ts ×0, profileSql.ts ×2 and semantic/snowflake.ts ×1',
-  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1]]), show(found.finishers));
-ok('inventory: every builder function ends its statement through whereOf or sampledFrom', found.unbased.length === 0, show(found.unbased));
+// sql/print.ts ×1: SQL on Live datasets (docs/live-data/01-live-sql.md F1) — each dataset read through its view, whose
+// WHERE holds the base filters (test-liveSqlCompile's golden shapes bind them in every dialect).
+ok('inventory: the builders are exactly compile.ts ×7, formulaSql.ts ×0, profileSql.ts ×2, semantic/snowflake.ts ×1 and sql/print.ts ×1',
+  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1], ['src/engine/live/sql/print.ts', 1]]), show(found.finishers));
+ok('inventory: every builder function ends its statement through whereOf, sampledFrom or viewBody', found.unbased.length === 0, show(found.unbased));
 const planted = new Map([...srcFiles(), ['src/engine/live/keyCheckSql.ts', "const b = new ParamSink();\nexport function compileKeyCheck(): unknown {\n  return b.finish('SELECT 1', d, []);\n}\n"]]);
 const caught = builders(planted);
 ok('inventory NEGATIVE CONTROL: a planted builder is counted, and named as carrying no base',
