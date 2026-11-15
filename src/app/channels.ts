@@ -107,10 +107,15 @@ export function sanitizeTo(raw: unknown): EmailTo {
   return { userIds: ids(o.userIds, MAX_TO_USERS), teamIds: ids(o.teamIds, MAX_TO_TEAMS) };
 }
 
-export async function getChannel(id: string): Promise<Channel | null> {
+export function getChannel(id: string): Promise<Channel | null> {
+  return channelFrom(id, () => recordFs.readFile(file(id), 'utf8'));
+}
+
+/** getChannel over `read` (the record's text): listChannels' come from one listing. */
+async function channelFrom(id: string, read: () => string | Promise<string>): Promise<Channel | null> {
   if (!isValidId(id)) return null;
   try {
-    const d = JSON.parse(await recordFs.readFile(file(id), 'utf8'));
+    const d = JSON.parse(await read());
     if (!d || d.id !== id || (d.kind !== 'slack' && d.kind !== 'teams' && d.kind !== 'email')) return null;
     return {
       id, name: clean(d.name, 80) || d.kind, kind: d.kind, ...(d.kind === 'email' ? { to: sanitizeTo(d.to) } : {}),
@@ -123,15 +128,15 @@ export async function getChannel(id: string): Promise<Channel | null> {
 
 /** The org's channels, by name. */
 export async function listChannels(): Promise<Channel[]> {
-  let names: string[];
+  let records;
   try {
-    names = await recordFs.readdir(dir());
+    records = await recordFs.listRecords(dir());
   } catch {
     return [];
   }
   const out: Channel[] = [];
-  for (const n of names) {
-    const c = n.endsWith('.json') ? await getChannel(n.slice(0, -5)) : null;
+  for await (const r of records) {
+    const c = await channelFrom(r.name.slice(0, -5), r.text);
     if (c) out.push(c);
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));

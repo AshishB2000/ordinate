@@ -403,21 +403,23 @@ export async function readFile(p: string, enc?: BufferEncoding): Promise<string 
     if (body === undefined) throw enoent('open', p);
     out = enc === 'utf8' || enc === 'utf-8' ? body : enc ? Buffer.from(body, 'utf8').toString(enc) : Buffer.from(body, 'utf8');
   }
-  if (overLimit(p, out)) {
-    // Stored before the limits (or by hand): refused, never handed to a parser — its
-    // reader sees an unreadable record, as for a corrupt one (docs/pod-lifecycle §3.5).
-    if (!warnedTooLarge.has(p)) {
-      warnedTooLarge.add(p);
-      logger.warn('[records] a record past its size or value limit was not read:', path.basename(p));
-    }
-    const e: NodeJS.ErrnoException = new Error(recordTooLarge());
-    e.code = 'ERECORDTOOLARGE';
-    throw e;
-  }
+  if (overLimit(p, out)) throw refused(p);
   return out;
 }
 
 const warnedTooLarge = new Set<string>();
+
+/** What reading `p`, past its limits, throws. Stored before the limits (or by hand): refused, never handed to a
+ *  parser — its reader sees an unreadable record, as for a corrupt one (docs/pod-lifecycle §3.5). */
+function refused(p: string): NodeJS.ErrnoException {
+  if (!warnedTooLarge.has(p)) {
+    warnedTooLarge.add(p);
+    logger.warn('[records] a record past its size or value limit was not read:', path.basename(p));
+  }
+  const e: NodeJS.ErrnoException = new Error(recordTooLarge());
+  e.code = 'ERECORDTOOLARGE';
+  return e;
+}
 
 /**
  * Several records for a READ-ONLY caller: one query with the DB, one read each
@@ -451,18 +453,20 @@ export async function readMany(paths: readonly string[]): Promise<Map<string, st
  * The search index's rebuild (src/server/searchIndex.ts): the record rows AT `rel` (a `.json` file) or UNDER it (a
  * directory), in path order, `limit` after `after` and no more bytes than `maxBytes` past the first, read with `c` — the
  * rebuild's own transaction, its RLS org set. A row past its limits comes back with a null body (readFile refuses it),
- * so the caller still pages past it.
+ * so the caller still pages past it. `direct`: only the rows directly in directory `rel` (listRecords).
  */
-export async function rowsUnder(c: PoolClient, org: string, rel: string, after: string, limit: number, maxBytes: number): Promise<Array<{ rel: string; body: string | null }>> {
+export async function rowsUnder(c: PoolClient, org: string, rel: string, after: string, limit: number, maxBytes: number, direct = false): Promise<Array<{ rel: string; body: string | null }>> {
   // A file's range holds the file alone: U+0001 is the least character that can follow its name.
   const [lo, hi] = JSON_NAME.test(rel) ? [rel, rel + '\u0001'] : under(rel);
   // `before`: the bytes of the page's earlier rows, so the first row is always read, however large.
+  // $7: where a direct row's name starts (no '/' after it), or 0 for every row.
   const r = await c.query(
     `SELECT path, body FROM (
        SELECT path, body, sum(octet_length(body)) OVER (ORDER BY path) - octet_length(body) AS before
-       FROM (SELECT path, body FROM records WHERE org_id = $1 AND path >= $2 AND path < $3 AND path > $4 ORDER BY path LIMIT $5) page
+       FROM (SELECT path, body FROM records WHERE org_id = $1 AND path >= $2 AND path < $3 AND path > $4
+             AND ($7::int = 0 OR strpos(substr(path, $7::int), '/') = 0) ORDER BY path LIMIT $5) page
      ) sized WHERE before < $6 ORDER BY path`,
-    [org, lo, hi, after, limit, maxBytes],
+    [org, lo, hi, after, limit, maxBytes, direct ? lo.length + 1 : 0],
   );
   return (r.rows as Array<{ path: string; body: string }>)
     .map((x) => ({ rel: x.path, body: overLimit(path.join(appPaths.userData(), x.path), x.body) ? null : x.body }));
@@ -607,10 +611,10 @@ export async function readdir(p: string, opts?: { withFileTypes: true }): Promis
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
-  // ponytail: one range scan over EVERY row below the directory — projects/ is
-  // the whole org (4.4 ms at 2,000 rows locally) — and a store's list is then
-  // one query per record (N+1). A stored `dir` column + index, and a batch
-  // read for the listers, when an org's size makes Home or a gallery slow.
+  // shortcut: one range scan over EVERY row below the directory — projects/ is
+  // the whole org (4.4 ms at 2,000 rows locally). A stored `dir` column + index
+  // when an org's size makes that slow. A store's list reads its records by
+  // page (listRecords), not one query each.
   const [lo, hi] = under(a.rel);
   const rows = (await sql(
     a,
@@ -626,4 +630,76 @@ export async function readdir(p: string, opts?: { withFileTypes: true }): Promis
   for (const r of rows) if (!out.has(r.name)) out.set(r.name, dirent(r.name, r.file));
   const list = [...out.values()].sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
   return opts ? list : list.map((d) => d.name);
+}
+
+// ── A store's list: readdir, then every record's text, by the page ──────────
+
+/** One file of a listing: its name, and its text as readFile gives it — `text()` throws what readFile threw (ENOENT, ERECORDTOOLARGE, …). */
+export interface ListedRecord {
+  readonly name: string;
+  readonly text: () => string;
+}
+
+const LIST_ROWS = 100;
+const LIST_BYTES = 8 * 1024 * 1024; // a page: under 8 MiB, plus the record that crosses it (a project record's cap is 8 MiB too)
+let perRecord = false;
+
+/** Test hook: listRecords reads one record at a time even with the DB — the N+1 it replaced, kept as its reference. */
+export function _listPerRecord(on: boolean): void { perRecord = on; }
+
+const listed = (name: string, text: string | undefined, err?: unknown): ListedRecord => ({ name, text: () => { if (text === undefined) throw err; return text; } });
+const settled = (name: string, p: string): Promise<ListedRecord> => readFile(p, 'utf8').then((t) => listed(name, t), (e: unknown) => listed(name, undefined, e));
+
+/**
+ * The `.json` files `readdir(dir)` lists (the same names, in its order), each with what `readFile` gives it — a
+ * store's list. With the DB the bodies come a page at a time (100 records or 8 MiB, as rowsUnder) instead of one
+ * transaction each, and only as the caller iterates, so one that keeps a summary holds a page at most. Throws what
+ * readdir throws (ENOENT: no directory). Inside `withReadMemo` the whole listing is read once and its bodies seed
+ * readFile's memo; any write forgets both. Inside `locked`, pages are read on the hold's transaction.
+ */
+export async function listRecords(dir: string): Promise<AsyncIterable<ListedRecord>> {
+  const a = perRecord ? null : at(dir);
+  const names = async (): Promise<string[]> => (await readdir(dir, { withFileTypes: true })).filter((d) => d.isFile() && d.name.endsWith('.json')).map((d) => d.name);
+  if (!a) return byFile(dir, await names());
+  if (!memo.getStore()) return byPage(a, dir, await names());
+  const all = await memoRead('list\0' + keyOf(a), async () => {
+    const out: ListedRecord[] = [];
+    for await (const r of byPage(a, dir, await names())) out.push(r);
+    return out;
+  });
+  return (async function* () { yield* all; })();
+}
+
+async function* byFile(dir: string, names: string[]): AsyncGenerator<ListedRecord> {
+  for (const n of names) yield await settled(n, path.join(dir, n));
+}
+
+async function* byPage(a: At, dir: string, names: string[]): AsyncGenerator<ListedRecord> {
+  const seen = memo.getStore();
+  const lo = a.rel ? a.rel + '/' : '';
+  let page = new Map<string, string | null>();
+  let last = '';
+  let more = true;
+  for (const n of names) {
+    const rel = lo + n;
+    const p = path.join(dir, n);
+    // A disk file readdir merged in, or a record this memo already read: readFile, as before.
+    if (!isRecordPath(rel) || seen?.has('row\0' + a.org + '\0' + rel)) {
+      yield await settled(n, p);
+      continue;
+    }
+    // Pages run in path order, as readdir's names do; a name no page holds (gone since the listing) is read alone.
+    while (more && !page.has(n) && rel > last) {
+      const rows = await inTx(a, (c) => rowsUnder(c, a.org, a.rel, last, LIST_ROWS, LIST_BYTES, true));
+      more = rows.length > 0;
+      if (more) last = rows[rows.length - 1].rel;
+      page = new Map(rows.map((r) => [r.rel.slice(lo.length), r.body]));
+      for (const r of rows) {
+        const k = 'row\0' + a.org + '\0' + r.rel;
+        if (seen && r.body !== null && !seen.has(k)) seen.set(k, Promise.resolve(r.body));
+      }
+    }
+    const body = page.get(n);
+    yield body === undefined ? await settled(n, p) : body === null ? listed(n, undefined, refused(p)) : listed(n, body);
+  }
 }

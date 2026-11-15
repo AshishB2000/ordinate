@@ -119,18 +119,18 @@ const isAgent = (data: any): boolean => !!data && typeof data === 'object' && !A
 /** Every agent of the project, in list order (then by name). A corrupt or unreadable file is skipped and logged. */
 export async function listAgents(projectId: string): Promise<Agent[]> {
   if (!isValidId(projectId)) return [];
-  let names: string[];
+  let records;
   try {
-    names = await recordFs.readdir(dirOf(projectId));
+    records = await recordFs.listRecords(dirOf(projectId));
   } catch (_) {
     return []; // no agents yet
   }
   const out: Agent[] = [];
-  for (const n of names) {
-    const id = n.endsWith('.json') ? n.slice(0, -5) : '';
+  for await (const r of records) {
+    const id = r.name.slice(0, -5);
     if (!isValidId(id)) continue; // a stray or temp file
     try {
-      const data = JSON.parse(await recordFs.readFile(fileOf(projectId, id), 'utf8'));
+      const data = JSON.parse(r.text());
       if (isAgent(data) && String(data.id).toLowerCase() === id.toLowerCase()) out.push(sanitizeAgent(data, projectId));
     } catch (err) {
       if ((err as { code?: string }).code !== 'ENOENT') logger.error('[agents] Skipping corrupt or unreadable agent:', id, (err as Error).message);

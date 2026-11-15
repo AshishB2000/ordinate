@@ -91,19 +91,18 @@ export function excerptOf(blocks: StoryBlock[]): string {
 
 export async function listStories(projectId: string): Promise<StorySummary[]> {
   if (!isValidId(projectId)) return [];
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(storiesDir(projectId), { withFileTypes: true });
+    records = await recordFs.listRecords(storiesDir(projectId));
   } catch (_) {
     return [];
   }
   const out: StorySummary[] = [];
-  for (const d of dirents) {
-    if (!d.isFile() || !d.name.endsWith('.json')) continue;
-    const id = d.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue;
     try {
-      const data = JSON.parse(await recordFs.readFile(storyFilePath(projectId, id), 'utf8'));
+      const data = JSON.parse(r.text());
       if (!data || typeof data.id !== 'string') continue;
       const s = normalize(data, projectId);
       out.push({ id: s.id, name: s.name, blockCount: s.blocks.length, excerpt: excerptOf(s.blocks), updatedAt: s.updatedAt });

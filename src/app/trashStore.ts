@@ -85,9 +85,14 @@ export async function stash(
 // ponytail: the stored record, whatever its type — or null when there is none
 export async function readEntry(projectId: string, type: RecordType, id: string): Promise<any> {
   const file = entryPath(projectId, type, id);
+  return entryFrom(file, () => recordFs.readFile(file, 'utf8'));
+}
+
+/** readEntry over `read` (the record's text): listEntries' come from one listing per type. */
+async function entryFrom(file: string, read: () => string | Promise<string>): Promise<any> { // any: as readEntry
   if (!file) return null;
   try {
-    const data = JSON.parse(await recordFs.readFile(file, 'utf8'));
+    const data = JSON.parse(await read());
     return data && typeof data === 'object' ? data : null;
   } catch (_) {
     return null;
@@ -122,17 +127,16 @@ export async function listEntries(projectId: string): Promise<TrashEntry[]> {
   }
   for (const type of types) {
     if (!isRecordType(type)) continue;
-    let names: string[] = [];
+    let records;
     try {
-      names = await recordFs.readdir(path.join(root, type));
+      records = await recordFs.listRecords(path.join(root, type));
     } catch (_) {
       continue;
     }
-    for (const n of names) {
-      if (!n.endsWith('.json')) continue;
-      const id = n.slice(0, -5);
+    for await (const r of records) {
+      const id = r.name.slice(0, -5);
       if (!isValidId(id)) continue;
-      const rec = await readEntry(projectId, type, id);
+      const rec = await entryFrom(entryPath(projectId, type, id), r.text);
       if (!rec || typeof rec.deletedAt !== 'string') continue;
       const entry: TrashEntry = {
         type, id,

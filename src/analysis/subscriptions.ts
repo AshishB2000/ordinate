@@ -201,10 +201,15 @@ async function write(s: Subscription): Promise<void> {
   await recordFs.rename(tmp, target);
 }
 
-export async function getSubscription(projectId: string, id: string): Promise<Subscription | null> {
+export function getSubscription(projectId: string, id: string): Promise<Subscription | null> {
+  return subscriptionFrom(projectId, id, () => recordFs.readFile(file(projectId, id), 'utf8'));
+}
+
+/** getSubscription over `read` (the record's text): the list's come from one listing. */
+async function subscriptionFrom(projectId: string, id: string, read: () => string | Promise<string>): Promise<Subscription | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
+    const data = JSON.parse(await read());
     return data && typeof data.id === 'string' && data.id ? normalize(data, projectId) : null;
   } catch {
     return null; // missing or corrupt: skipped, never fatal
@@ -214,16 +219,15 @@ export async function getSubscription(projectId: string, id: string): Promise<Su
 /** A project's subscriptions, newest first. */
 export async function listSubscriptions(projectId: string): Promise<Subscription[]> {
   if (!isValidId(projectId)) return [];
-  let names: recordFs.Dirent[];
+  let records;
   try {
-    names = await recordFs.readdir(dir(projectId), { withFileTypes: true });
+    records = await recordFs.listRecords(dir(projectId));
   } catch {
     return []; // no subscriptions yet
   }
   const out: Subscription[] = [];
-  for (const d of names) {
-    if (!d.isFile() || !d.name.endsWith('.json')) continue;
-    const s = await getSubscription(projectId, d.name.slice(0, -5));
+  for await (const r of records) {
+    const s = await subscriptionFrom(projectId, r.name.slice(0, -5), r.text);
     if (s) out.push(s);
   }
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

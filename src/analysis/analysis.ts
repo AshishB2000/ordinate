@@ -295,20 +295,19 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
   if (!isValidId(projectId)) return [];
   const publishedOnly = await readsPublishedOnly(projectId);
   const dir = analysesDir(projectId);
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(dir, { withFileTypes: true });
+    records = await recordFs.listRecords(dir);
   } catch (_) {
     return []; // no analyses dir yet
   }
 
   const out: AnalysisSummary[] = [];
-  for (const dirent of dirents) {
-    if (!dirent.isFile() || !dirent.name.endsWith('.json')) continue;
-    const id = dirent.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await recordFs.readFile(analysisFilePath(projectId, id), 'utf8');
+      const raw = r.text();
       const a = summaryOf(projectId, await migrateReady(projectId, id, JSON.parse(raw)), publishedOnly);
       if (a) out.push(a);
     } catch (err: any) {

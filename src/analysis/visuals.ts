@@ -526,20 +526,19 @@ export function summaryOf(projectId: string, raw: string): VisualSummary | null 
 export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
   if (!isValidId(projectId)) return [];
   const dir = visualsDir(projectId);
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(dir, { withFileTypes: true });
+    records = await recordFs.listRecords(dir);
   } catch (_) {
     return []; // no visuals dir yet
   }
 
   const out: VisualSummary[] = [];
-  for (const dirent of dirents) {
-    if (!dirent.isFile() || !dirent.name.endsWith('.json')) continue;
-    const id = dirent.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const v = summaryOf(projectId, await recordFs.readFile(visualFilePath(projectId, id), 'utf8'));
+      const v = summaryOf(projectId, r.text());
       if (v) out.push(v);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {

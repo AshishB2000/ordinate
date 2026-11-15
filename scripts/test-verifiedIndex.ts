@@ -113,20 +113,25 @@ async function world(): Promise<World> {
   });
 }
 
-/** Count verified-record reads while `fn` runs: listings, single reads and paths in batch reads. */
+/** Count verified-record reads while `fn` runs: listings, single reads (or records read by a listing's page) and paths in batch reads. */
 async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; lists: number; files: number; batched: number }> {
-  const [list, readFile, readMany] = [store.listTagged, recordFs.readFile, recordFs.readMany];
+  const [list, readFile, readMany, listRecords] = [store.listTagged, recordFs.readFile, recordFs.readMany, recordFs.listRecords];
   let lists = 0, files = 0, batched = 0;
   const verifiedPath = (p: unknown) => typeof p === 'string' && /[\\/]verified[\\/]/.test(p);
   (store as { listTagged: unknown }).listTagged = (p: string) => { lists++; return list(p); };
   (recordFs as { readFile: unknown }).readFile = (p: string, enc?: BufferEncoding) => { if (verifiedPath(p)) files++; return (readFile as (p: string, e?: BufferEncoding) => Promise<unknown>)(p, enc); };
   (recordFs as { readMany: unknown }).readMany = (ps: readonly string[]) => { batched += ps.filter(verifiedPath).length; return readMany(ps); };
+  (recordFs as { listRecords: unknown }).listRecords = async (dir: string) => {
+    const it = await listRecords(dir);
+    return (async function* () { for await (const r of it) { if (verifiedPath(path.join(dir, r.name))) files++; yield r; } })();
+  };
   try {
     return { out: await fn(), lists, files, batched };
   } finally {
     (store as { listTagged: unknown }).listTagged = list;
     (recordFs as { readFile: unknown }).readFile = readFile;
     (recordFs as { readMany: unknown }).readMany = readMany;
+    (recordFs as { listRecords: unknown }).listRecords = listRecords;
   }
 }
 

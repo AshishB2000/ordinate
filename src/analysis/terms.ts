@@ -126,18 +126,18 @@ export function toSummary(t: Term): TermSummary {
 /** Every term of the project as full records, by name (locale-aware). Corrupt files are skipped. */
 export async function listFullTerms(projectId: string): Promise<Term[]> {
   if (!isValidId(projectId)) return [];
-  let names: string[];
+  let records;
   try {
-    names = await recordFs.readdir(termsDir(projectId));
+    records = await recordFs.listRecords(termsDir(projectId));
   } catch (_) {
     return []; // no terms yet
   }
   const out: Term[] = [];
-  for (const n of names) {
-    const id = n.endsWith('.json') ? n.slice(0, -5) : '';
+  for await (const r of records) {
+    const id = r.name.slice(0, -5);
     if (!isValidId(id)) continue; // a stray or temp file
     try {
-      const data = JSON.parse(await recordFs.readFile(termFile(projectId, id), 'utf8'));
+      const data = JSON.parse(r.text());
       if (isValidTerm(data)) out.push(normalize(data, projectId));
     } catch (err) {
       if ((err as { code?: string }).code !== 'ENOENT') logger.error('[terms] Skipping corrupt or unreadable term:', id, (err as Error).message);

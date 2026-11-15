@@ -92,9 +92,9 @@ function sanitize(raw: unknown, projectId: string, runId: string): StoredRun | n
   return r as StoredRun;
 }
 
-async function load(p: string, projectId: string, runId: string): Promise<StoredRun | null> {
+async function load(p: string, projectId: string, runId: string, read = (): string | Promise<string> => recordFs.readFile(p, 'utf8')): Promise<StoredRun | null> {
   try {
-    return sanitize(JSON.parse(await recordFs.readFile(p, 'utf8')), projectId, runId);
+    return sanitize(JSON.parse(await read()), projectId, runId);
   } catch {
     return null; // missing or corrupt: the run has ended
   }
@@ -225,17 +225,17 @@ export async function prune(scope?: { projectId: string; user: string }): Promis
   const now = Date.now();
   const found: Array<{ p: string; projectId: string; runId: string; by: string; updatedAt: string; leased: boolean }> = [];
   for (const projectId of pids) {
-    let names: string[] = [];
+    let records;
     try {
-      names = await recordFs.readdir(path.join(projectDir(projectId), 'plans'));
+      records = await recordFs.listRecords(path.join(projectDir(projectId), 'plans'));
     } catch {
       continue;
     }
-    for (const name of names) {
-      const runId = name.replace(/\.json$/, '');
-      if (!name.endsWith('.json') || !isValidId(runId)) continue;
+    for await (const r of records) {
+      const runId = r.name.slice(0, -5);
+      if (!isValidId(runId)) continue;
       const p = runPath(projectId, runId);
-      const run = await load(p, projectId, runId);
+      const run = await load(p, projectId, runId, r.text);
       if (!run || (scope && run.by !== scope.user)) continue;
       found.push({ p, projectId, runId, by: run.by, updatedAt: run.updatedAt, leased: !!run.lease && run.lease.until >= now });
     }
