@@ -7,6 +7,9 @@
 // stored one (asked, or through MCP answer_verified_question) says the kind can't be shown here yet, never "a newer
 // version of Ordinate". NEGATIVE CONTROL: the same question on the base's column saves and is answered.
 //
+// The match stays inside the open dataset, visual or topic; "Not what I asked" (`skipVerified`) gives the same words
+// to the model, without that verified question or the answer it gave. Each with a negative control.
+//
 //   npm run build:ts && node scripts/test-verifiedAsk.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -128,6 +131,62 @@ async function main(): Promise<void> {
   ok('part 5: …and so does MCP answer_verified_question', mcp === said, mcp);
   const plain = await verified.saveVerifiedQuestion(pid, { question: 'Visit amount by region', spec: { ...KIND, measures: [{ column: 'amount', aggregation: 'sum' as const }] } });
   ok('NEGATIVE CONTROL: part 5: the same question on the base\'s column saves, and is answered', plain.ok && (await ask('Visit amount by region')).ok === true, JSON.stringify(plain).slice(0, 200));
+
+  // ── The match stays inside what is open ───────────────────────────────────
+  // "Revenue by region" is verified on Orders. Asked with Stores open (the dataset, a visual on it, a topic of it only),
+  // it is the model's question, not Orders' chart.
+  const topicsStore: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const visualsStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+  const stores = (await datasets.saveDataset(pid, {
+    name: 'Stores', sourceKind: 'csv', columns: [{ name: 'city', type: 'text' }, { name: 'sales', type: 'number' }], rows: [['Austin', 7], ['Reno', 2]],
+  }))!;
+  const storesTopic = (await topicsStore.saveTopic(pid, { name: 'Retail', datasets: [{ id: stores.id }] }))!;
+  const ordersTopic = (await topicsStore.saveTopic(pid, { name: 'Online', datasets: [{ id: ds.id }] }))!;
+  const storesVisual = (await visualsStore.saveVisual(pid, { name: 'Sales by city', datasetId: stores.id, chartType: 'column', encoding: { category: 'city', values: [{ column: 'sales', aggregation: 'sum' }] } }))!;
+  if (!storesTopic || !ordersTopic || !storesVisual) throw new Error('fixture: topics and visual');
+  const replies: any[] = [];
+  const seen: { prior: { role: string; text: string }[]; facts: string }[] = [];
+  (analyze as any).askCopilot = async (prior: { role: string; text: string }[], facts: string) => {
+    calls++;
+    seen.push({ prior, facts });
+    return replies.shift() ?? { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } };
+  };
+  (execConfig as any).executionReady = async () => true;
+  const how = async (context: object): Promise<string> => {
+    const n = calls;
+    const r = await ask('Revenue by region', { context });
+    return !r.ok ? `failed: ${r.error}` : r.guidance?.verifiedId === V && calls === n ? 'verified' : r.guidance?.verifiedId === undefined && calls === n + 1 ? 'model' : JSON.stringify(r.guidance);
+  };
+  ok('scope: with another dataset open, a verified question on Orders does not match: the model takes it', (await how({ kind: 'dataset', id: stores.id })) === 'model');
+  ok('scope: …nor with a visual on that dataset open', (await how({ kind: 'visual', id: storesVisual.id })) === 'model');
+  ok('scope: …nor with a topic open that leaves Orders out', (await how({ kind: 'topic', id: storesTopic.id })) === 'model');
+  const inside = [await how({ kind: 'dataset', id: ds.id }), await how({ kind: 'topic', id: ordersTopic.id }), await how({})];
+  ok('NEGATIVE CONTROL: scope: it matches with Orders open, in a topic holding Orders, and from Home', inside.every((x) => x === 'verified'), inside.join());
+  ok('scope: a topic that is gone limits nothing, as its facts fall back to the project', (await how({ kind: 'topic', id: crypto.randomUUID() })) === 'verified');
+
+  // ── "Not what I asked" ────────────────────────────────────────────────────
+  // A model answer on Stores, then the verified one on Orders, then "Not what I asked": the model gets the same words,
+  // without that verified question as an example, and continues the Stores chart, not the one set aside.
+  replies.push({ ok: true, text: 'Austin leads.', suggestedAction: { kind: 'answer', intent: 'sales by city', spec: { dataset: 'Stores', category: 'city', measures: [{ column: 'sales', aggregation: 'sum' }] } } });
+  const fresh = (await call('copilot:newThread', { projectId: pid })).thread.id;
+  const t1 = await ask('sales by city', { threadId: fresh });
+  const t2 = await ask('Revenue by region', { threadId: t1.threadId });
+  ok('fixture: a model answer, then a verified one, in one conversation',
+    t1.ok && t1.turns.at(-1).answer?.datasetId === stores.id && t2.ok && t2.guidance?.verifiedId === V && t2.threadId === t1.threadId, JSON.stringify(t1).slice(0, 300));
+  seen.length = 0;
+  const n0 = calls;
+  const skip = await ask('Revenue by region', { threadId: t1.threadId, skipVerified: true });
+  ok('not what I asked: the same words go to the model, ONE call, into the same conversation',
+    skip.ok && calls === n0 + 1 && skip.guidance?.verifiedId === undefined && skip.threadId === t1.threadId, JSON.stringify(skip.guidance));
+  ok('not what I asked: that verified question is no example', !skip.guidance.examples.includes(V) && !seen[0].facts.includes('- "Revenue by region" →'), JSON.stringify(skip.guidance));
+  const blk = seen[0].facts.slice(seen[0].facts.indexOf('PREVIOUS ANSWER'));
+  ok('not what I asked: the chart it continues is the Stores one, not the answer set aside', seen[0].facts.includes('PREVIOUS ANSWER') && blk.includes('Stores') && !blk.includes('Orders'), blk);
+  ok('not what I asked: the replayed turns leave out the question and the answer set aside',
+    seen[0].prior.length === 2 && seen[0].prior[0].text === 'sales by city' && seen[0].prior[1].text === 'Austin leads.', JSON.stringify(seen[0].prior));
+  const stored = (await hist(t1.threadId)).map((t) => (t.guidance?.verifiedId === V ? 'verified' : t.text));
+  ok('not what I asked: nothing is deleted: the verified answer stays, and the new question and answer follow it',
+    stored.join('|') === 'sales by city|Austin leads.|Revenue by region|verified|Revenue by region|Fine.', stored.join('|'));
+  ok('NEGATIVE CONTROL: without it, the same words in the same conversation are the verified answer again', (await ask('Revenue by region', { threadId: t1.threadId })).guidance?.verifiedId === V && calls === n0 + 1);
 
   finish();
 }

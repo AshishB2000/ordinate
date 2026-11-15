@@ -296,11 +296,17 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     await send(question, context, tid, null);
   }
 
+  /** "Not what I asked" under an answer from a verified question: the same words, for the model this time. */
+  async function notThis(question: string): Promise<void> {
+    await send(question, context, shownThread, agentId, true);
+  }
+
   /**
    * `on`: what the answer is about, when the caller pinned it in this same turn (the state has not caught up); `into`
-   * and `withAgent`, the conversation and its agent likewise (a conversation started this turn).
+   * and `withAgent`, the conversation and its agent likewise (a conversation started this turn). `skipVerified`: "Not
+   * what I asked" on a verified answer, so the model takes the same question.
    */
-  async function send(question: string, on: DockContext = context, into: string = shownThread, withAgent: string | null = agentId): Promise<void> {
+  async function send(question: string, on: DockContext = context, into: string = shownThread, withAgent: string | null = agentId, skipVerified = false): Promise<void> {
     const q = question.trim();
     if (!q || !pid || pending) return;
     const askId = crypto.randomUUID();
@@ -315,7 +321,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     try {
       // A first question asked before the agents are known (handed from Home, typed at once) waits for the preselection.
       const answering = !into && agentList.isPending ? ((await agentList.refetch()).data?.preselected ?? null) : withAgent;
-      r = await ask(pid, on, q, into, askId, answering);
+      r = await ask(pid, on, q, into, askId, answering, skipVerified);
     } catch {
       r = { ok: false, error: 'Something went wrong. Try again.' };
     }
@@ -429,6 +435,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     panel,
     stage,
     send,
+    notThis,
     followUp,
     startNew,
     switchThread,

@@ -44,7 +44,7 @@ Agreed on the flow page (Nov 2026). Related: [Explore](../explore/00-design.md),
 | Step | What happens | AI | Exists |
 |---|---|---|---|
 | 1 | You ask, from Home, the Assistant page or the side panel. An open topic scopes everything below. | — | yes |
-| 2 | Same letters as a verified question (lowercase, no spaces or punctuation)? Show that chart. | — | yes |
+| 2 | Same letters as a verified question (lowercase, no spaces or punctuation) on the open dataset, visual's dataset or topic (anywhere in the project from Home)? Show that chart, with **Not what I asked**, which gives the same words to the AI without that question or its answer. | — | yes |
 | 3 | Search the Data model; follow links; add table facts. | — | new |
 | 4 | One AI call returns a chart form, or SQL only when the form can't express it. | 1 (2 for SQL) | partly |
 | 5 | Every dataset, column, metric and term named must be real, else "Did you mean …?". | — | yes |
