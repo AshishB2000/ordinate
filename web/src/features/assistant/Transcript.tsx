@@ -105,6 +105,7 @@ export function Transcript({
               spec={t.answer}
               learn={t.learn}
               turn={threadId ? { threadId, turnId: t.id } : undefined}
+              card={t.card}
               savedVisualId={t.savedVisualId}
               narrated={false}
               question={turns[i - 1]?.role === 'user' ? turns[i - 1].text.slice(0, 300) : undefined}

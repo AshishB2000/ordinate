@@ -29,6 +29,7 @@ import { ctx, serverDataDir } from '../server/context';
 import { inOrg, orgDb } from '../server/db/inOrg';
 import { sameChart } from './answerRefine';
 import type { AnswerSpec } from './answerSpec';
+import type { AnswerSnapshot } from './answerSnapshot';
 // A cycle (./copilot imports this module): only used inside functions, never at load.
 import * as copilot from './copilot';
 import type { CopilotThread, CopilotThreadSummary, CopilotTurn } from './copilot';
@@ -241,6 +242,13 @@ export async function renameThread(projectId: string, threadId: string, title: s
 }
 
 export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
+  return changeTurn(projectId, threadId, turnId, spec, (turn) => {
+    turn.savedVisualId = visualId;
+  });
+}
+
+/** `change` on one assistant turn of the caller's `threadId` whose stored answer draws `spec`, its body rewritten. False: no such turn. */
+async function changeTurn(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, change: (turn: CopilotTurn) => void): Promise<boolean> {
   if (!copilot.isValidId(threadId) || !copilot.isValidId(turnId)) return false;
   await moveFile(projectId);
   return tx(true, async (c, org) => {
@@ -252,9 +260,17 @@ export async function markSaved(projectId: string, threadId: string, turnId: str
     );
     const turn = r.rows[0] && turnOf(r.rows[0]);
     if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
-    turn.savedVisualId = visualId;
+    change(turn);
     await c.query('UPDATE assistant_turns SET body = $5 WHERE org_id = $1 AND project_id = $2 AND thread_id = $3 AND id = $4', [org, projectId, threadId, turnId, bodyOf(turn)]);
     return true;
+  });
+}
+
+/** ./copilot `setSnapshot`: `snap` undefined removes it. */
+export async function setSnapshot(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, snap: AnswerSnapshot | undefined): Promise<boolean> {
+  return changeTurn(projectId, threadId, turnId, spec, (turn) => {
+    if (snap) turn.snapshot = snap;
+    else delete turn.snapshot;
   });
 }
 

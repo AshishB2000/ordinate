@@ -67,7 +67,8 @@ const shell = (turns: unknown[], role = 'editor'): Record<string, Route> => ({
   'ai:status': { ready: true, models: [{ provider: 'anthropic', model: 'm', label: 'M', isDefault: true }], mine: { provider: 'anthropic', model: 'm' }, copilotEnabled: true, keyStore: null },
   'copilot:history': { ok: true, turns, threadId: TID },
   'dataset:list': [{ id: DID, name: 'Orders' }],
-  'answer:card': CARD,
+  // A turn that kept no card (one stored before answers kept theirs): drawn now by `answer:refresh`, as it keeps one.
+  'answer:refresh': CARD,
 });
 
 async function openDock(): Promise<HTMLElement> {
@@ -129,7 +130,7 @@ describe('in the dock', () => {
   it('an answer card draws every chip the server sent, a next-level one too; a click reruns that chip\'s spec under its label', async () => {
     const STATE = { ...SPEC, category: 'state', title: 'Sales by region by state' };
     const chips = ['Split by segment', 'By state', 'Show as table'].map((label) => ({ label, spec: label === 'By state' ? STATE : SPEC }));
-    const calls = serve({ ...shell([user('u1', 'sales by region'), ANSWERED]), 'answer:card': { ...CARD, chips }, 'answer:rerun': { ok: true, threadId: TID, turns: [user('u1', 'sales by region'), ANSWERED] } });
+    const calls = serve({ ...shell([user('u1', 'sales by region'), ANSWERED]), 'answer:refresh': { ...CARD, chips }, 'answer:rerun': { ok: true, threadId: TID, turns: [user('u1', 'sales by region'), ANSWERED] } });
     renderApp('/');
     const dock = await openDock();
     const card = await within(dock).findByTestId('answer-card');
@@ -173,7 +174,7 @@ describe('in the dock', () => {
     const turns = [user('u1', 'sales in est'), ANSWERED];
     const calls = serve({
       ...shell(turns),
-      'answer:card': {
+      'answer:refresh': {
         ...CARD, data: { labels: [], series: [] }, headline: [], caption: 'No data to summarize', bullets: ['No rows match this question, so there is nothing to chart.'],
         noMatch: { text: 'No rows match region = "est".', options: [{ label: 'West', spec: west }, { label: 'East', spec: east }] },
       },
@@ -231,7 +232,7 @@ describe('Save as visual', () => {
     const calls = serve({
       ...shell(turns),
       'copilot:history': () => ({ ok: true, turns, threadId: TID }),
-      'answer:card': (p: unknown) => ({ ...CARD, ...((p as { savedVisualId?: string }).savedVisualId ? { savedVisualId: VID } : {}) }),
+      'answer:refresh': () => ({ ...CARD, ...((turns[1] as { savedVisualId?: string }).savedVisualId ? { savedVisualId: VID } : {}) }),
       'answer:saveVisual': () => {
         turns = [user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }];
         return { ok: true, visual: { id: VID, name: 'Sales by region' } };
@@ -252,13 +253,13 @@ describe('Save as visual', () => {
   });
 
   it('after a reload, an answer the turn records as saved links to its visual — no second save offered', async () => {
-    const calls = serve({ ...shell([user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }]), 'answer:card': { ...CARD, savedVisualId: VID } });
+    const calls = serve({ ...shell([user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }]), 'answer:refresh': { ...CARD, savedVisualId: VID } });
     renderApp('/');
     const card = await within(await openDock()).findByTestId('answer-card');
     const link = await within(card).findByRole('link', { name: 'Open in Visuals' });
     expect(link.getAttribute('href')).toBe(`/visuals/${PID}/${VID}`);
     expect(within(card).queryByRole('button', { name: 'Save as visual' })).toBeNull();
-    expect(calls.find((c) => c.channel === 'answer:card')?.payload).toEqual({ projectId: PID, spec: SPEC, savedVisualId: VID });
+    expect(calls.find((c) => c.channel === 'answer:refresh')?.payload).toEqual({ projectId: PID, threadId: TID, turnId: 'a2' }); // the turn: the server reads its spec and saved visual
     expect(calls.filter((c) => c.channel === 'answer:saveVisual')).toHaveLength(0);
   });
 
@@ -292,7 +293,7 @@ describe('Remember a name', () => {
     let known = false;
     return serve({
       ...shell([user('u1', 'Net Sales'), TAUGHT], role),
-      'answer:card': () => ({ ...CARD, learn: { ...LEARN, label: 'Net Sales', state: known ? 'known' : 'offer' } }),
+      'answer:refresh': () => ({ ...CARD, learn: { ...LEARN, label: 'Net Sales', state: known ? 'known' : 'offer' } }),
       'catalog:addAlias': async (p: unknown) => {
         const r = (await addAlias(p)) as { ok: boolean };
         known = r.ok;
@@ -320,7 +321,7 @@ describe('Remember a name', () => {
     const calls = remembering('editor', () => new Promise((r) => (reply = r)));
     renderApp('/');
     const card = await within(await openDock()).findByTestId('answer-card');
-    expect(calls.find((c) => c.channel === 'answer:card')?.payload).toEqual({ projectId: PID, spec: SPEC, learn: LEARN });
+    expect(calls.find((c) => c.channel === 'answer:refresh')?.payload).toEqual({ projectId: PID, threadId: TID, turnId: 'a2' });
     fireEvent.click(await within(card).findByRole('button', { name: 'Remember “sales” as Net Sales' }));
     const busy = await within(card).findByRole('button', { name: 'Remembering…' });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
@@ -334,7 +335,7 @@ describe('Remember a name', () => {
   });
 
   it('a viewer is not offered it', async () => {
-    serve({ ...shell([user('u1', 'Net Sales'), TAUGHT], 'viewer'), 'answer:card': { ...CARD, learn: { ...LEARN, label: 'Net Sales', state: 'offer' } } });
+    serve({ ...shell([user('u1', 'Net Sales'), TAUGHT], 'viewer'), 'answer:refresh': { ...CARD, learn: { ...LEARN, label: 'Net Sales', state: 'offer' } } });
     renderApp('/');
     const card = await within(await openDock()).findByTestId('answer-card');
     await within(card).findByRole('button', { name: 'Show table' });
@@ -342,7 +343,7 @@ describe('Remember a name', () => {
   });
 
   it('a known name is read by anyone — viewer included', async () => {
-    serve({ ...shell([user('u1', 'Net Sales'), TAUGHT], 'viewer'), 'answer:card': { ...CARD, learn: { ...LEARN, label: 'Net Sales', state: 'known' } } });
+    serve({ ...shell([user('u1', 'Net Sales'), TAUGHT], 'viewer'), 'answer:refresh': { ...CARD, learn: { ...LEARN, label: 'Net Sales', state: 'known' } } });
     renderApp('/');
     const card = await within(await openDock()).findByTestId('answer-card');
     expect((await within(card).findByText(/now means/)).textContent).toBe('“sales” now means Net Sales in this project.');

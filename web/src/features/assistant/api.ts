@@ -4,9 +4,10 @@
 // row count, a turn count — is the server's; the dock only formats it.
 
 import { useEffect } from 'react';
-import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { useVerified } from '../model/assistant/api';
+import type { Card, CardReply } from './AnswerCard';
 
 export type Provider = 'anthropic' | 'openai' | 'gemini' | 'gateway';
 
@@ -59,8 +60,14 @@ export interface Turn {
   text: string;
   createdAt: string;
   provenance?: Provenance;
-  /** A stored answer spec: the card is recomputed from it on every render (`answer:card`). */
+  /** A stored answer spec: what Refresh computes again. */
   answer?: { datasetId: string; title?: string } & Record<string, unknown>;
+  /**
+   * The card the answer kept, as the server computed it then (src/ipc/answerSnapshots.ts): sent only while the
+   * caller's access is what it was computed under. None: the card asks `answer:refresh` (not kept yet, too big
+   * to keep, or the access changed).
+   */
+  card?: Card;
   /** A refused chart's "Did you mean": the server's options, each a complete spec `answer:rerun` takes (src/ai/answerSuggest.ts). */
   suggest?: { part: string; said: string; options: { label: string; spec: Record<string, unknown>; column?: string }[] };
   /** An answer run from a "Did you mean" column: the name that was said, which its card can offer to remember. */
@@ -167,6 +174,19 @@ export function useHistory(projectId: string | null, threadId: string) {
       return r;
     },
   });
+}
+
+/** An answer of the caller's conversation computed now and kept in place of its card (`answer:refresh`). */
+export async function refreshAnswer(projectId: string, threadId: string, turnId: string): Promise<CardReply> {
+  return (await rpc('answer:refresh', { projectId, threadId, turnId })) as CardReply;
+}
+
+/** The conversation's copy of a turn now carries `card`, so the card draws it, a remount included, with no call. */
+export function keepInConversation(qc: QueryClient, projectId: string, turnId: string, card: Card): void {
+  type History = { ok: true; turns: Turn[] } & Record<string, unknown>;
+  qc.setQueriesData<History>({ queryKey: ['copilot:history', projectId] }, (old) =>
+    old?.ok && old.turns.some((t) => t.id === turnId) ? { ...old, turns: old.turns.map((t) => (t.id === turnId ? { ...t, card } : t)) } : old,
+  );
 }
 
 /** One page of the caller's conversations, and the cursor of the page after it (null: the last). */
