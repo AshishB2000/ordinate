@@ -11,7 +11,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { WS_REGEX_CLASS, doubleQuoted, extractPart, sqlInt } from '../dialect';
+import { doubleQuoted, extractPart, orderKey, sqlInt, STANDARD_SET_OPS, WS_REGEX_CLASS } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -57,4 +57,6 @@ export const duckdbDialect: SqlDialect = {
   floor: (x) => `floor(${x})`,
   ceil: (x) => `ceil(${x})`,
   datePart: extractPart,
+  setOp: (kind) => STANDARD_SET_OPS[kind],
+  nullOrder: orderKey,
 };

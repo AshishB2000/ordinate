@@ -15,7 +15,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, doubleQuoted, extractPart, finiteBySubtraction, sqlInt } from '../dialect';
+import { doubleQuoted, extractPart, finiteBySubtraction, JS_WHITESPACE, orderKey, sqlInt, STANDARD_SET_OPS } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP_NTZ',
@@ -54,4 +54,6 @@ export const snowflakeDialect: SqlDialect = {
   floor: (x) => `FLOOR(${x})`,
   ceil: (x) => `CEIL(${x})`,
   datePart: extractPart,
+  setOp: (kind) => STANDARD_SET_OPS[kind],
+  nullOrder: orderKey,
 };

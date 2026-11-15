@@ -10,7 +10,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { WS_REGEX_CLASS, sqlInt } from '../dialect';
+import { EXPLICIT_SET_OPS, orderKey, sqlInt, WS_REGEX_CLASS } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'String', number: 'Float64', boolean: 'Bool', date: 'Date32', timestamp: "DateTime64(3, 'UTC')",
@@ -65,4 +65,6 @@ export const clickhouseDialect: SqlDialect = {
   floor: (x) => `floor(${x})`,
   ceil: (x) => `ceil(${x})`,
   datePart: (d, part) => `${PART[part]}(${d})`,
+  setOp: (kind) => EXPLICIT_SET_OPS[kind],
+  nullOrder: orderKey,
 };

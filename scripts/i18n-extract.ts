@@ -408,6 +408,7 @@ export const MAIN_FILES = [
   'src/server/folderMessages.ts',
   'src/analysis/answerAlertMessages.ts',
   'src/ai/answerSqlMessages.ts',
+  'src/engine/liveSqlMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
