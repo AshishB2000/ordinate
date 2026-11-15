@@ -427,12 +427,13 @@ function refused(p: string): NodeJS.ErrnoException {
 }
 
 /**
- * Several records for a READ-ONLY caller: one query with the DB, one read each
+ * Several records for a READ-ONLY caller: one query with the DB (one per `perQuery` paths, in turn), one read each
  * without. Path → text; a path that is missing, unreadable or past its limits is
  * simply absent. No lock: what it returns may be stale a moment later. Inside
- * `withReadMemo` it reads what the memo holds from there, and seeds it with the rest, as listRecords' pages do.
+ * `withReadMemo` it reads what the memo holds from there, and claims the rest in it before its first query: a readFile
+ * of one meanwhile waits for its query instead of making its own, and a write meanwhile forgets the claims.
  */
-export async function readMany(paths: readonly string[]): Promise<Map<string, string>> {
+export async function readMany(paths: readonly string[], perQuery = Infinity): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const byRel = new Map<string, string>();
   const files: string[] = [];
@@ -445,14 +446,27 @@ export async function readMany(paths: readonly string[]): Promise<Map<string, st
       byRel.set(a.rel, p);
     } else files.push(p); // a file, or a record the memo holds: readFile
   }
-  if (first) {
-    const r = await sql(first, 'SELECT path, body FROM records WHERE org_id = $1 AND path = ANY($2::text[])', [[...byRel.keys()]]);
-    for (const row of r.rows as Array<{ path: string; body: string }>) {
-      const p = byRel.get(row.path);
-      if (!p || overLimit(p, row.body)) continue;
-      out.set(p, row.body);
-      const k = 'row\0' + first.org + '\0' + row.path;
-      if (seen && !seen.has(k)) seen.set(k, Promise.resolve(row.body));
+  const a = first;
+  if (a) {
+    const rels = [...byRel.keys()];
+    const n = Math.max(1, Math.min(perQuery, rels.length));
+    const pages: Array<Promise<Map<string, string>>> = [];
+    let prev: Promise<unknown> = Promise.resolve();
+    for (let i = 0; i < rels.length; i += n) {
+      const page = rels.slice(i, i + n);
+      const rows = prev.then(() => sql(a, 'SELECT path, body FROM records WHERE org_id = $1 AND path = ANY($2::text[])', [page]))
+        .then((r) => new Map((r.rows as Array<{ path: string; body: string }>).map((x) => [x.path, x.body])));
+      rows.catch(() => undefined); // a page after a failed one fails with it, unawaited: the first failure is what this throws
+      prev = rows;
+      pages.push(rows);
+      // Claimed now, not seeded when the rows come: a body read before a write never lands in the memo after it.
+      if (seen) for (const rel of page) void memoRead('row\0' + a.org + '\0' + rel, () => rows.then((m) => m.get(rel)));
+    }
+    for (const rows of pages) {
+      for (const [rel, body] of await rows) {
+        const p = byRel.get(rel);
+        if (p && !overLimit(p, body)) out.set(p, body);
+      }
     }
   }
   await Promise.all(files.map((p) => readFile(p, 'utf8').then((t) => { out.set(p, t); }, () => undefined)));

@@ -122,7 +122,7 @@ async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; lists: number; 
   (store as { listTagged: unknown }).listTagged = (p: string) => { lists++; return list(p); };
   (store as { listBoth: unknown }).listBoth = (p: string) => { lists++; return both(p); }; // a chart's questions and the SQL ones, in one listing
   (recordFs as { readFile: unknown }).readFile = (p: string, enc?: BufferEncoding) => { if (verifiedPath(p)) files++; return (readFile as (p: string, e?: BufferEncoding) => Promise<unknown>)(p, enc); };
-  (recordFs as { readMany: unknown }).readMany = (ps: readonly string[]) => { batched += ps.filter(verifiedPath).length; return readMany(ps); };
+  (recordFs as { readMany: unknown }).readMany = (ps: readonly string[], perQuery?: number) => { batched += ps.filter(verifiedPath).length; return readMany(ps, perQuery); };
   (recordFs as { listRecords: unknown }).listRecords = async (dir: string) => {
     const it = await listRecords(dir);
     return (async function* () { for await (const r of it) { if (verifiedPath(path.join(dir, r.name))) files++; yield r; } })();

@@ -28,7 +28,8 @@
 //   5. SAME REPLY: in every case, memo on and off, the model is sent the same facts, and the reply's answer, chart,
 //      provenance, action, ledger, audit and guidance are the same, with Object.is.
 //   7. MEANING ON (PR 7c; pgvector, ORDINATE_EXPECT_PGVECTOR=1 fails without it): a fake fingerprint model, every item
-//      fingerprinted by the job, then cases (a) to (e) again: ONE embed call each, and their own ceilings.
+//      fingerprinted by the job, then cases (a) to (e) again: ONE embed call each, and their own ceilings; (d) once more
+//      with every batched record read 200 ms late (a slow run's interleaving): no more statements than at full speed.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-askBudget.js
 
@@ -119,11 +120,9 @@ const CEILING_ON: Record<string, { queries: number; reads: number }> = {
   home: at(107, 153), // off: 89 / 154
   dataset: at(94, 118), // off: 88 / 123
   agent: at(84, 136), // off: 75 / 136
-  // CI (password Postgres + MinIO, STORAGE_URL s3://) counts ~15 more statements here than a run on DATA_DIR: 149 on #521,
-  // 152 once #523's links added their 3; 134 locally. `shortcut:` raised to CI's count; the histogram printed when a
-  // case is into its 10% says which statements those are — lower this once they are found.
   // Shared folders (E2): +3 for the restricted viewer, its folder access in one transaction (BEGIN, the tree, COMMIT), as off.
-  viewer: at(142, 7_350), // off: 120 / 7,312; was at(139, 7_350), at(135, 7_350)
+  // CI's ~18 more were a race, not S3: the picks' checks reading singly what the counts' batches had in flight (below).
+  viewer: at(134, 7_350), // off: 120 / 7,312; was at(142, 7_350) (CI's raced count), at(139, 7_350), at(135, 7_350)
   dashboard: at(119, 182), // off: 112 / 183
 };
 
@@ -187,8 +186,8 @@ async function world(pool: Pool): Promise<World> {
   });
 }
 
-/** What one ask costs: Postgres statements, record reads and tables loaded (datasets.getDataset) while `fn` runs. */
-async function counted<T>(fn: () => Promise<T>): Promise<{ out: T; queries: number; reads: number; tables: number; ms: number; sqls: string[] }> {
+/** What one ask costs: Postgres statements, record reads and tables loaded (datasets.getDataset) while `fn` runs. `slowBatches`: ms each batched record read (readMany) waits before it is sent. */
+async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out: T; queries: number; reads: number; tables: number; ms: number; sqls: string[] }> {
   const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown }; // the pool's clients are pg Clients
   const [query, readFile, readMany, readdir, getDataset] = [proto.query, recordFs.readFile, recordFs.readMany, recordFs.readdir, datasets.getDataset];
   let queries = 0, reads = 0, tables = 0;
@@ -198,11 +197,13 @@ async function counted<T>(fn: () => Promise<T>): Promise<{ out: T; queries: numb
     queries++;
     const q = a[0] as string | { text?: string } | undefined;
     sqls.push(String(typeof q === 'string' ? q : q?.text ?? '?'));
+    const text = sqls[sqls.length - 1];
+    if (slowBatches && text.includes('ANY($2::text[])')) return new Promise((r) => setTimeout(r, slowBatches)).then(() => query.apply(this, a));
     return query.apply(this, a);
   };
   const spy = recordFs as unknown as Record<'readFile' | 'readMany' | 'readdir', unknown>;
   spy.readFile = (...a: unknown[]) => { reads++; return (readFile as (...x: unknown[]) => unknown)(...a); };
-  spy.readMany = (ps: readonly string[]) => { reads += ps.length; return readMany(ps); };
+  spy.readMany = (ps: readonly string[], perQuery?: number) => { reads += ps.length; return readMany(ps, perQuery); };
   spy.readdir = (...a: unknown[]) => { reads++; return (readdir as (...x: unknown[]) => unknown)(...a); };
   const t0 = Date.now();
   try {
@@ -295,10 +296,10 @@ async function dbLeg(pool: Pool): Promise<void> {
     ['viewer', 'viewer', {}, undefined, (r) => r.provenance?.kind === 'project'],
     ['dashboard', 'admin', { context: { kind: 'analysis', id: w.board } }, undefined, (r) => r.provenance?.kind === 'analysis'],
   ];
-  const once = async (role: Role, extra: object, agentId: string | undefined) => {
+  const once = async (role: Role, extra: object, agentId: string | undefined, slowBatches = 0) => {
     const threadId = await fresh(role, agentId);
     sent.length = 0;
-    const c = await counted(() => ask(role, { ...extra, threadId }));
+    const c = await counted(() => ask(role, { ...extra, threadId }), slowBatches);
     return { ...c, facts: sent.slice() };
   };
   const factsOf = new Map<string, string>();
@@ -366,7 +367,7 @@ async function dbLeg(pool: Pool): Promise<void> {
 }
 
 /** The cases again with meaning search on: a fake model (no network), every item fingerprinted by the job first. */
-async function meaningOn(cases: Array<[string, Role, object, string | undefined, unknown]>, once: (role: Role, extra: object, agentId: string | undefined) => Promise<{ queries: number; reads: number; tables: number; ms: number; out: any; sqls: string[] }>,
+async function meaningOn(cases: Array<[string, Role, object, string | undefined, unknown]>, once: (role: Role, extra: object, agentId: string | undefined, slowBatches?: number) => Promise<{ queries: number; reads: number; tables: number; ms: number; out: any; sqls: string[] }>,
   line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
   const vstore: typeof import('../src/server/vectorStore') = require('../src/server/vectorStore');
   if (!(await vstore.vectorStatus(0)).table) {
@@ -404,6 +405,18 @@ async function meaningOn(cases: Array<[string, Role, object, string | undefined,
     ok(`${name}, meaning on: the ask answers, with ONE embed call (${embeds}), ${on.queries} queries ≤ ${CEILING_ON[name].queries} and ${on.reads} record reads ≤ ${CEILING_ON[name].reads}`,
       on.out.ok === true && embeds === 1 && on.queries <= CEILING_ON[name].queries && on.reads <= CEILING_ON[name].reads);
     if (on.queries * 1.1 > CEILING_ON[name].queries || process.env.ORDINATE_BUDGET_SQL) histogram(name + ' (meaning on)', on.sqls); // over, or into its 10%
+    if (name === 'viewer') {
+      // A slow run (CI) once made 18 more statements: the picks' checks read singly the metrics the counts' batches were
+      // still reading. Batches 200 ms late force that interleaving; a batch claims its records first (recordFs.readMany),
+      // so nothing more is read. Its NEGATIVE CONTROL is test-recordListBatch's (5.): outside a memo each read queries.
+      // Records read one at a time, not every statement: a 2 s ask may also outlive a per-pod probe's TTL (vectorStatus, 30 s).
+      const slow = await once(role, extra, agentId, 200);
+      const singly = (sqls: readonly string[]): number => sqls.filter((q) => q.startsWith('SELECT body FROM records WHERE org_id = $1 AND path = $2')).length;
+      line(name + ' (slow batches)', slow);
+      ok(`${name}, meaning on, every batched record read 200 ms late: ${singly(slow.sqls)} records read singly, no more than at full speed (${singly(on.sqls)})`,
+        slow.out.ok === true && singly(slow.sqls) <= singly(on.sqls));
+      if (singly(slow.sqls) > singly(on.sqls)) histogram(name + ' (slow batches)', slow.sqls);
+    }
   }
 }
 
