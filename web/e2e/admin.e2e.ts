@@ -35,7 +35,8 @@ if (!adminUrl) {
   await root.connect();
   await root.query(`CREATE DATABASE ${dbName}`);
 
-  // Admin → AI's provider: lists two models and answers a connection test with OK.
+  // Admin → AI's provider: lists two models and answers a connection test with OK. Under /gw it is an
+  // OpenAI-compatible gateway, whose /embeddings gives one 768-number fingerprint.
   const stub = http.createServer((req, res) => {
     req.resume();
     req.on('end', () => {
@@ -43,7 +44,11 @@ if (!adminUrl) {
       res.end(
         req.method === 'GET' && req.url === '/v1/models'
           ? JSON.stringify({ data: [{ id: 'claude-sonnet-stub', display_name: 'Claude Sonnet Stub', created_at: 2 }, { id: 'claude-haiku-stub', display_name: 'Claude Haiku Stub', created_at: 1 }] })
-          : JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' }),
+          : req.url === '/gw/embeddings'
+            ? JSON.stringify({ data: [{ index: 0, embedding: Array.from({ length: 768 }, (_, i) => (i === 0 ? 1 : 0)) }] })
+            : req.url === '/gw/chat/completions'
+              ? JSON.stringify({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] })
+              : JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' }),
       );
     });
   });
@@ -51,7 +56,7 @@ if (!adminUrl) {
   const stubUrl = `http://127.0.0.1:${(stub.address() as AddressInfo).port}`;
   after(() => stub.close());
 
-  const { e2e, screens, settled, configureServer } = await import('./fixtures.ts');
+  const { e2e, screens, screensInPlace, settled, configureServer } = await import('./fixtures.ts');
   configureServer({
     env: {
       DATABASE_URL: scratch.toString(),
@@ -266,6 +271,10 @@ if (!adminUrl) {
     await page.getByRole('radio', { name: 'Make Claude Haiku Stub the default', checked: true }).waitFor();
     assert.equal((await page.content()).includes(KEY), false, 'the key is nowhere in the page');
     await screens(page, 'admin-ai');
+    // Meaning search: Anthropic alone has no fingerprint model, so the card says what it needs and offers no picker.
+    await page.getByRole('heading', { name: 'Meaning search needs an OpenAI, Gemini or gateway key' }).scrollIntoViewIfNeeded();
+    assert.equal(await page.getByRole('combobox', { name: 'Model' }).count(), 0);
+    await screensInPlace(page, 'admin-ai-meaning'); // in place: the page scrolls inside its own pane
 
     // ── Disconnect: the confirmation names what members lose ─────────────────
     await page.getByRole('button', { name: 'Disconnect' }).click();
@@ -274,6 +283,23 @@ if (!adminUrl) {
     await confirm.getByRole('button', { name: 'Disconnect' }).click();
     await page.getByRole('heading', { name: 'No models yet' }).waitFor();
     await providers.getByText('Not connected').first().waitFor();
+
+    // ── Meaning search on a gateway: pick its model id, Test (768 numbers from the stub), Save ──
+    await providers.getByRole('button', { name: 'Connect' }).last().click();
+    const gw = page.getByRole('form', { name: 'Connect OpenAI-compatible gateway' });
+    await gw.getByLabel('Base URL').fill(`${stubUrl}/gw`);
+    await gw.getByLabel('Model id to test with').fill('gw-chat');
+    await gw.getByRole('button', { name: 'Connect' }).click();
+    await providers.getByText(/^Connected · tested/).waitFor();
+    await page.getByRole('combobox', { name: 'Model' }).click();
+    await page.getByRole('option', { name: /enter a model id/ }).click();
+    await page.getByLabel('Gateway model id').fill('acme/embed-768');
+    await page.getByRole('button', { name: 'Test', exact: true }).click();
+    await page.getByText(/^768 dimensions · \d+ ms$/).waitFor();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByText('On · acme/embed-768').waitFor();
+    await page.getByText(/^Picking another model later/).scrollIntoViewIfNeeded();
+    await screensInPlace(page, 'admin-ai-meaning-on');
   });
 
   e2e('admin: identity provider groups — map a group; a header sign-in gets the mapped role and team', async ({ page, server }) => {

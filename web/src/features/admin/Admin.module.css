@@ -358,6 +358,13 @@
   margin-left: auto;
   padding-top: 22px;
 }
+/* The fingerprint model's pick: the select (and a gateway's id) growing, Test and Save at the end. */
+.aiPick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-8) var(--sp-12);
+}
 .aiRadio {
   accent-color: var(--accent);
   width: 16px;

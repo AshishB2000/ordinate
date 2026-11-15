@@ -423,13 +423,13 @@ Now:
 | 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
 | 6c | A caller with a hidden column: its dataset and metric checks off the index |
 | 7a | pgvector where Ordinate runs, optional everywhere (`0029_pgvector`): CI, the nightly, the release boot, Compose and the chart's kind run use `pgvector/pgvector:pg17-trixie`; the extension and `assistant_search_vectors` are made only where present; `src/server/vectorStore.ts` |
-| 7b | Fingerprints and the rank merge (phase C): next, see below |
+| 7b | The fingerprint model (Admin → AI, off by default) and `rankFusion.fuse`: done; 7c, the fingerprint job and the ask path, next |
 
 **Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
 5,000 metrics, 2,000 terms), under the 50 ms line, so the index holds no summaries (6a's open question).
 
 **What 7b still needs.** Its rules are above (a job makes fingerprints, each row records its model, meaning and words
-merge by rank). pgvector is done (7a); two things are left, each the owner's call:
+merge by rank). pgvector (7a) and the fingerprint model (7b) are done; the job and the ask path (7c) are next:
 
 - **pgvector (7a, done).** CI's check and web jobs, the e2e nightly, the release boot check, Compose and the chart's kind
   run use `pgvector/pgvector:pg17-trixie` (`postgres:17`, which is trixie, plus the extension). `0029_pgvector` creates
@@ -441,8 +441,8 @@ merge by rank). pgvector is done (7a); two things are left, each the owner's cal
   through the HNSW index, the later install, a role that may not create the extension, and, with
   `ORDINATE_EXPECT_PGVECTOR=1` as in CI, fails when pgvector is missing. A managed Postgres creates it by hand
   ([upgrade.md](../server/upgrade.md#pgvector-for-meaning-search-0029_pgvector)); without it, search stays on words.
-- **The fingerprint model** (the open question below): which provider's embedding model, picked in Admin → AI like the
-  chat models, from the org's own API keys. No surprise network calls, nothing installed at run time.
+- **The fingerprint model:** decided and built in 7b part 1 (see "Open questions"): picked in Admin → AI from the org's
+  own OpenAI, Gemini or gateway key, off by default, with `src/ai/rankFusion.ts` for the merge.
 - **Spelling mistakes** (also phase C): `pg_trgm` is available everywhere and would bring back the "Did you mean" that
   6b drops for a typo sharing no word with any name ("Ordrs"); its similarity is a float, so it needs a reference the
   differential can hold to.
@@ -507,9 +507,11 @@ source table can answer, a question needing an undefined link, and a question on
 
 ## Open questions
 
-- **Fingerprint model (phase C).** Which model makes the fingerprints, and where it runs. It must be
-  the org's configured AI provider or something the operator installs: no surprise network calls,
-  nothing installed at run time.
+- **Fingerprint model (phase C): answered (PR 7b).** The org's own OpenAI, Gemini or gateway key,
+  picked in Admin → AI and off until an admin does: OpenAI `text-embedding-3-small` / `-large`,
+  Gemini `gemini-embedding-001` / `gemini-embedding-2`, or a gateway's id; 768 numbers each,
+  normalized by the server; Anthropic has none. A Test action checks one sample. Details, the cost
+  note and the rank merge: `docs/ai-models/00-plan.md`, "Meaning search".
 - **Date-filter pruning (phase A).** Unmeasured; see above. If the cast doesn't hurt pruning on a
   given warehouse, leave that dialect alone.
 - **Folders and `/p/` links (phase E).** A published dashboard keeps working for its audience;

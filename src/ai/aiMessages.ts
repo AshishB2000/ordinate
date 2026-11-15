@@ -57,3 +57,23 @@ export function aiColumnWithheld(): string {
 export function assistantOff(): string {
   return t('aiMessages.the_assistant_is_off_for_your');
 }
+
+/** fingerprint() with no model picked: meaning search is off, and nothing was sent. */
+export function fingerprintOff(): string {
+  return t('aiMessages.meaning_search_is_off_an_admin');
+}
+
+/** A fingerprint model on a provider with no embedding API (Anthropic). */
+export function fingerprintNoModel(): string {
+  return t('aiMessages.meaning_search_needs_an_openai_gemini');
+}
+
+/** A fingerprint model whose provider is not connected, has no key or (a gateway) no base URL. `provider` is its label. */
+export function fingerprintNeedsProvider(provider: string): string {
+  return t('aiMessages.connect_in_admin_ai_before_meaning', { provider });
+}
+
+/** A fingerprint reply of the wrong length. `dimensions` is already formatted. */
+export function fingerprintWrongSize(dimensions: string): string {
+  return t('aiMessages.this_model_returns_dimensions_meaning', { dimensions });
+}

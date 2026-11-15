@@ -131,6 +131,8 @@ interface Config {
   displayName: string;
   /** Settings → General → Language: a code from src/app/i18n.ts, 'en' by default. */
   language: string;
+  /** Admin → AI: the org's fingerprint model for meaning search (src/server/aiConfig.ts); null is off. */
+  fingerprintModel: { provider: string; model: string } | null;
   providers: Record<string, LegacyProviderEntry>;
   byok: ByokBlock;
   // Connection secrets, keyed by connection UUID. Never reaches a renderer.
@@ -261,6 +263,8 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   automation: { enabled: false, http: false, port: AUTOMATION_PORT },
   displayName: '',
   language: 'en',
+  // Meaning search is OFF until an org admin picks a model: no fingerprint request before that.
+  fingerprintModel: null,
   // Connection secrets (pg passwords / URL tokens), keyed by connection UUID.
   // Plaintext on disk like API keys; stripped from every renderer-facing view.
   connectionSecrets: {},
@@ -410,6 +414,12 @@ function sanitize(input: any): Partial<Config> {
   if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
   if (typeof input.displayName === 'string') out.displayName = input.displayName.replace(/\s+/g, ' ').trim().slice(0, 80);
   if (isLanguage(input.language)) out.language = input.language;
+  // The exact ids are the ai:setFingerprintModel contract's; this only keeps a sane shape off disk.
+  const fp = input.fingerprintModel;
+  if (fp === null) out.fingerprintModel = null;
+  else if (fp && ['openai', 'gemini', 'gateway'].includes(fp.provider) && typeof fp.model === 'string' && fp.model && fp.model.length <= 200) {
+    out.fingerprintModel = { provider: fp.provider, model: fp.model };
+  }
   return out;
 }
 

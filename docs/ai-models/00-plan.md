@@ -264,3 +264,35 @@ These come from CLAUDE.md, with the extra ones for this work:
   stays registered (append-only).
 - Found by `test-aiModels-db`: the legacy import borrowed a second pool connection while holding one,
   which deadlocks a full pool. It now reads the old policy on its own transaction's client.
+
+## Meaning search: the fingerprint model (phase C, PR 7b part 1)
+
+Answers the "fingerprint model" open question in `docs/assistant/00-design.md`. A fingerprint is
+an embedding of an item's text (a dataset, column, metric, term or verified question), made by the
+org's own provider key. Nothing is installed on the server and nothing runs locally.
+
+| Decided | |
+|---|---|
+| **Off by default** | No fingerprint request is ever made until an org admin picks a model in Admin → AI. `fingerprint(texts, null)` refuses before any request (`test-fingerprints` holds it). |
+| **Models** | OpenAI `text-embedding-3-small` and `text-embedding-3-large`; Gemini `gemini-embedding-001` and `gemini-embedding-2`; any id an OpenAI-compatible gateway serves. Anthropic has no embedding API, so it has none, and the card says meaning search needs an OpenAI, Gemini or gateway key. |
+| **768 numbers each** | OpenAI and gateways get `dimensions: 768` on `POST /embeddings`; Gemini gets `outputDimensionality: 768` on `models/<id>:batchEmbedContents`. A reply of another length is an error, "This model returns N dimensions; meaning search needs 768.", never cut or padded. |
+| **Normalized here** | Every vector is scaled to length 1 by the server, whatever the provider: OpenAI's are already unit length, `gemini-embedding-001` cut to 768 is not, and a gateway may not be. |
+| **Requests** | Through `providerFetch` (the SSRF guard), at most 100 texts each, a 30 s timeout joined to the request's abort signal. The key is sent in a header (Gemini's `x-goog-api-key` too, not the `?key=` the chat call uses) and cut out of any provider reason before it is logged or returned. |
+| **Storage** | `fingerprintModel` in the org's settings document (`src/app/config.ts`, the `org_config` row), behind `aiConfig.currentFingerprintModel()` / `setFingerprintModel()`. No migration. Its provider must be connected; disconnecting that provider turns meaning search off. |
+| **Changing it** | Saving another model sends nothing. Part 2's background job refingerprints every item; until it has, items are found by their words. |
+
+`text-embedding-004` was left out: Google's deprecations page lists it as shut down on 14 January 2026.
+
+**Contracts** (`src/api/ai.ts`, org `admin`): `ai:setFingerprintModel {pick | null}`, where `pick`
+is one of the ids above or `{provider: 'gateway', model}` and anything else is a 400 before the
+handler; and `ai:testFingerprint {pick}`, which fingerprints one short sample and answers
+`{ok, dimensions, ms}` or the provider's sentence. `ai:admin` gains `fingerprintModel`.
+
+**Cost.** OpenAI's embeddings guide (read 15 November 2026) works out to about $0.02 per million
+tokens for `text-embedding-3-small` and about $0.13 for `-large`. At roughly 50 tokens per item,
+10,000 items is about 500,000 tokens, so about one cent. Gemini's price was not checked.
+
+**Rank merge** (`src/ai/rankFusion.ts`, pure): `fuse(lists, {k = 60, limit})` scores each item
+Σ 1/(k + rank) over the lists it is in (rank from 1), ties by its rank in the first list (words),
+then by key. With no fingerprints the meaning list is empty and the result is the words order.
+`test-rankFusion` holds it `Object.is`-equal to a brute reference on 300 random cases.

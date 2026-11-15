@@ -57,6 +57,14 @@ export interface AdminView {
   readonly providers: readonly ProviderState[];
   /** Every enabled model, whatever its provider's state, in list order. */
   readonly models: readonly AiModel[];
+  /** The fingerprint model for meaning search, or null (off). */
+  readonly fingerprintModel: FingerprintPick | null;
+}
+
+/** A fingerprint model: openai or gemini by its id, a gateway's typed in (src/api/ai.ts FINGERPRINT_MODELS). */
+export interface FingerprintPick {
+  readonly provider: string;
+  readonly model: string;
 }
 
 type Fail = { ok: false; error: string };
@@ -185,7 +193,29 @@ export async function adminView(): Promise<AdminView> {
       verifiedAt: r?.verified_at ? r.verified_at.toISOString() : null,
     });
   }
-  return { keyStore, providers, models };
+  return { keyStore, providers, models, fingerprintModel: currentFingerprintModel() };
+}
+
+/**
+ * The org's fingerprint model for meaning search, or null: OFF, the default,
+ * and with no database. It is in the org's settings document (src/app/config.ts,
+ * a Postgres row with a database), so every pod reads the same within a second.
+ * Picking another model means every item is refingerprinted, by the background
+ * job that reads this (part 2 of meaning search); the save itself sends nothing.
+ */
+export function currentFingerprintModel(): FingerprintPick | null {
+  return enabled() ? config.get().fingerprintModel : null;
+}
+
+/** Sets or clears the fingerprint model. Its provider must be connected (the contract allows only real ids). */
+export async function setFingerprintModel(pick: FingerprintPick | null): Promise<{ ok: true } | Fail> {
+  if (pick) {
+    const connected = await asOrg(async (c, org) => (await c.query(
+      'SELECT 1 FROM org_ai_providers WHERE org_id = $1 AND provider = $2 AND verified_at IS NOT NULL', [org, pick.provider])).rowCount);
+    if (!connected) return { ok: false, error: msg.aiProviderNotConnected(pick.provider) };
+  }
+  config.save({ fingerprintModel: pick && { provider: pick.provider, model: pick.model } });
+  return { ok: true };
 }
 
 /** A provider's endpoint and key for one outbound call (src/app/execConfig.ts byokCredentials). Key — main only. */
@@ -255,10 +285,11 @@ export async function connect(
   return r;
 }
 
-/** Removes the key and the provider; its models and every pick of them go with it (cascade). */
+/** Removes the key and the provider; its models and every pick of them go with it (cascade), and its fingerprint model. */
 export async function disconnect(provider: string): Promise<{ ok: true }> {
   await aiKeys.deleteKey(provider);
   await asOrg((c, org) => c.query('DELETE FROM org_ai_providers WHERE org_id = $1 AND provider = $2', [org, provider]));
+  if (currentFingerprintModel()?.provider === provider) config.save({ fingerprintModel: null }); // meaning search goes off with its key
   return { ok: true };
 }
 

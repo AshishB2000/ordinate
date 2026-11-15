@@ -147,3 +147,99 @@ describe('Admin → AI', () => {
     }));
   });
 });
+
+describe('Admin → AI → fingerprint model for meaning search', () => {
+  const OPENAI_ON = { ...SET_UP, providers: [on('anthropic'), on('openai'), off('gemini'), on('gateway')], fingerprintModel: null };
+  const SMALL = { provider: 'openai', model: 'text-embedding-3-small' };
+  const card = async () => {
+    const heading = await screen.findByRole('heading', { name: 'Fingerprint model for meaning search' });
+    return heading.closest('div')!.parentElement as HTMLElement;
+  };
+  const choose = (name: string | RegExp) => {
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    fireEvent.click(screen.getByRole('option', { name }));
+  };
+
+  it('with only Anthropic connected, says meaning search needs an OpenAI, Gemini or gateway key, and offers no picker', async () => {
+    serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: { ...SET_UP, fingerprintModel: null } } });
+    open();
+    expect(await screen.findByRole('heading', { name: 'Meaning search needs an OpenAI, Gemini or gateway key' })).toBeTruthy();
+    expect(screen.getByText(/Anthropic has no fingerprint model/)).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
+  });
+
+  it('is off by default: Off picked, Test and Save disabled; only connected providers\' models are offered', async () => {
+    serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: OPENAI_ON } });
+    open();
+    const c = await card();
+    expect(within(c).queryByText(/^On ·/)).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('Off');
+    expect((screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names.some((n) => n?.includes('OpenAI · text-embedding-3-large'))).toBe(true);
+    expect(names.some((n) => n?.includes('gemini'))).toBe(false); // Gemini is not connected
+    expect(names.some((n) => n?.includes('enter a model id'))).toBe(true);
+  });
+
+  it('Test fingerprints the picked model and shows the server\'s size and latency; Save sends the pick', async () => {
+    const calls = serve({
+      '/api/auth/me': { body: ADMIN },
+      'ai:admin': { body: OPENAI_ON },
+      'ai:testFingerprint': { body: { ok: true, dimensions: 768, ms: 412 } },
+      'ai:setFingerprintModel': { body: { ok: true } },
+    });
+    open();
+    await card();
+    choose('OpenAI · text-embedding-3-small');
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+    expect(await screen.findByText('768 dimensions · 412 ms')).toBeTruthy();
+    expect(calls.find((c) => c.channel === 'ai:testFingerprint')?.payload).toEqual({ pick: SMALL });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'ai:setFingerprintModel')?.payload).toEqual({ pick: SMALL }));
+  });
+
+  it('a failed test shows the provider\'s sentence; picking again clears it', async () => {
+    serve({
+      '/api/auth/me': { body: ADMIN },
+      'ai:admin': { body: OPENAI_ON },
+      'ai:testFingerprint': { body: { ok: false, errorType: 'auth', message: 'Your API key was rejected. Check it in Settings.', detail: 'OpenAI API · 401' } },
+    });
+    open();
+    await card();
+    choose('OpenAI · text-embedding-3-large');
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Your API key was rejected. Check it in Settings. OpenAI API · 401');
+    choose('OpenAI · text-embedding-3-small');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('a gateway needs its model id typed before Save; a refusal is shown inline', async () => {
+    const calls = serve({
+      '/api/auth/me': { body: ADMIN },
+      'ai:admin': { body: OPENAI_ON },
+      'ai:setFingerprintModel': { body: { ok: false, error: 'Connect gateway before adding its models.' } },
+    });
+    open();
+    await card();
+    choose('OpenAI-compatible gateway · enter a model id');
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Gateway model id'), { target: { value: 'acme/embed-768' } });
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() => expect(calls.find((c) => c.channel === 'ai:setFingerprintModel')?.payload).toEqual({ pick: { provider: 'gateway', model: 'acme/embed-768' } }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Connect gateway before adding its models.');
+  });
+
+  it('a saved model shows On; choosing Off and saving sends null', async () => {
+    const calls = serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: { ...OPENAI_ON, fingerprintModel: SMALL } }, 'ai:setFingerprintModel': { body: { ok: true } } });
+    open();
+    expect(await screen.findByText('On · text-embedding-3-small')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+    choose(/^Off/);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'ai:setFingerprintModel')?.payload).toEqual({ pick: null }));
+  });
+});
