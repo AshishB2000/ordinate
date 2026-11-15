@@ -411,6 +411,27 @@ describe('the dock', () => {
     expect((within(composer).getByRole('textbox', { name: 'Your question' }) as HTMLTextAreaElement).value).toBe('upload data');
   });
 
+  it('a viewer whose answer needs a link nobody defined gets Ask an editor with that reason (phase D `needs`)', async () => {
+    const turns = [
+      { id: 't1', role: 'user', text: 'returns by customer region', createdAt: '' },
+      { id: 't2', role: 'assistant', text: 'Returns and customers are not linked.', createdAt: '', needs: 'link' },
+    ];
+    serve({
+      ...base(ADMIN, true),
+      'projects:roles': { body: { [PID]: 'viewer' } },
+      'copilot:ask': { body: { ok: true, answer: turns[1].text, threadId: null, turns } },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    fireEvent.change(box, { target: { value: 'returns by customer region' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(await within(dock).findByText(turns[1].text)).toBeTruthy();
+    const offer = await within(dock).findByTestId('ask-editor');
+    expect(offer.textContent).not.toContain('This data isn’t in Ordinate yet.'); // the link's reason, not outcome D's
+  });
+
   it('a reply that proposes rebuilding another tool’s dashboard links to the screenshot page in this project', async () => {
     const turns = [
       { id: 't1', role: 'user', text: 'rebuild my Tableau dashboard here', createdAt: '' },

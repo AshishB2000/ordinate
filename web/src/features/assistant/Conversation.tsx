@@ -79,6 +79,7 @@ function AgentPick({ c }: { c: Conversation }) {
 function Turns({ c }: { c: Conversation }) {
   const qc = useQueryClient();
   const { pid, canEdit, pending } = c;
+  const lastNeeds = c.turns.findLast((t) => t.role === 'assistant')?.needs;
   if (!pid) return null;
   return (
     <>
@@ -101,8 +102,9 @@ function Turns({ c }: { c: Conversation }) {
           <Link className={buttonClass('secondary', 'sm')} to={`/connections/${pid}`}>Connect a source</Link>
         </div>
       )}
-      {/* Outcome D for a viewer: nothing they may read has it, so they ask the editors (./AskAnEditor). */}
-      {!canEdit && c.getData && !pending && <AskAnEditor projectId={pid} question={c.turns.findLast((t) => t.role === 'user')?.text ?? ''} reason="missing" />}
+      {/* For a viewer: outcome D (nothing they may read has it), or the last answer needs a link nobody defined or a
+          table copied first (`needs`, from the server) — they ask the editors (./AskAnEditor). */}
+      {!canEdit && !pending && (c.getData || lastNeeds) && <AskAnEditor projectId={pid} question={c.turns.findLast((t) => t.role === 'user')?.text ?? ''} reason={lastNeeds ?? 'missing'} />}
       {canEdit && c.rebuildOffer && !pending && (
         <div className={s.getData} data-testid="dock-rebuild">
           <Link className={buttonClass('primary', 'sm')} to={`/analyses/${pid}/rebuild${c.context.kind === 'dataset' && c.context.id ? `?dataset=${c.context.id}` : ''}`}>
