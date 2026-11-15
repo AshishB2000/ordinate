@@ -44,7 +44,7 @@ Agreed on the flow page (Nov 2026). Related: [Explore](../explore/00-design.md),
 | Step | What happens | AI | Exists |
 |---|---|---|---|
 | 1 | You ask, from Home, the Assistant page or the side panel. An open topic scopes everything below. | — | yes |
-| 2 | Same letters as a verified question (lowercase, no spaces or punctuation) on the open dataset, visual's dataset or topic (anywhere in the project from Home)? Show that chart, with **Not what I asked**, which gives the same words to the AI without that question or its answer. | — | yes |
+| 2 | Same letters as a verified question (lowercase, no spaces or punctuation) on the open dataset, visual's dataset or topic (anywhere in the project from Home)? Show that chart, with **Not what I asked**, which gives the same words to the AI without that question or its answer. One indexed lookup (`verified_keys`, 0026): a miss reads no verified record. | — | yes |
 | 3 | Search the Data model; follow links; add table facts. | — | new |
 | 4 | One AI call returns a chart form, or SQL only when the form can't express it. | 1 (2 for SQL) | partly |
 | 5 | Every dataset, column, metric and term named must be real, else "Did you mean …?". | — | yes |
@@ -258,7 +258,12 @@ AI agents over MCP and API tokens act as their person and get that person's role
   changes. Without pgvector or a configured fingerprint model, search is words only.
 - The index is refreshed when an editor verifies a question; a metric, term or dataset description
   is edited; a dbt or Ossie import runs; the connection job pulls new table info.
-- Verified questions load in one query, not one per question.
+- Verified questions are an index, `verified_keys` (0026): one row per wording, rewritten in the same
+  transaction as the save. Step 2 is one lookup by key, and step 4's examples are ranked in Postgres, so
+  only the few returned are read and checked for the person asking (whether each still runs, and
+  what they may see). With 5,000 verified questions: 0.27 ms for a miss, 9.7 ms for the examples, where
+  reading them all took about 650 ms each. The read-them-all path stays as the reference a
+  differential test holds the index to (`test-verifiedIndex`), and answers without a database.
 
 ## Build order
 

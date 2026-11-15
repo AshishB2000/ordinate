@@ -9,7 +9,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { isValidId, projectDir, RECORD_DIR } from '../app/recordKinds';
 import * as recordFs from '../app/recordFs';
-import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
+import { contentTag, lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeVerified, type VerifiedQuestion } from './verifiedRules';
 
 const dirOf = (projectId: string): string => path.join(projectDir(projectId), RECORD_DIR.verified);
@@ -40,6 +40,29 @@ export async function listTagged(projectId: string): Promise<Tagged<VerifiedQues
     if (t && t.rec.id === id) out.push(t);
   }
   return out.sort((a, b) => (a.rec.updatedAt < b.rec.updatedAt ? 1 : a.rec.updatedAt > b.rec.updatedAt ? -1 : 0));
+}
+
+/** A stored record's text as `readVerified` reads it (re-sanitized, with its tag), or null when it is not a question. */
+export function verifiedFromBody(projectId: string, body: string): Tagged<VerifiedQuestion> | null {
+  try {
+    const data: unknown = JSON.parse(body);
+    const rec = normalize(projectId)(data);
+    return rec ? { rec, tag: contentTag('verified', data) } : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** The questions `ids`, in that order, from ONE read; a missing, corrupt or misnamed one is left out, as `listTagged` leaves it. */
+export async function readManyTagged(projectId: string, ids: readonly string[]): Promise<Tagged<VerifiedQuestion>[]> {
+  if (!isValidId(projectId)) return [];
+  const valid = ids.filter((id) => isValidId(id));
+  const bodies = await recordFs.readMany(valid.map((id) => fileOf(projectId, id)));
+  return valid.flatMap((id) => {
+    const body = bodies.get(fileOf(projectId, id));
+    const t = body === undefined ? null : verifiedFromBody(projectId, body);
+    return t && t.rec.id === id ? [t] : [];
+  });
 }
 
 /** Every question of the project, newest `updatedAt` first. A corrupt file is skipped. */

@@ -10,10 +10,7 @@ import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import { guidanceBlock, GUIDE_INVENTORY_MAX, GUIDE_OPEN_MAX, type GuidanceInput, type Guided } from '../ai/guidanceFacts';
 import { logger } from '../app/logger';
-import { verifiedStates } from './verifiedState';
-import { pickExamples } from '../ai/verifiedPick';
-import { listTerms } from '../analysis/terms';
-import { withheldColumns } from '../app/sharePolicy';
+import { verifiedExamples } from './verifiedLookup';
 import { readTopic, topicForReaders } from '../analysis/topics';
 
 const NONE: Guided = { text: '', ledger: [], used: { instructions: 0, examples: [] } };
@@ -25,20 +22,9 @@ function guided(input: GuidanceInput, examples: string[] = []): Guided {
   return { text: b.text, ledger: b.ledger, used: { instructions: b.instructions, examples } };
 }
 
-/** The verified questions worth showing for `question` (D10), as lines and ids. Metadata only; the caller's row lock hides what it hides. */
-async function exampleLines(projectId: string, question: string, datasetId: string | undefined, exclude: string | undefined, first?: ReadonlySet<string>) {
-  const states = await verifiedStates(projectId);
-  if (!states.length) return { lines: [], ids: [] };
-  const ids = [...new Set(states.map((s) => s.q.spec.datasetId))];
-  const [metas, terms, withheld] = await Promise.all([
-    Promise.all(ids.map((id) => datasets.getDatasetMeta(projectId, id))), listTerms(projectId), Promise.all(ids.map((id) => withheldColumns(projectId, id))),
-  ]);
-  const name = new Map(ids.map((id, i) => [id, metas[i]?.name ?? ''] as const));
-  const held = new Map(ids.map((id, i) => [id, withheld[i]] as const));
-  return pickExamples(states, {
-    question, datasetId, exclude, first, names: { dataset: (id) => name.get(id) ?? '', term: (id) => terms.find((t) => t.id === id)?.name ?? '' },
-    withheld: (id) => held.get(id) ?? new Set(),
-  });
+/** The verified questions worth showing for `question` (D10), as lines and ids (./verifiedLookup: ranked by the index with a database). Metadata only; the caller's row lock hides what it hides. */
+function exampleLines(projectId: string, question: string, datasetId: string | undefined, exclude: string | undefined, first?: ReadonlySet<string>) {
+  return verifiedExamples(projectId, { question, datasetId, exclude, first });
 }
 
 /** A topic's datasets in its order (gone ones dropped), or null when there is no such topic: the project's then. */

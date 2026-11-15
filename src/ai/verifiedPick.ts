@@ -42,29 +42,46 @@ export interface PickOptions {
   withheld: (datasetId: string) => ReadonlySet<string>;
 }
 
-/** Up to 5 example lines: the context's dataset first, then an agent's topic, then the most words shared with the question, then the newest. */
-export function pickExamples(states: VerifiedState[], o: PickOptions): { lines: string[]; ids: string[] } {
+/** Whether `s` may be shown to this caller as an example: it runs, they may see it, and no value filter of it is on a column withheld from them. */
+export function eligibleExample(s: VerifiedState, o: Pick<PickOptions, 'exclude' | 'withheld'>): boolean {
+  if (!usable(s, o.exclude)) return false;
+  const w = o.withheld(s.q.spec.datasetId);
+  return !(hasValueFilter(s.q.spec) && s.q.spec.filters.some((f) => 'column' in f && !('period' in f) && w.has(f.column)));
+}
+
+/** The examples' order: the context's dataset first, then an agent's topic, then the most words shared with the question, then the newest, then the id. */
+export function exampleOrder(o: Pick<PickOptions, 'question' | 'datasetId' | 'first'>): (a: VerifiedQuestion, b: VerifiedQuestion) => number {
   const asked = new Set(words(o.question));
   const shared = (q: VerifiedQuestion): number => words(q.question).filter((w) => asked.has(w)).length;
-  const eligible = states.filter((s) => {
-    if (!usable(s, o.exclude)) return false;
-    const w = o.withheld(s.q.spec.datasetId);
-    return !(hasValueFilter(s.q.spec) && s.q.spec.filters.some((f) => 'column' in f && !('period' in f) && w.has(f.column)));
-  }).map((s) => s.q);
   const rank = (q: VerifiedQuestion): number => (q.spec.datasetId === o.datasetId ? 0 : o.first?.has(q.spec.datasetId) ? 1 : 2);
-  eligible.sort((a, b) => rank(a) - rank(b) || shared(b) - shared(a)
-    || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0) || (a.id < b.id ? -1 : 1));
-  const lines: string[] = [], ids: string[] = [];
-  let total = 0;
-  for (const q of eligible) {
+  return (a, b) => rank(a) - rank(b) || shared(b) - shared(a)
+    || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0) || (a.id < b.id ? -1 : 1);
+}
+
+/** The example lines taken so far; `done` once five are taken or the block is full, so no later question could join. */
+export interface Taken { lines: string[]; ids: string[]; total: number; done: boolean }
+export const NOTHING_TAKEN: Taken = { lines: [], ids: [], total: 0, done: false };
+
+/** `sorted` (eligible, in `exampleOrder`) taken after `acc`, so lines can be taken a batch at a time (../ipc/verifiedLookup). */
+export function takeExamples(sorted: readonly VerifiedQuestion[], names: Names, acc: Taken = NOTHING_TAKEN): Taken {
+  if (acc.done) return acc;
+  const lines = [...acc.lines], ids = [...acc.ids];
+  let total = acc.total;
+  for (const q of sorted) {
     if (ids.length >= MAX_EXAMPLES) break;
-    const line = `- ${promptJson(q.question)} → ${promptJson(rawSpec(q.spec, o.names))}`;
+    const line = `- ${promptJson(q.question)} → ${promptJson(rawSpec(q.spec, names))}`;
     if (line.length > EXAMPLE_MAX) continue;
     const next = total + line.length + (lines.length ? 1 : 0);
-    if (next > EXAMPLES_BLOCK_MAX) break;
+    if (next > EXAMPLES_BLOCK_MAX) return { lines, ids, total, done: true };
     total = next;
     lines.push(line);
     ids.push(q.id);
   }
-  return { lines, ids };
+  return { lines, ids, total, done: ids.length >= MAX_EXAMPLES };
+}
+
+/** Up to 5 example lines: the context's dataset first, then an agent's topic, then the most words shared with the question, then the newest. */
+export function pickExamples(states: VerifiedState[], o: PickOptions): { lines: string[]; ids: string[] } {
+  const t = takeExamples(states.filter((s) => eligibleExample(s, o)).map((s) => s.q).sort(exampleOrder(o)), o.names);
+  return { lines: t.lines, ids: t.ids };
 }

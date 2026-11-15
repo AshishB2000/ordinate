@@ -13,6 +13,7 @@ import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import { mentionsHidden } from '../data/columnAccess';
 import { hasValueFilter, type VerifiedQuestion } from '../analysis/verifiedRules';
 import { listTagged } from '../analysis/verifiedQuestions';
+import type { Tagged } from '../app/editConflict';
 import * as msg from '../analysis/verifiedMessages';
 import { listMetrics } from '../analysis/metrics';
 import { pendingMetric } from '../analysis/pendingKinds';
@@ -59,6 +60,11 @@ export interface VerifiedState { q: VerifiedQuestion; problem: string | null; hi
  */
 export async function verifiedStates(projectId: string): Promise<VerifiedState[]> {
   const [list, env] = await Promise.all([listTagged(projectId), verifiedEnv(projectId)]);
+  return statesOf(projectId, list, env);
+}
+
+/** `verifiedStates` of some questions only, in their order (../ipc/verifiedLookup: the few an index lookup returned). */
+export async function statesOf(projectId: string, list: readonly Tagged<VerifiedQuestion>[], env: VerifiedEnv): Promise<VerifiedState[]> {
   const left = await leftOutFor(projectId, list.map((x) => x.rec));
   const closed = new Map<string, boolean>();
   const out: VerifiedState[] = [];
