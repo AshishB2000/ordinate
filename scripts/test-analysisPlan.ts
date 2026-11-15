@@ -307,7 +307,8 @@ async function checkFacts(): Promise<void> {
 
   // NO ROWS. A cell value planted in the table must not appear anywhere.
   ok('facts: contains NO row value', !facts.includes(CELL_SENTINEL));
-  ok('facts: contains no leading-zero id from the table', !facts.includes('007'));
+  // Not inside a hex run: the facts carry random ids, and one holding "007" is no cell (it failed CI once in a while).
+  ok('facts: contains no leading-zero id from the table', !/(?<![0-9a-f])007(?![0-9a-f])/i.test(facts), facts.match(/.{0,20}007.{0,20}/)?.[0]);
   // Not even the most-common VALUE, which ColumnSummary carries and this omits
   // on purpose — a most-common value is a cell wearing a statistic's clothes.
   ok('facts: contains no category value at all',
