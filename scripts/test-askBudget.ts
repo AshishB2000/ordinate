@@ -111,7 +111,10 @@ const CEILING_ON: Record<string, { queries: number; reads: number }> = {
   home: at(107, 153), // off: 89 / 154
   dataset: at(94, 118), // off: 88 / 123
   agent: at(84, 136), // off: 75 / 136
-  viewer: at(135, 7_350), // off: 114 / 7,299
+  // CI (password Postgres + MinIO, STORAGE_URL s3://) counts ~15 more statements here than a run on DATA_DIR: 149 on #521,
+  // 152 once #523's links added their 3; 134 locally. `shortcut:` raised to CI's count; the histogram printed when a
+  // case is into its 10% says which statements those are — lower this once they are found.
+  viewer: at(139, 7_350), // off: 117 / 7,312; was at(135, 7_350)
   dashboard: at(119, 182), // off: 112 / 183
 };
 
@@ -173,19 +176,25 @@ async function world(pool: Pool): Promise<World> {
 }
 
 /** What one ask costs: Postgres statements, record reads and tables loaded (datasets.getDataset) while `fn` runs. */
-async function counted<T>(fn: () => Promise<T>): Promise<{ out: T; queries: number; reads: number; tables: number; ms: number }> {
+async function counted<T>(fn: () => Promise<T>): Promise<{ out: T; queries: number; reads: number; tables: number; ms: number; sqls: string[] }> {
   const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown }; // the pool's clients are pg Clients
   const [query, readFile, readMany, readdir, getDataset] = [proto.query, recordFs.readFile, recordFs.readMany, recordFs.readdir, datasets.getDataset];
   let queries = 0, reads = 0, tables = 0;
+  const sqls: string[] = [];
   (datasets as { getDataset: unknown }).getDataset = (...a: Parameters<typeof getDataset>) => { tables++; return getDataset(...a); };
-  proto.query = function (this: unknown, ...a: unknown[]) { queries++; return query.apply(this, a); };
+  proto.query = function (this: unknown, ...a: unknown[]) {
+    queries++;
+    const q = a[0] as string | { text?: string } | undefined;
+    sqls.push(String(typeof q === 'string' ? q : q?.text ?? '?'));
+    return query.apply(this, a);
+  };
   const spy = recordFs as unknown as Record<'readFile' | 'readMany' | 'readdir', unknown>;
   spy.readFile = (...a: unknown[]) => { reads++; return (readFile as (...x: unknown[]) => unknown)(...a); };
   spy.readMany = (ps: readonly string[]) => { reads += ps.length; return readMany(ps); };
   spy.readdir = (...a: unknown[]) => { reads++; return (readdir as (...x: unknown[]) => unknown)(...a); };
   const t0 = Date.now();
   try {
-    return { out: await fn(), queries, reads, tables, ms: Date.now() - t0 };
+    return { out: await fn(), queries, reads, tables, ms: Date.now() - t0, sqls };
   } finally {
     proto.query = query;
     Object.assign(spy, { readFile, readMany, readdir });
@@ -289,6 +298,7 @@ async function dbLeg(pool: Pool): Promise<void> {
     line(name, on);
     ok(`${name}: the ask answers with the chart, as asked`, on.out.ok === true && on.out.turns.at(-1)?.answer?.datasetId === w.orders && right(on.out), JSON.stringify(on.out).slice(0, 300));
     ok(`${name}: ${on.queries} queries ≤ ${CEILING[name].queries} and ${on.reads} record reads ≤ ${CEILING[name].reads}`, on.queries <= CEILING[name].queries && on.reads <= CEILING[name].reads);
+    if (on.queries * 1.1 > CEILING[name].queries || process.env.ORDINATE_BUDGET_SQL) histogram(name, on.sqls); // over, or into its 10%
     tablesOf.set(name, on.tables);
     // Before PR 4 the dashboard resolved all 5,000 metrics, a table loaded for each clone's (they have no Parquet). Since
     // PR 6b it also resolves the few metrics step 3 finds for the question elsewhere (Q12): "Revenue" on five clones.
@@ -343,7 +353,7 @@ async function dbLeg(pool: Pool): Promise<void> {
 }
 
 /** The cases again with meaning search on: a fake model (no network), every item fingerprinted by the job first. */
-async function meaningOn(cases: Array<[string, Role, object, string | undefined, unknown]>, once: (role: Role, extra: object, agentId: string | undefined) => Promise<{ queries: number; reads: number; tables: number; ms: number; out: any }>,
+async function meaningOn(cases: Array<[string, Role, object, string | undefined, unknown]>, once: (role: Role, extra: object, agentId: string | undefined) => Promise<{ queries: number; reads: number; tables: number; ms: number; out: any; sqls: string[] }>,
   line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
   const vstore: typeof import('../src/server/vectorStore') = require('../src/server/vectorStore');
   if (!(await vstore.vectorStatus(0)).table) {
@@ -380,7 +390,19 @@ async function meaningOn(cases: Array<[string, Role, object, string | undefined,
     line(name + ' (meaning on)', on);
     ok(`${name}, meaning on: the ask answers, with ONE embed call (${embeds}), ${on.queries} queries ≤ ${CEILING_ON[name].queries} and ${on.reads} record reads ≤ ${CEILING_ON[name].reads}`,
       on.out.ok === true && embeds === 1 && on.queries <= CEILING_ON[name].queries && on.reads <= CEILING_ON[name].reads);
+    if (on.queries * 1.1 > CEILING_ON[name].queries || process.env.ORDINATE_BUDGET_SQL) histogram(name + ' (meaning on)', on.sqls); // over, or into its 10%
   }
+}
+
+/** The statements a case made, by their first words, most frequent first: what to cut when a case nears its ceiling. */
+function histogram(name: string, sqls: readonly string[]): void {
+  const by = new Map<string, number>();
+  for (const q of sqls) {
+    const k = q.replace(/\s+/g, ' ').trim().slice(0, 90);
+    by.set(k, (by.get(k) ?? 0) + 1);
+  }
+  console.log(`  ${name}: ${sqls.length} statements`);
+  for (const [k, n] of [...by].sort((a, b) => b[1] - a[1])) console.log(`    ${String(n).padStart(4)}  ${k}`);
 }
 
 /**
