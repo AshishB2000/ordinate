@@ -324,6 +324,36 @@ worst places:
 - `catalog.json` stays one record per project; a project whose catalog passes 4 MiB is logged
   once, and it is split per dataset only when a real project nears the 8 MiB cap.
 
+### Step 3's index, as built (`0027_assistant_search`, PR 6a)
+
+- **What it holds:** datasets (name; description from the catalog), their columns (name;
+  display name, "also called" names and description from the catalog's column docs), metrics
+  (name, description), glossary terms (name, other names, description) and documented source
+  tables (`connections/<id>.tables.json`, editors only). Never a value: no example, value label,
+  filter value or row. Verified questions keep their own index (0026).
+- **Parts, not rows:** an item draws on up to two records, its own and `catalog.json`, so each
+  record writes only its own part and a query sums the parts by item. `catalog.json` is split into
+  groups (one per dataset, one for certified and retired) with a hash each: a save rewrites only
+  the groups whose hash moved. At 10,000 column docs a column save costs 82 ms, 26 ms of it the
+  describer on the event loop, instead of a 179 ms rebuild on the next question.
+- **Words** are `answerSuggest.words`, less a short list of question words, with a light English
+  plural fold (`src/ai/modelWords.ts`), the same on both sides. **Score:** 4 per asked word in a
+  name, 2 in an other name, 1 in a description; then certified first, kind, newest, key. An
+  integer the JS reference reproduces exactly (`test-assistantSearch`).
+- **Access:** a viewer's query never matches a source table (`audience` in the `WHERE`). A column
+  hidden from the caller, and a metric or term that reads one (`metricHidden`, `termHidden`, as the
+  vocabulary leaves them out), are dropped after ranking, a page at a time. Retired items are left
+  out. `countModel` counts datasets, metrics, terms and source tables the caller may see, never
+  columns. For a caller with a hidden column those checks read every dataset and metric once a
+  request (`hiddenAnywhere`, `metricsByName`): 1.6 s for a question whose results hold a metric, and
+  1.2 s for the counts, at the size below. Making those two index-backed is the next fix there.
+- **Measured** (Postgres 17, 2,000 datasets × 20 columns, 5,000 metrics, 2,000 terms, 10,000
+  column docs, 61,000 rows): first build 1.2 s, once; a question matching nothing 0.4 ms; one
+  whose words match thousands of items ("sales by region") 22 ms, against 1,400 ms for reading
+  every store. Until Postgres has statistics on a fresh build (autovacuum, about a minute), 17 to
+  35 ms. The API is `searchModel` and `countModel` (`src/ipc/assistantSearch.ts`); PR 6b puts it
+  on the ask path.
+
 ### Answers keep the figures they had
 
 An answer stored only its chart form, so it was computed again each time its conversation

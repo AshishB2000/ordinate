@@ -261,8 +261,10 @@ async function dbLeg(pool: Pool): Promise<void> {
   await pool.query('DELETE FROM records WHERE org_id = $1 AND path = $2', ['acme', HUGE]);
 
   // A failed index write keeps the source's shared lock to the end of its transaction, so no rebuild reads past it.
+  // ⌘K's own lock on the datasets source only: the Assistant's index (0027) takes one of its own for the same write.
   const sharedLocks = async () => Number((await pool.query(
-    `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND mode = 'ShareLock' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`)).rows[0].count);
+    `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND mode = 'ShareLock' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+       AND ((classid::bigint << 32) | objid::bigint) = hashtextextended($1, 0)`, [`search:acme:${P}:datasets`])).rows[0].count);
   const JUNK = await as(ADMIN, null, async () => path.join(appPaths.userData(), 'projects', P, 'datasets', '11111111-1111-4111-8111-111111111111.json'));
   let during = -1;
   index.useDescriber(() => { throw Object.assign(new Error('describer broke'), { code: 'TEST' }); });

@@ -146,6 +146,12 @@ export async function listFullTerms(projectId: string): Promise<Term[]> {
   return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
 
+/** One stored record → its summary, or null for one the list skips: the Assistant search index's parser (0027). */
+export function termOf(projectId: string, raw: string): TermSummary | null {
+  const data = JSON.parse(raw);
+  return isValidTerm(data) ? toSummary(normalize(data, projectId)) : null;
+}
+
 export async function listTerms(projectId: string): Promise<TermSummary[]> {
   return (await listFullTerms(projectId)).map(toSummary);
 }

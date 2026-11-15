@@ -618,8 +618,8 @@ export function registerHandlers(): void {
   }
 
   // Settings, themes, privacy, the palette's record search and the calendar
-  // preview (T2.14). Each module once; the registry throws on a second.
-  for (const mod of ['../ipc/settingsServer', '../ipc/themes', '../ipc/privacy', '../ipc/search', '../ipc/periods']) {
+  // preview (T2.14), and what keeps the Assistant's search index (0027) current. Each module once; the registry throws on a second.
+  for (const mod of ['../ipc/settingsServer', '../ipc/themes', '../ipc/privacy', '../ipc/search', '../ipc/periods', '../ipc/assistantSearch']) {
     (require(mod) as { register: () => void }).register();
   }
   // Analyses and authoring, metrics (T2.8). `periods` (metric:compare) is T2.14's registration above.
