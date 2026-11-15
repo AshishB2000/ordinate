@@ -21,8 +21,7 @@ import { datasetFilePath } from '../data/datasetRecord';
 import { isValidId } from '../app/ids';
 import * as recordFs from '../app/recordFs';
 import { pendingMetric } from '../analysis/pendingKinds';
-import { specDatasets, specMetrics, specTerms } from './answers';
-import { specDatasetsOf, specMetricsFrom, specTermOf } from './specVocabulary';
+import { metricsNamedAs, specDatasets, specDatasetsOf, specMetrics, specMetricsFrom, specTermOf, specTerms } from './specVocabulary';
 import { perAsk } from './askMemo';
 
 /** `pending`: the ids of metrics of a kind this release cannot draw (part 5): `computeCard` refuses those in its own words. */
@@ -40,14 +39,14 @@ export function verifiedEnv(projectId: string): Promise<VerifiedEnv> {
  * `verifiedEnv` cut to what `questions` name, to check a few (an index lookup's candidates, a draft, a card's mark):
  * their datasets, the terms their filters name, the metrics their measures name and, on each one's dataset, every
  * metric of its name (refineSpec's `byName`: the FIRST of a name is the one the name means). For each of `questions`,
- * `verifiedProblem` reads the same here as in the whole env (scripts/test-verifiedNarrowEnv.ts). `pending` is the
- * whole set when a measure names a metric, else empty: only a named metric is looked up in it.
+ * `verifiedProblem` reads the same here as in the whole env (scripts/test-verifiedNarrowEnv.ts). `pending` holds those
+ * metrics' pending ones: only a named metric is looked up in it.
  */
 export async function verifiedEnvFor(projectId: string, questions: readonly VerifiedQuestion[]): Promise<VerifiedEnv> {
   const ids = (of: (q: VerifiedQuestion) => Array<string | undefined>): string[] => [...new Set(questions.flatMap(of))].filter((id): id is string => !!id);
   const named = new Set(ids((q) => q.spec.measures.map((m) => m.metricId)));
-  // shortcut: a measure naming a metric lists the project's metric summaries, to find the metrics of its name on its dataset; upgrade to a (dataset, name) lookup when step 3's index lands.
-  const all = named.size ? await perAsk(`metricSummaries\0${projectId}`, () => listMetrics(projectId)) : [];
+  // A measure naming a metric: the metrics of its name, off step 3's index (the project's list without one), to find those on its dataset.
+  const all = named.size ? ((await metricsNamedAs(projectId, [...named])) ?? (await perAsk(`metricSummaries\0${projectId}`, () => listMetrics(projectId)))) : [];
   const nameOn = (s: MetricSummary): string => `${s.datasetId}\0${s.name.trim().toLowerCase()}`;
   const same = new Set(all.filter((s) => named.has(s.id)).map(nameOn));
   const [dsIds, termIds] = [ids((q) => [q.spec.datasetId]), ids((q) => q.spec.filters.map((f) => ('term' in f ? f.term : undefined)))];

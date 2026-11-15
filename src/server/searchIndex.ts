@@ -201,3 +201,15 @@ export async function query(projectId: string, typed: readonly string[], needle:
     }));
   });
 }
+
+/** How many rows of each of `kinds` an `audiences` caller may see (Home's counts of visuals and dashboards). Null without a database. */
+export async function countKinds(projectId: string, kinds: readonly string[], audiences: readonly Audience[]): Promise<Map<string, number> | null> {
+  if (!orgDb()) return null;
+  return inOrg(async (c, org) => {
+    const r = await c.query(
+      'SELECT kind, count(*)::int AS n FROM search_entries WHERE org_id = $1 AND project_id = $2 AND audience = ANY($3::text[]) AND kind = ANY($4::text[]) GROUP BY kind',
+      [org, projectId, audiences, kinds],
+    );
+    return new Map((r.rows as Array<{ kind: string; n: number }>).map((x) => [x.kind, x.n]));
+  });
+}

@@ -12,10 +12,11 @@ import { guidanceBlock, GUIDE_INVENTORY_MAX, GUIDE_OPEN_MAX, type GuidanceInput,
 import { logger } from '../app/logger';
 import { verifiedExamples } from './verifiedLookup';
 import { readTopic, topicForReaders } from '../analysis/topics';
+import { HOME_DATASETS, homeDatasets } from './homeFacts';
 
 const NONE: Guided = { text: '', ledger: [], used: { instructions: 0, examples: [] } };
-/** The project inventory's datasets, in the order and cut of `buildFacts`' fallback. */
-const INVENTORY = 12;
+/** Home's datasets (./homeFacts: the ones `buildFacts`' fallback shows, picked once per ask), or a topic's first 12. */
+const INVENTORY = HOME_DATASETS;
 
 function guided(input: GuidanceInput, examples: string[] = []): Guided {
   const b = guidanceBlock(input);
@@ -31,15 +32,15 @@ function exampleLines(projectId: string, question: string, datasetId: string | u
 export async function topicDatasets(projectId: string, id: string): Promise<{ id: string; name: string }[] | null> {
   const stored = await readTopic(projectId, id);
   if (!stored) return null;
-  const { topic } = await topicForReaders(projectId, stored.rec);
-  const all = new Map((await datasets.listDatasets(projectId)).map((d) => [d.id, d] as const));
-  return topic.datasets.flatMap((t) => all.get(t.id) ?? []);
+  const { topic } = await topicForReaders(projectId, stored.rec); // its datasets that exist, read already (inside an ask, the memo holds them)
+  const metas = await Promise.all(topic.datasets.map((t) => datasets.getDatasetMeta(projectId, t.id)));
+  return metas.flatMap((m) => (m ? [{ id: m.id, name: m.name }] : []));
 }
 
 /**
  * The block for one `copilot:ask`. `factsKind` is the kind of the facts `buildFacts` built (its provenance), so a
  * context that fell back to the project inventory gets the inventory's guides. Guides: the dataset's own for a
- * dataset, the visual's dataset's for a visual, the first 12 datasets' on Home, a topic's first 12 in its order (part 6; its
+ * dataset, the visual's dataset's for a visual, Home's 12 datasets' (./homeFacts), a topic's first 12 in its order (part 6; its
  * facts are the inventory's, narrowed); any other kind gets instructions only. `agent`: the Assistant agent answering
  * (docs/assistant-agents): its instructions after the project's, and the verified questions on its topic's datasets first.
  */
@@ -60,7 +61,7 @@ export async function askGuidance(
     }
     if (factsKind === 'project') {
       const topic = context.kind === 'topic' && id ? await topicDatasets(projectId, id) : null;
-      for (const d of (topic ?? (await datasets.listDatasets(projectId))).slice(0, INVENTORY)) {
+      for (const d of (topic ?? (await homeDatasets(projectId, question ?? ''))).slice(0, INVENTORY)) {
         if (guideOf(d.id)) guides.push({ dataset: d.name, text: guideOf(d.id), max: GUIDE_INVENTORY_MAX });
       }
     }

@@ -1,14 +1,12 @@
 import { ipcMain } from './bus';
 import { ctx, senderOf, serverDataDir } from '../server/context';
 import * as onboarding from '../app/onboarding';
-import { closedToCaller, gateRows, hiddenColumnsFor } from '../data/rowAccess';
-import { dropHidden, factsOf, tableWithout } from '../ai/hiddenFacts';
-import { metricHidden } from '../analysis/columnHidden';
+import { gateRows, hiddenColumnsFor } from '../data/rowAccess';
+import { factsOf, tableWithout } from '../ai/hiddenFacts';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { assistantOff } from '../ai/aiMessages';
 import * as copilot from '../ai/copilot';
-import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
@@ -16,16 +14,12 @@ import { computeColumnSummary } from '../data/datasetStats';
 import * as copilotTable from './copilotTable';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
-import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { followedEncoding } from '../analysis/metricMeasures';
-import { followedMeasureTexts, metricDefinitionText } from './copilotMeasures';
+import { followedMeasureTexts } from './copilotMeasures';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
-import * as metrics from '../analysis/metrics';
-import { metricDate } from '../analysis/metricTimeScope';
-import { resolveMetric, type MetricRead } from './metrics';
-import { kpiHidden } from '../publish/kpiPolicy';
 import { isSharePath, type SharePath } from '../app/privacyStore';
 import { resolveChartOverlays } from './visualsAnalytics';
 import * as scorecards from '../analysis/scorecards';
@@ -37,26 +31,21 @@ import * as scenarios from '../analysis/scenarios';
 import { computeScenario } from '../analysis/scenarioResolve';
 import { scenarioFacts } from '../ai/scenarioFacts';
 import { statsPanelFacts, withStatsTiles } from './stats';
-import type { FactMetric } from '../ai/copilotFacts';
 import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import * as answers from './answers';
 import { vizDataFor } from './visuals';
-import { isLiveFigureError } from './liveRoute';
 import { isLiveDatasetError } from '../data/liveDataset';
-import { targetField, targetHidden } from './targetResolve';
-import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } from './copilotCards';
+import { inDashboardCurrency, metricCardFigures, savedScope } from './copilotCards';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
 import { tableFacts } from '../app/tableDocs';
-import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
+import { liveCopilotFacts } from './liveProfile';
 import { logger } from '../app/logger';
 import { isKeptStep } from '../data/filterList';
 import { termFactsFor } from './terms';
-import { statusFor } from '../analysis/statusStore';
-import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 import { askGuidance } from './guidance';
 import { verifiedAsk, verifiedMatch, verifiedScope } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
@@ -66,6 +55,7 @@ import { agentNames, agentRef } from '../ai/agentAccess';
 import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk';
 import { keepReads } from './askMemo';
 import { snapshotFor, turnsForBrowser } from './answerSnapshots';
+import { homeFacts } from './homeFacts';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -160,54 +150,8 @@ function reasonLedger(reason: string): LedgerEntry[] {
   return harvestAppNumbers(reason.replace(/"[\s\S]*"/, '')).map((h) => ({ label: 'a limit the app states in a refusal', value: h.value, unit: h.unit, source: 'refusal' }));
 }
 
-/**
- * The project's DEFINED metrics, resolved.
- *
- * Only the metrics on the datasets in `on`: the open dataset, or the datasets a
- * dashboard's tiles use — never every metric in the project (docs/assistant
- * "Scale rules": each is a query, a Live one in the warehouse). Exported for
- * scripts/test-askDatasetFacts.ts. Each figure comes back from the ordinary
- * resolver, so it is the same number the card shows, formatted the same way —
- * and both go into the facts ledger at the call site. `scope`: the dashboard's saved filters and
- * parameters, so a metric reads here as its KPI card does on that dashboard.
- *
- * Never throws: a project whose metrics cannot be read simply hands the model
- * no metric vocabulary, which is exactly the state every project was in before
- * this layer existed.
- */
-export async function factMetrics(projectId: string, on: ReadonlySet<string>, scope?: SavedScope, question?: string, share?: SharePath): Promise<FactMetric[]> {
-  try {
-    const status = statusFor(projectId); // once per request (part 4)
-    const list = await metrics.listMetrics(projectId);
-    const byName = await metrics.metricsByName(projectId);
-    const out: FactMetric[] = [];
-    const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
-    for (const s of list) {
-      // A layer's metric is the layer's figure, as a Live one is the warehouse's; one reading a hidden column is not the caller's vocabulary (part 4).
-      if (!on.has(s.datasetId) || (await metricHidden(projectId, s.id))) continue;
-      // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
-      const reads: MetricRead[] = [];
-      const r = await resolveMetric(projectId, s.id, share ? { ...scope, reads } : scope).catch((err: unknown) => {
-        if (isLiveFigureError(err)) return null;
-        throw err;
-      });
-      if (!r) continue;
-      if (share && (await kpiHidden(projectId, reads, share))) continue; // leaving by a share path: a figure the policy withholds there is not the model's
-      const additivity = (await metricAdditivity(projectId, s.id, byName, scope?.params)) ?? undefined;
-      // Its filters are worded as the Assistant is told a chart's: a value of a column marked personal or financial is withheld.
-      const stored = await metrics.getMetric(projectId, s.id);
-      if (!stored) continue;
-      const definitionText = await metricDefinitionText(projectId, stored, (notes[s.datasetId] ??= await catalogColumns(projectId, s.datasetId)));
-      const date = await metricDate(projectId, s); // a date column that is gone counts as none (D9)
-      const snapshot = metrics.isSimpleDefinition(s.definition) ? s.definition.snapshot : undefined;
-      const st = await status(`metric:${s.id}`);
-      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}), ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}), ...(await targetField(projectId, s.id, scope?.filters ?? [], r.value, await targetHidden(projectId, s.id, share))) });
-    }
-    return vocabularyOrder(out, (m) => namedIn(question, [m.name]));
-  } catch (_) {
-    return [];
-  }
-}
+import { factMetrics, questionMetrics } from './factMetrics';
+export { factMetrics }; // for scripts/test-askDatasetFacts.ts
 
 /** The conversation without what verified question `id` answered, its question and its card: "Not what I asked" sets them aside. */
 function withoutAnswer(turns: copilot.CopilotTurn[], id: string | undefined): copilot.CopilotTurn[] {
@@ -340,9 +284,15 @@ export async function buildFacts(
       // KPI through its tile's doors, a defined metric as a card of it would read here — one number per name.
       const scope = savedScope(a);
       // …and in the dashboard's own currency, as the page asks every tile.
+      // Its tiles' datasets' metrics, not the project's, and the few step 3 finds for the question elsewhere (Q12), each
+      // under the same saved filters; those are their own call, so one that fails costs only them.
+      const own = new Set(tiles.flatMap((t) => (t.datasetId ? [t.datasetId] : [])));
       const { cards, defined } = await inDashboardCurrency(projectId, a.id, async () => ({
         cards: await metricCardFigures(projectId, a, scope, share),
-        defined: await factMetrics(projectId, new Set(tiles.flatMap((t) => (t.datasetId ? [t.datasetId] : []))), scope, question, share), // its tiles' datasets' metrics, not the project's
+        defined: [
+          ...await factMetrics(projectId, own, scope, question, share),
+          ...await factMetrics(projectId, new Set(), scope, question, share, await questionMetrics(projectId, question, own)),
+        ],
       }));
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
       if (defined.length) {
@@ -411,30 +361,8 @@ export async function buildFacts(
     }
   }
 
-  // Fallback — project inventory (no per-entity figures available).
-  const proj = await projects.getProject(projectId);
-  const [dsList, vList, dashList] = await Promise.all([
-    datasets.listDatasets(projectId),
-    visuals.listVisuals(projectId),
-    analysis.listAnalyses(projectId),
-  ]);
-  emit({
-    kind: 'inventory',
-    label: 'Scanned the project',
-    detail: plural(dsList.length, 'dataset') + ', ' + plural(vList.length, 'visual') + ', ' + plural(dashList.length, 'dashboard'),
-  });
-  // Column names and types only — a metadata read, no rows — so a question
-  // asked from Home can still come back as an answer chart.
-  const metas = await Promise.all(dsList.slice(0, 12).map((d) => datasets.getDatasetMeta(projectId, d.id)));
-  return copilot.projectFacts(proj ? proj.name : 'Untitled project', {
-    datasets: dsList.map((x) => x.name),
-    visuals: vList.map((x) => x.name),
-    dashboards: dashList.map((x) => x.name),
-  }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
-    name: m!.name, columns: dropHidden(m!.columns, await hiddenColumnsFor(projectId, m!.id)), docs: await catalogColumns(projectId, m!.id), table: tableWithout(await tableFacts(projectId, m!.id), await hiddenColumnsFor(projectId, m!.id)),
-    // A Live dataset's profile and sample values (L2.5), or a copy's from its value index — none from a dataset with row access rules the caller may not read whole.
-    notes: (await closedToCaller(projectId, m!.id)) ? undefined : (await liveInventoryNotes(projectId, m!)) ?? (await copyValueNotes(projectId, m!.id, 'inventory')),
-  }))));
+  // Fallback — Home: the project's counts and what step 3 finds for the question (./homeFacts), no per-entity figures.
+  return homeFacts(projectId, question ?? '', emit);
 }
 
 export function register() {

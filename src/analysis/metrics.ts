@@ -153,7 +153,7 @@ function metricsDir(projectId: string): string {
   return path.join(getProjectsBase(), projectId, 'metrics');
 }
 
-function metricFilePath(projectId: string, id: string): string {
+export function metricFilePath(projectId: string, id: string): string {
   return path.join(metricsDir(projectId), id + '.json');
 }
 

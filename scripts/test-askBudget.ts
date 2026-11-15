@@ -15,11 +15,14 @@
 //   2. A catalog.json past 4 MiB is logged once per org and project, by its size only; one under it is not.
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on); without it, a skip line:
 //   3. THE BUDGET: each case's counts ≤ its ceilings (printed).
-//   4. NEGATIVE CONTROL: case (c) with the question's read memo off (../src/ipc/askMemo `_setAskMemo`) is over them.
+//   4. NEGATIVE CONTROL: case (c) with the question's read memo off (../src/ipc/askMemo `_setAskMemo`) is over them, and
+//      case (a) with step 3's index off (../src/ipc/assistantSearch `_setIndexed`, the reference paths) is too.
 //      The open dataset of case (b) loads no table: datasets.getDataset is called no more often than from Home, where
 //      the one call is the answer chart's (../src/ipc/answers computeCardWith hydrates by design); Orders is past
 //      every door's 1,000-row cost model. NEGATIVE CONTROL: with the resident read off (../src/ipc/copilotTable
-//      `residentTable`) the facts load Orders too.
+//      `residentTable`) the facts load Orders too. The dashboard of case (e) loads at most QUESTION_METRICS tables more:
+//      the metrics step 3 finds for its question on other datasets (Q12), clones with no Parquet.
+//   6. Q8: the facts of one Home question, built alone (no model call), timed and printed with their parts.
 //   5. SAME REPLY: in every case, memo on and off, the model is sent the same facts, and the reply's answer, chart,
 //      provenance, action, ledger, audit and guidance are the same, with Object.is.
 //
@@ -54,6 +57,10 @@ const verified: typeof import('../src/ipc/verified') = require('../src/ipc/verif
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const factMetricsMod: typeof import('../src/ipc/factMetrics') = require('../src/ipc/factMetrics');
+const homeFacts: typeof import('../src/ipc/homeFacts') = require('../src/ipc/homeFacts');
+const searchMod: typeof import('../src/ipc/assistantSearch') = require('../src/ipc/assistantSearch');
+const cmdK: typeof import('../src/ipc/search') = require('../src/ipc/search');
 const copilotTable: typeof import('../src/ipc/copilotTable') = require('../src/ipc/copilotTable');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
@@ -72,20 +79,20 @@ const as = <T>(role: Role, fn: () => Promise<T>, org = 'acme'): Promise<T> =>
 
 const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 };
 
-// The ceilings: the counts measured with PR 3 (a store's list reads its records a page at a time) plus 10%. A record
-// read is a call into recordFs, one the memo answers included; a query is what reached Postgres. Before PR 2, (a) was
-// 129,540 queries and 43,188 reads, (c) about 300,000 and 100,000; after PR 2, about 27,000 queries each. Later PRs
-// lower them: PR 4 an open dataset and dashboard, PR 6 the step 3 index. PR 5 checks a verified question against only
-// what its chart names, its records in one readMany (measured with it); with the memo off, (a) no longer builds the
-// whole vocabulary twice, so the control is (c). PR 4: (e), a dashboard open, resolved every metric in the project
-// (5,000 tables loaded); now only its datasets' metrics, one table (the answer chart's). (b) loads no table for its facts.
+// The ceilings: the counts measured plus 10%. A record read is a call into recordFs, one the memo answers included; a
+// query is what reached Postgres. Before PR 2, (a) was 129,540 queries and 43,188 reads, (c) about 300,000 and 100,000;
+// after PR 2, about 27,000 queries each; after PRs 3 to 6a (lists one paged query, verified checks narrowed, a dataset's
+// stats, a dashboard's own metrics), 345 queries and about 7,100 reads each, (d) 14,135 reads. PR 6b, step 3's index on
+// the ask path (no question lists the whole project): Home counts and the 12 datasets the index ranks, a dataset's metrics
+// and terms by index, the names a model's answer says looked up by index. (d) still checks every metric and term once for
+// a caller with a hidden column (hiddenAnywhere, metricsByName: the next fix there), its terms now prefetched.
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
-  home: at(345, 7_134),
-  dataset: at(345, 7_121),
-  agent: at(339, 7_113),
-  viewer: at(345, 14_135),
-  dashboard: at(354, 7_112),
+  home: at(89, 154), // was at(345, 7_134)
+  dataset: at(88, 123), // was at(345, 7_121)
+  agent: at(75, 136), // was at(339, 7_113)
+  viewer: at(359, 11_153), // was at(345, 14_135)
+  dashboard: at(112, 183), // was at(354, 7_112)
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
   reopen: at(22, 4),
@@ -226,6 +233,8 @@ async function dbLeg(pool: Pool): Promise<void> {
   const w = await world(pool);
   console.log(`  seeded in ${Date.now() - t0} ms`);
   copilotIpc.register();
+  require('../src/ipc/assistantSearch').register(); // what src/server/app.ts registers at startup: the two indexes' describers
+  require('../src/ipc/search').register();
   const sent: string[] = [];
   (execConfig as { executionReady: unknown }).executionReady = async () => true;
   (analyze as { askCopilot: unknown }).askCopilot = async (_prior: unknown, facts: string) => { sent.push(facts); return { ok: true, text: 'West leads.', suggestedAction: ANSWER }; };
@@ -264,8 +273,12 @@ async function dbLeg(pool: Pool): Promise<void> {
     ok(`${name}: the ask answers with the chart, as asked`, on.out.ok === true && on.out.turns.at(-1)?.answer?.datasetId === w.orders && right(on.out), JSON.stringify(on.out).slice(0, 300));
     ok(`${name}: ${on.queries} queries ≤ ${CEILING[name].queries} and ${on.reads} record reads ≤ ${CEILING[name].reads}`, on.queries <= CEILING[name].queries && on.reads <= CEILING[name].reads);
     tablesOf.set(name, on.tables);
-    // Before PR 4 the dashboard resolved all 5,000 metrics, a table loaded for each clone's (they have no Parquet).
-    if (name === 'dashboard') ok(`dashboard: it resolves only its datasets' metrics, loading no table for them (${on.tables} getDataset calls, as from Home)`, on.tables === tablesOf.get('home'));
+    // Before PR 4 the dashboard resolved all 5,000 metrics, a table loaded for each clone's (they have no Parquet). Since
+    // PR 6b it also resolves the few metrics step 3 finds for the question elsewhere (Q12): "Revenue" on five clones.
+    if (name === 'dashboard') {
+      const most = (tablesOf.get('home') ?? 0) + factMetricsMod.QUESTION_METRICS;
+      ok(`dashboard: it resolves its datasets' metrics and at most ${factMetricsMod.QUESTION_METRICS} the question finds (${on.tables} getDataset calls ≤ ${most})`, on.tables <= most);
+    }
     if (name === 'dataset') {
       const home = tablesOf.get('home') ?? -1;
       ok(`dataset: the open dataset loads no table (${on.tables} getDataset calls, as from Home: the answer chart's)`, on.tables === home, home);
@@ -290,14 +303,53 @@ async function dbLeg(pool: Pool): Promise<void> {
     if (name === 'agent') {
       ok('NEGATIVE CONTROL: the agent with the memo off is over both ceilings', off.queries > CEILING.agent.queries && off.reads > CEILING.agent.reads, `${off.queries} queries, ${off.reads} reads`);
     }
+    if (name === 'home') {
+      searchMod._setIndexed(false); // the reference paths, as without a database: every list of the project
+      try {
+        const ref = await once(role, extra, agentId);
+        line(name + ' (index off)', ref);
+        ok('NEGATIVE CONTROL: Home with the index off is over both ceilings', ref.queries > CEILING.home.queries && ref.reads > CEILING.home.reads, `${ref.queries} queries, ${ref.reads} reads`);
+      } finally {
+        searchMod._setIndexed(true);
+      }
+    }
     factsOf.set(name, on.facts[0]);
     const [a, b] = [replyOf(on.out), replyOf(off.out)];
     ok(`${name}: memo on and off, the model is sent the same facts`, on.facts.length === 1 && off.facts.length === 1 && Object.is(on.facts[0], off.facts[0]));
     ok(`${name}: …and the reply is the same, field for field`, a.every((x, i) => Object.is(x, b[i])), JSON.stringify([a, b]).slice(0, 600));
   }
+  await homeTiming(w);
   ok('NEGATIVE CONTROL: the comparison can tell facts apart (Home, a dataset and the agent\'s topic differ)',
     !Object.is(factsOf.get('home'), factsOf.get('dataset')) && !Object.is(factsOf.get('home'), factsOf.get('agent')));
   await reopenCase(w, fresh, line);
+}
+
+/**
+ * Q8: building the facts of ONE Home question (no model call), at this scale, warm: the median of five, each in a read memo
+ * of its own as an ask's is; then the median time of each part, alone. Printed, not a ceiling (a laptop is no CI runner).
+ */
+async function homeTiming(w: World): Promise<void> {
+  const Q = 'revenue by region last year';
+  const median = async (fn: () => Promise<unknown>): Promise<number> => {
+    const ms: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t0 = process.hrtime.bigint();
+      await as('admin', () => recordFs.withReadMemo(fn));
+      ms.push(Number(process.hrtime.bigint() - t0) / 1e6);
+    }
+    return ms.sort((a, b) => a - b)[2];
+  };
+  const whole = await median(() => copilotIpc.buildFacts(w.P, {}, undefined, Q));
+  const parts: Array<[string, () => Promise<unknown>]> = [
+    ['counts (step 3 index)', () => searchMod.countModel(w.P)],
+    ['counts (⌘K index)', () => cmdK.countNamed(w.P)],
+    ['picks (two searches, newest)', () => homeFacts.picksFrom(w.P, Q, { search: searchMod.searchModel, newest: async (p, n) => (await searchMod.newestModel(p, 'dataset', n)) ?? [] })],
+    ['12 datasets read', () => homeFacts.homeDatasets(w.P, Q)],
+  ];
+  const each: string[] = [];
+  for (const [name, fn] of parts) each.push(`${name} ${(await median(fn)).toFixed(1)} ms`);
+  console.log(`  Q8: facts for one Home question ${whole.toFixed(1)} ms (median of 5; ${each.join(', ')})`);
+  ok(`Q8: the facts of one Home question are built (${whole.toFixed(1)} ms)`, whole > 0);
 }
 
 /** (f) A conversation of 15 chart answers, reopened: the figure doors spied (every computeCard enters `withLockOf`). */

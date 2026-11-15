@@ -17,6 +17,8 @@ import * as metrics from './metrics';
 import * as terms from './terms';
 import { isValidId, projectDir, RECORD_DIR } from '../app/recordKinds';
 import * as recordFs from '../app/recordFs';
+import { bodyOf, readTexts } from '../app/recordTexts';
+import { datasetFilePath } from '../data/datasetRecord';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { osUser } from '../app/catalog';
 import { logger } from '../app/logger';
@@ -151,16 +153,35 @@ export async function readTopic(projectId: string, id: string): Promise<Tagged<T
   return readTagged('topic', topicFile(projectId, id), (d) => (isValidTopic(d) ? sanitizeTopic(d, projectId) : null));
 }
 
-/** What exists now: dataset ids (with their column names, read lazily), metric ids, term ids. Metadata only. */
-async function membersOf(projectId: string) {
-  const [list, ms, ts] = await Promise.all([datasets.listDatasets(projectId), metrics.listMetrics(projectId), terms.listFullTerms(projectId)]);
-  const sets = new Set(list.map((d) => d.id));
+/**
+ * Which of `topics`' members exist now: dataset ids (with their column names, read lazily), metric ids, term ids. Only
+ * their own records, in ONE query (../app/recordTexts), never a list of the project. Metadata only. A member exists as
+ * its store's list would hold it: a record its parser accepts.
+ */
+async function membersOf(projectId: string, topics: ReadonlyArray<Pick<Topic, 'datasets' | 'metricIds' | 'termIds'>>) {
+  const valid = (ids: string[]): string[] => [...new Set(ids)].filter(isValidId);
+  const dsIds = valid(topics.flatMap((t) => t.datasets.map((d) => d.id)));
+  const [mIds, tIds] = [valid(topics.flatMap((t) => t.metricIds)), valid(topics.flatMap((t) => t.termIds))];
+  const textOf = await readTexts([...dsIds.map((id) => datasetFilePath(projectId, id)), ...mIds.map((id) => metrics.metricFilePath(projectId, id)), ...tIds.map((id) => terms.termFile(projectId, id))]);
+  const parsed = <T>(path: string, parse: (body: string) => T | null): T | null => {
+    const body = bodyOf(textOf, path);
+    try {
+      return body === null ? null : parse(body);
+    } catch (_) {
+      return null; // corrupt: its list skips it too
+    }
+  };
+  const sets = new Set(dsIds.filter((id) => parsed(datasetFilePath(projectId, id), (b) => datasets.summaryOf(projectId, b))));
   const cols = new Map<string, Promise<Set<string>>>();
   const columnsOf = (id: string): Promise<Set<string>> => {
-    if (!cols.has(id)) cols.set(id, datasets.getDatasetMeta(projectId, id).then((m) => new Set((m?.columns ?? []).map((c) => c.name))));
+    if (!cols.has(id)) cols.set(id, datasets.getDatasetMeta(projectId, id, false, textOf(datasetFilePath(projectId, id))).then((m) => new Set((m?.columns ?? []).map((c) => c.name))));
     return cols.get(id)!;
   };
-  return { sets, columnsOf, metrics: new Set(ms.map((m) => m.id)), terms: new Set(ts.map((t) => t.id)) };
+  return {
+    sets, columnsOf,
+    metrics: new Set(mIds.filter((id) => parsed(metrics.metricFilePath(projectId, id), (b) => metrics.summaryOf(projectId, b)))),
+    terms: new Set(tIds.filter((id) => parsed(terms.termFile(projectId, id), (b) => terms.termOf(projectId, b)))),
+  };
 }
 
 /**
@@ -175,7 +196,7 @@ export async function topicProblem(projectId: string, input: Partial<TopicInput>
   if (!exceptId && others.length >= MAX_TOPICS) return { field: 'name', error: msg.tooManyTopics(MAX_TOPICS) };
   if (arr(input.datasets).length > MAX_TOPIC_DATASETS) return { field: 'datasets', error: msg.topicTooManyDatasets(MAX_TOPIC_DATASETS) };
   const t = sanitizeTopic({ ...input, id: exceptId ?? randomUUID() }, projectId);
-  const have = await membersOf(projectId);
+  const have = await membersOf(projectId, [t]);
   for (const d of t.datasets) {
     if (!have.sets.has(d.id)) return { field: 'datasets', error: msg.topicMemberGone() };
     if (d.fields) {
@@ -210,12 +231,12 @@ export async function updateTopic(projectId: string, id: string, input: TopicInp
 
 /**
  * Each topic as readers get it: the members that have gone (a deleted dataset, metric or term, a field a refresh
- * dropped) left out, in order, and how many were. Reads metadata once for the whole list; never writes, never throws
+ * dropped) left out, in order, and how many were. Reads their members' records once, in one query; never writes, never throws
  * on a gone member. A field subset whose every field has gone reads as the whole dataset (no `fields`).
  */
 export async function topicsForReaders(projectId: string, list: Topic[]): Promise<{ topic: Topic; stale: number }[]> {
   if (!list.length) return [];
-  const have = await membersOf(projectId);
+  const have = await membersOf(projectId, list);
   return Promise.all(list.map(async (t) => {
     let stale = 0;
     const kept: TopicDataset[] = [];

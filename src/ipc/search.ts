@@ -199,6 +199,29 @@ export async function searchIndexed(projectId: string, query: string, viewer: bo
   }
 }
 
+/** Home's counts from the index (its two sources built first if they are not); null without a database or on any failure. */
+async function countIndexed(projectId: string, viewer: boolean): Promise<{ visuals: number; dashboards: number } | null> {
+  if (projectId !== projectId.toLowerCase()) return null;
+  try {
+    const missing = await index.unbuilt(projectId);
+    if (!missing) return null;
+    for (const source of missing) if (source === 'visuals' || source === 'analyses') await index.rebuild(projectId, source, recordFs.rowsUnder);
+    const n = await index.countKinds(projectId, ['visual', 'analysis'], viewer ? ['all', 'viewer'] : ['all', 'editor']);
+    return n && { visuals: n.get('visual') ?? 0, dashboards: n.get('analysis') ?? 0 };
+  } catch (err) {
+    trace.record('search:names', 'failed', String((err as { code?: unknown })?.code ?? 'error')); // a code, never a name
+    return null;
+  }
+}
+
+/** How many visuals and dashboards the caller can open (Home's counts): one query once the index is built, no record read; the lists are the reference. */
+export async function countNamed(projectId: string): Promise<{ visuals: number; dashboards: number }> {
+  const viewer = await analysis.readsPublishedOnly(projectId);
+  return (await countIndexed(projectId, viewer)) ?? countListed(projectId);
+}
+export const countListed = async (projectId: string): Promise<{ visuals: number; dashboards: number }> =>
+  ({ visuals: (await visuals.listVisuals(projectId)).length, dashboards: (await analysis.listAnalyses(projectId)).length });
+
 /** Every project the search covers: the one asked for, or all of them. */
 async function scope(projectId: string): Promise<{ id: string; name: string }[]> {
   if (projectId) {

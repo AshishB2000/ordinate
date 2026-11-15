@@ -17,10 +17,10 @@ import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from './db/inOrg';
 import { logger } from '../app/logger';
 import { allWords, kindOrd } from '../app/assistantSearchRank';
-import type { Audience, CountedKind, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
+import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
 
 /** Bump when what a record describes to changes (the words, the parts): every marker is then stale, and each source rebuilds once. */
-export const ASSISTANT_SEARCH_VERSION = 1;
+export const ASSISTANT_SEARCH_VERSION = 2; // 2: base parts carry their exact-lookup keys (0028)
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 
@@ -89,7 +89,7 @@ type Row = Part & { path: string; ord: number; hash: string };
 const rowsOf = (path: string, groups: Iterable<{ hash: string; parts: Part[] }>): Row[] =>
   [...groups].flatMap((g) => g.parts.map((p, ord) => ({ ...p, path, ord, hash: g.hash })));
 
-// A word holds letters, marks and digits only (../ai/modelWords), never a space: joined and split back in SQL.
+// A word holds letters, marks and digits only (../ai/modelWords), never a space: joined and split back in SQL. So does a key (base64url, or `d:` and an id).
 const joined = (ws: readonly string[]): string => ws.join(' ');
 const ARRAY = (x: string): string => `CASE WHEN ${x} = '' THEN '{}'::text[] ELSE string_to_array(${x}, ' ') END`;
 
@@ -97,18 +97,18 @@ async function insertRows(c: PoolClient, org: string, projectId: string, source:
   if (!rows.length) return;
   await c.query(
     `INSERT INTO assistant_search (org_id, project_id, source, path, grp, ord, grp_hash, item, kind, kind_ord, base, id, dataset_id, conn_id, name, updated,
-       audience, name_words, alias_words, text_words, all_words, certified, retired)
+       audience, name_words, alias_words, text_words, all_words, certified, retired, keys)
      SELECT $1, $2, $3, u.path, u.grp, u.ord, u.hash, u.item, u.kind, u.kind_ord, u.base, u.id, u.dataset_id, u.conn_id, u.name, u.updated, u.audience,
-       ${ARRAY('u.nw')}, ${ARRAY('u.aw')}, ${ARRAY('u.tw')}, ${ARRAY('u.allw')}, u.certified, u.retired
+       ${ARRAY('u.nw')}, ${ARRAY('u.aw')}, ${ARRAY('u.tw')}, ${ARRAY('u.allw')}, u.certified, u.retired, ${ARRAY('u.ks')}
      FROM unnest($4::text[], $5::text[], $6::int[], $7::text[], $8::text[], $9::text[], $10::int[], $11::bool[], $12::text[], $13::text[], $14::text[],
-       $15::text[], $16::text[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[], $22::bool[], $23::bool[])
-       AS u(path, grp, ord, hash, item, kind, kind_ord, base, id, dataset_id, conn_id, name, updated, audience, nw, aw, tw, allw, certified, retired)`,
+       $15::text[], $16::text[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[], $22::bool[], $23::bool[], $24::text[])
+       AS u(path, grp, ord, hash, item, kind, kind_ord, base, id, dataset_id, conn_id, name, updated, audience, nw, aw, tw, allw, certified, retired, ks)`,
     [
       org, projectId, source, rows.map((r) => r.path), rows.map((r) => r.grp), rows.map((r) => r.ord), rows.map((r) => r.hash), rows.map((r) => r.item),
       rows.map((r) => r.kind), rows.map((r) => kindOrd(r.kind)), rows.map((r) => r.base), rows.map((r) => r.id), rows.map((r) => r.datasetId),
       rows.map((r) => r.connId), rows.map((r) => r.name), rows.map((r) => r.updated), rows.map((r) => r.audience), rows.map((r) => joined(r.nameWords)),
       rows.map((r) => joined(r.aliasWords)), rows.map((r) => joined(r.textWords)), rows.map((r) => joined(allWords(r))), rows.map((r) => r.certified),
-      rows.map((r) => r.retired),
+      rows.map((r) => r.retired), rows.map((r) => joined(r.keys)),
     ],
   );
 }
@@ -223,12 +223,13 @@ export function rankedPage(projectId: string, asked: readonly string[], o: RankO
        WHERE p.org_id = $1 AND p.project_id = $2 AND p.item = ANY(ARRAY(
          SELECT DISTINCT item FROM assistant_search
          WHERE org_id = $1 AND project_id = $2 AND all_words && $3::text[] AND audience = ANY($4::text[])
-           AND ($5::text[] IS NULL OR kind = ANY($5::text[])) AND ($6::text[] IS NULL OR dataset_id = ANY($6::text[]))))
+           AND ($5::text[] IS NULL OR kind = ANY($5::text[])) AND ($6::text[] IS NULL OR dataset_id = ANY($6::text[]))
+           AND ($9::text[] IS NULL OR dataset_id IS NULL OR dataset_id <> ALL($9::text[]))))
        GROUP BY p.item
        HAVING bool_or(p.base AND p.audience = ANY($4::text[])) AND NOT bool_or(p.retired)
        ORDER BY score DESC, certified DESC, kind_ord, updated DESC, p.item
        LIMIT $7 OFFSET $8`,
-      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, limit, offset],
+      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, limit, offset, o.exceptDatasetIds ?? null],
     );
     return (r.rows as Array<{ kind: ModelKind; id: string; dataset_id: string | null; conn_id: string | null; name: string; score: number }>).map((x) => ({
       kind: x.kind, id: x.id, ...(x.dataset_id !== null ? { datasetId: x.dataset_id } : {}), ...(x.conn_id !== null ? { connId: x.conn_id } : {}), name: x.name, score: x.score,
@@ -246,5 +247,29 @@ export function foundItems(projectId: string, audiences: readonly Audience[], ro
       [org, projectId, audiences],
     );
     return r.rows as Array<{ kind: CountedKind; id: string }>;
+  });
+}
+
+/** Each item of `kind` whose base part holds one of `keys` (0028), by item key: ../app/assistantSearchRank keyedItems. Null without a database. */
+export function keyedItems(projectId: string, kind: KeyedKind, keys: readonly string[], rowsUnder: RowsUnder): Promise<KeyedItem[] | null> {
+  return built(projectId, rowsUnder, async (c, org) => {
+    const r = await c.query(
+      `SELECT id, dataset_id FROM assistant_search WHERE org_id = $1 AND project_id = $2 AND base AND kind = $3 AND keys && $4::text[] ORDER BY item`,
+      [org, projectId, kind, keys],
+    );
+    return (r.rows as Array<{ id: string; dataset_id: string | null }>).map((x) => ({ id: x.id, datasetId: x.dataset_id }));
+  });
+}
+
+/** The `limit` newest items of `kind`, then by item key, retired left out unless `retired`: ../app/assistantSearchRank newestItems. Null without a database. */
+export function newestItems(projectId: string, kind: KeyedKind, limit: number, retired: boolean, rowsUnder: RowsUnder): Promise<KeyedItem[] | null> {
+  return built(projectId, rowsUnder, async (c, org) => {
+    const r = await c.query(
+      `SELECT p.id, p.dataset_id FROM assistant_search p WHERE p.org_id = $1 AND p.project_id = $2 AND p.base AND p.kind = $3
+         AND ($5 OR NOT EXISTS (SELECT 1 FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.item = p.item AND x.retired))
+       ORDER BY p.updated DESC, p.item LIMIT $4`,
+      [org, projectId, kind, limit, retired],
+    );
+    return (r.rows as Array<{ id: string; dataset_id: string | null }>).map((x) => ({ id: x.id, datasetId: x.dataset_id }));
   });
 }

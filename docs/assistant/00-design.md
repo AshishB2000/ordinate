@@ -354,6 +354,40 @@ worst places:
   35 ms. The API is `searchModel` and `countModel` (`src/ipc/assistantSearch.ts`); PR 6b puts it
   on the ask path.
 
+### On the ask path (PR 6b)
+
+No ask calls a whole-project list any more (`test-askNoProjectLists` spies every store's list on
+eight asks; with the index off, each one lists). What each reads:
+
+- **Home:** counts (`countModel`; visuals and dashboards off ⌘K's index, one query), the 12
+  datasets step 3 ranks highest for the question by their names or their columns' with the
+  newest after them when fewer match, and the 8 best metrics and terms, by name and definition.
+  The guidance gives the same 12 datasets' guides (`src/ipc/homeFacts.ts`, once per ask).
+- **A topic:** only its own datasets, metrics and terms, by id in one query (`topics.membersOf`).
+- **A dataset open:** its metrics and terms through the index's exact-lookup keys (0028: `d:` and
+  the dataset's id), read by id.
+- **A dashboard:** its own metrics, and at most 5 more that step 3 finds for the question on its
+  other datasets (Q12), under the same saved filters.
+- **An agent's outside-the-topic check:** step 3's search with the topic's datasets left out, each
+  dataset scored by its own and its columns', metrics' and terms' matches; the first readable wins.
+- **Checking the model's answer:** only the datasets, metrics and terms its spec names, found by
+  their name as the validator compares it (0028 `keys`: trimmed and lowercased, and squashed,
+  hashed; a match is a candidate, the validator's own rule decides) and read in one query. "Did
+  you mean" a dataset offers among the 20 step 3 finds for the name said: one that shares no word
+  with it (a one-letter typo of a one-word name) is no longer offered. `test-askIndex` holds a
+  corpus of model answers Object.is-equal to the whole vocabulary, an admin and a restricted viewer.
+- **Every ask:** its agent by its own record, a verified example's terms by id, and the metrics
+  of a verified chart's metric's name through the index (no list of agents, terms or metrics).
+- Without a database, or when an index query fails (logged once), each takes its reference path,
+  the lists it read before.
+
+`test-askBudget` at the scale above, queries and record reads (memo hits counted), before → after:
+Home 345 / 7,134 → 89 / 154; a dataset open 345 / 7,121 → 88 / 123; an agent with a topic
+339 / 7,113 → 75 / 136; a dashboard 354 / 7,112 → 112 / 183; the restricted viewer from Home
+345 / 14,135 → 359 / 11,153. The viewer still checks every metric and term once for its counts
+(`hiddenAnywhere`, `metricsByName`; its terms now prefetched a thousand at a time): making those
+two index-backed is the next fix. Building one Home question's facts takes 20 ms (Q8).
+
 ### Answers keep the figures they had
 
 An answer stored only its chart form, so it was computed again each time its conversation

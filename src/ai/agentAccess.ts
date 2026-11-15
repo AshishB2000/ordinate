@@ -88,8 +88,10 @@ export async function agentNames(projectId: string, ids: Iterable<string>): Prom
 /** A conversation's agent as a reply names it: null for the Project assistant; `gone` once it is deleted (or never was). */
 export async function agentRef(projectId: string, id: string | null): Promise<{ id: string; name: string; gone?: true } | null> {
   if (!id) return null;
-  const n = (await agentNames(projectId, [id])).get(id);
-  return n && !n.gone ? { id, name: n.name } : { id, name: n?.name ?? '', gone: true };
+  const live = await readAgent(projectId, id); // its own record, never the list (every ask names its agent)
+  if (live && live.rec.id === id) return { id, name: live.rec.name };
+  const trashed: unknown = await readEntry(projectId, 'agent', id);
+  return { id, name: trashed && typeof trashed === 'object' ? recordName(trashed as { name?: unknown }).trim() : '', gone: true };
 }
 
 export type AgentField = 'name' | 'topicId' | 'model' | 'teamIds';
