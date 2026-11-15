@@ -258,8 +258,8 @@ export async function keyStats(projectId: string, from: DsInfo, fromCol: string,
   return f && t ? keyStatsJs(f.cells, f.type, t.cells, t.type) : null;
 }
 
-/** Ranked key pairs for FROM → TO, each with its sampled match rate and the cardinality the data supports. */
-async function suggest(projectId: string, fromId: string, toId: string): Promise<any> {
+/** Ranked key pairs for FROM → TO, each with its sampled match rate and the cardinality the data supports. The Assistant's checked link too (./answerLink). */
+export async function suggest(projectId: string, fromId: string, toId: string): Promise<any> {
   const from = await infoFor(projectId, fromId);
   const to = await infoFor(projectId, toId);
   if (!from || !to) return { ok: false, error: relationshipDatasetGone() };

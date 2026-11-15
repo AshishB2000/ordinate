@@ -36,6 +36,7 @@ import { sanitizeStoredSpec } from './answerSpec';
 import { sameChart } from './answerRefine';
 import type { AnswerSpec } from './answerSpec';
 import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
+import { sanitizeNeeds, type AnswerLink, type AnswerNeeds } from './answerNeeds';
 import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
 import { sanitizeGuidance, type TurnGuidance } from './turnGuidance';
 import { sanitizeSnapshot, type AnswerSnapshot } from './answerSnapshot';
@@ -82,6 +83,9 @@ export interface CopilotTurn {
   guidance?: TurnGuidance;
   /** An Assistant agent's out-of-scope reply (src/ipc/agentAsk.ts): the dataset the Project assistant can answer from. */
   outside?: { dataset: string };
+  /** What a refused answer needs an editor to add (./answerNeeds): Ask an editor's reason, and outcome E's checked link. Never beside `answer`. */
+  needs?: AnswerNeeds['needs'];
+  link?: AnswerLink;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -130,6 +134,8 @@ export interface NewCopilotTurn {
   learn?: AnswerLearn;
   guidance?: TurnGuidance;
   outside?: { dataset: string };
+  needs?: AnswerNeeds['needs'];
+  link?: AnswerLink;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -266,6 +272,7 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     if (guidance) turn.guidance = guidance;
     const outside = role === 'assistant' && !answer ? sanitizeOutside(t.outside) : undefined;
     if (outside) turn.outside = outside;
+    if (role === 'assistant' && !answer) Object.assign(turn, sanitizeNeeds(t));
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -571,6 +578,7 @@ export async function appendTurn(
   if (guidance) record.guidance = guidance;
   const outside = role === 'assistant' && !answer ? sanitizeOutside(turn && turn.outside) : undefined;
   if (outside) record.outside = outside;
+  if (role === 'assistant' && !answer) Object.assign(record, sanitizeNeeds(turn));
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {
@@ -633,6 +641,23 @@ export async function markSaved(projectId: string, threadId: string, turnId: str
     const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
     if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
     turn.savedVisualId = visualId;
+    await writeThreads(projectId, threads);
+    return true;
+  });
+}
+
+// A source table's answer re-pointed at the dataset kept from it (../ipc/sourceKeep), on one of the CALLER's threads,
+// on a turn whose stored answer is still `from`: its spec replaced and its card computed again on open. False: no change.
+export async function replaceAnswer(projectId: string, threadId: string, turnId: string, from: AnswerSpec, to: AnswerSpec, note: string): Promise<boolean> {
+  const next = sanitizeStoredSpec(to);
+  if (!isValidId(projectId) || !next) return false;
+  if (rows.on()) return rows.replaceAnswer(projectId, threadId, turnId, from, next, note);
+  return changeThreads(projectId, async (threads) => {
+    const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
+    if (!turn || !holds(turn, from)) return false;
+    turn.answer = next;
+    if (turn.provenance) turn.provenance = { ...turn.provenance, note }; // what the figures are now: a Live dataset's
+    delete turn.snapshot;
     await writeThreads(projectId, threads);
     return true;
   });

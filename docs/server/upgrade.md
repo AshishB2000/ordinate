@@ -846,6 +846,26 @@ run through the Data page's Query tab checks and marked *Not checked* until an e
 **Rolling back** keeps every SQL answer and verified SQL question on disk and in Postgres; they come
 back when you upgrade again.
 
+## The Assistant answers editors straight from source tables, and checks a missing link (phase D)
+
+An editor's question can be answered Live from a documented warehouse table with no dataset made, kept as a Live
+dataset with one click, and a question that needs a link nobody defined gets a checked link to add
+([design](../assistant/00-design.md#source-tables-keeping-and-the-missing-link-as-built-phase-d)). No migration and no
+new setting. What is new on records, all in a conversation's answer turn (`assistant_turns`' body, or `copilot.json`
+without `DATABASE_URL`):
+
+- **An answer's spec may hold `table`**: the connection id of the source table it was read from (its `datasetId` is then
+  the table doc's id, which no dataset has).
+- **A refused answer's turn may hold `needs`** (`link` or `copy`) and **`link`** (the checked pair: two dataset ids, their
+  names and columns, the cardinality and the checks' results).
+
+**What a pod of an older release does** (a rolling update, or a rollback): it drops `table` when it reads the spec, so a
+table's answer reads as one on a dataset that does not exist: the sentence stays, the card says the dataset is gone,
+and no figure or table name is shown (a hide, never a leak). It shows a refused answer without the link card. Without
+`DATABASE_URL` it drops these fields from every conversation in the project the next time anyone in the project asks
+the Assistant something; with a database it never rewrites those turns. A Live dataset kept from a table is an ordinary
+Live dataset every release reads.
+
 ## Compose
 
 From a checkout:

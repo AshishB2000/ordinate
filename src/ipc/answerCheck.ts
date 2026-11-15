@@ -15,6 +15,8 @@ import { searchModel, spellModel } from './assistantSearch';
 import { linkedColumnOf } from './askLinks';
 import { linkedColumnRefused } from '../ai/answerMessages';
 import type { Failure } from './answers';
+import { copyRefusal, sourceVocabulary, viewDatasets, withTable } from './sourceAnswers';
+import { linkRefusal } from './answerLink';
 
 /**
  * What `want` may name: off step 3's index (./specVocabulary vocabularyFor), else the whole vocabulary, the reference
@@ -58,8 +60,16 @@ export async function checkAction(
   // What the spec and the answer it continues may name: off step 3's index, the few they say (./specVocabulary).
   const want = { specs: [action.spec, previous], datasetIds: [defaultDatasetId, previous?.datasetId].filter((x): x is string => !!x), metricIds: previous?.measures.flatMap((m) => m.metricId ?? []) ?? [], only: only ?? null };
   const unnamed = (x: unknown) => !specNames([x]).datasets.length;
+  // An editor's source tables (outcome C, ./sourceAnswers): named like datasets, after them; one to copy first is refused here.
+  const tables = only ? [] : await sourceVocabulary(projectId, context, question, previous);
+  const copy = copyRefusal(tables, action.spec);
+  if (copy) return copy;
+  const withViews = async (w: VocabularyWant): Promise<Vocabulary> => {
+    const x = await vocabulary(projectId, w);
+    return { ...x, datasets: [...x.datasets, ...viewDatasets(tables)] };
+  };
   // With no default, an unnamed spec means the project's one dataset, if it has one (a previous answer's dataset may be gone).
-  let { datasets: all, metrics: defined, terms } = await vocabulary(projectId, { ...want, anyDataset: !defaultDatasetId && unnamed(action.spec) });
+  let { datasets: all, metrics: defined, terms } = await withViews({ ...want, anyDataset: !defaultDatasetId && unnamed(action.spec) });
   const on = previous ? all.find((d) => d.id === previous.datasetId) : undefined;
   // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
   const base = previous && on && isRefine(action.spec) ? previous : null;
@@ -71,16 +81,19 @@ export async function checkAction(
     const linked = !only && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkedColumnOf(projectId, v.miss.datasetId, v.miss.said) : null;
     const on = linked && all.find((d) => d.id === v.miss?.datasetId);
     if (linked && on) return { ok: false, reason: linkedColumnRefused(linked.column, linked.dataset, on.name) };
+    // A column of a dataset NOT linked to this one (outcome E, ./answerLink): the checked-link card, or "can't be combined yet".
+    const unlinked = !only && !linked && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkRefusal(projectId, v.miss.datasetId, v.miss.said) : null;
+    if (unlinked) return unlinked;
     // A name that does not exist: what it may have meant, picked by the app from the names alone
     // (ai/answerSuggest) and laid over the same raw spec — the MERGED one, so a follow-up's option
     // keeps its carried filters. An option that is the previous chart again is not one. A dataset's
     // candidates are what step 3 finds for the name said (`nearDatasets`), with the vocabulary's.
-    if (v.miss?.part === 'dataset') ({ datasets: all, metrics: defined, terms } = await vocabulary(projectId, { ...want, datasetIds: [...want.datasetIds, ...await nearDatasets(projectId, v.miss.said, only)] }));
+    if (v.miss?.part === 'dataset') ({ datasets: all, metrics: defined, terms } = await withViews({ ...want, datasetIds: [...want.datasetIds, ...await nearDatasets(projectId, v.miss.said, only)] }));
     const options = v.miss ? suggestFixes(raw, v.miss, all, defined, { ...opts, terms }).filter((o) => !base || !sameChart(base, o.spec)) : [];
     return v.miss && options.length
       ? { ok: false, reason: v.reason, suggest: { part: v.miss.part, said: v.miss.said, options } }
       : { ok: false, reason: v.reason };
   }
   if (base && sameChart(base, v.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
-  return { ok: true, spec: v.spec, base };
+  return { ok: true, spec: withTable(v.spec, tables), base };
 }

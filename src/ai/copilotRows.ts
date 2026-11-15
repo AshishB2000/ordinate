@@ -273,6 +273,15 @@ export async function setSnapshot(projectId: string, threadId: string, turnId: s
   });
 }
 
+/** ./copilot `replaceAnswer`. */
+export async function replaceAnswer(projectId: string, threadId: string, turnId: string, from: AnswerSpec, to: AnswerSpec, note: string): Promise<boolean> {
+  return changeTurn(projectId, threadId, turnId, from, (turn) => {
+    turn.answer = to;
+    if (turn.provenance) turn.provenance = { ...turn.provenance, note };
+    delete turn.snapshot;
+  });
+}
+
 export async function deleteThread(projectId: string, threadId: string): Promise<boolean> {
   if (!copilot.isValidId(threadId)) return false;
   await moveFile(projectId);

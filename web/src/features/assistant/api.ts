@@ -81,6 +81,18 @@ export interface Turn {
   guidance?: { verifiedId?: string; instructions: number; examples: string[]; narrated?: boolean };
   /** An Assistant agent's out-of-scope reply: the dataset the Project assistant can answer from (src/ipc/agentAsk.ts). */
   outside?: { dataset: string };
+  /** What a refused answer needs an editor to add first (src/ai/answerNeeds.ts): the reason Ask an editor carries. */
+  needs?: 'link' | 'copy';
+  /** Outcome E for an editor: the link the server checked, which ./LinkCard offers to add. */
+  link?: AnswerLink;
+}
+
+/** A link the server checked between two datasets (src/ai/answerNeeds.ts `AnswerLink`): every check is the engine's. */
+export interface AnswerLink {
+  from: { datasetId: string; dataset: string; column: string };
+  to: { datasetId: string; dataset: string; column: string };
+  cardinality: 'many_to_one' | 'one_to_one';
+  checks: { names: boolean; types: boolean; foundPct: number | null; unique: boolean };
 }
 
 /** The Assistant agent a conversation is with (null: the Project assistant); `gone` once it was deleted. */

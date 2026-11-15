@@ -15,7 +15,9 @@
 //      a formula names, ../src/data/rowAccess hiddenAnywhere, ../src/analysis/columnHidden). A formula metric sits on
 //      Orders, which the dataset and dashboard cases compute: its figure and additivity read only the metrics it names
 //      (../src/analysis/metricNames). Orders links to Regions (Relationships): with Orders open, Regions is in the facts as
-//      a linked dataset, read by id with relationships.json, one record (../src/ipc/askLinks.ts). Each reply is checked too.
+//      a linked dataset, read by id with relationships.json, one record (../src/ipc/askLinks.ts). An answer from Home read
+//      straight from a documented table, no dataset (phase D, ../src/ipc/sourceAnswers.ts): its doc and connection by id.
+//      Each reply is checked too.
 //   2. NEGATIVE CONTROL: the same asks with the index off (assistantSearch._setIndexed(false), the reference paths) DO
 //      call them, each case; the formula's figure through metricsByName.
 //
@@ -64,7 +66,7 @@ type Role = import('../src/server/context').Identity['user']['role'];
 let req = 0;
 const as = <T>(role: Role, fn: () => Promise<T>): Promise<T> => context.runInContext({ user: { email: `${role}@acme.test`, role }, org: { id: 'acme' } }, `n${++req}`, fn);
 
-interface World { P: string; orders: string; returns: string; agent: string; board: string; live: string }
+interface World { P: string; orders: string; returns: string; agent: string; board: string; live: string; conn: string; whDoc: string }
 
 async function world(): Promise<World> {
   return as('admin', async () => {
@@ -108,7 +110,12 @@ async function world(): Promise<World> {
     const doc = await sourceDocs.createSourceDoc(P, conn.id, 'sales_live', { guide: 'Use amount for revenue' });
     if (!doc.ok) throw new Error('fixture: source doc');
     await sourceDocs.updateSourceDoc(P, conn.id, doc.docId, (d) => ({ ...d, facts: { columns: [], partition: { columns: ['region'], required: true }, rowEstimate: 5000, readAt: new Date().toISOString(), readBy: 'admin@acme.test' } }));
-    return { P, orders, returns, agent: agent.id, board: board.id, live };
+    // A documented table no dataset is made from (phase D): an editor's Home answer reads it Live, through its view.
+    await fakeMod.loadWarehouseTable('returns_wh', [txt('reason'), num('refunds')], [['Late', 2], ['Damaged', 3]] as never);
+    const wh = await sourceDocs.createSourceDoc(P, conn.id, 'returns_wh', {});
+    if (!wh.ok) throw new Error('fixture: a source doc');
+    await sourceDocs.updateSourceDoc(P, conn.id, wh.docId, (d) => ({ ...d, facts: { columns: [{ name: 'reason', type: 'VARCHAR' }, { name: 'refunds', type: 'DOUBLE' }], readAt: new Date().toISOString(), readBy: 'admin@acme.test' } }));
+    return { P, orders, returns, agent: agent.id, board: board.id, live, conn: conn.id, whDoc: wh.docId };
   });
 }
 
@@ -186,6 +193,11 @@ async function dbLeg(): Promise<void> {
     { name: 'agent, answer outside', reply: answer({ dataset: 'Returns', category: 'reason', measures: [{ column: 'refunds', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(w.agent), context: {}, question: 'refunds by reason' }), right: (r) => r.turns.at(-1)?.outside?.dataset === 'Returns' && !r.turns.at(-1)?.answer },
     { name: 'typo (Did you mean)', reply: answer({ dataset: 'Order', category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: {}, question: 'amount by region' }), right: (r) => r.turns.at(-1)?.suggest?.part === 'dataset' && r.turns.at(-1)?.suggest?.options?.[0]?.spec?.datasetId === w.orders },
     { name: 'follow-up', reply: answer({ refine: true, filters: [{ column: 'region', op: '=', value: 'West' }] }), ask: async () => ({ threadId: await started(), context: {}, question: 'only West' }), right: (r) => r.turns.at(-1)?.answer?.filters?.length === 1 && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    {
+      name: 'source table, no dataset', reply: answer({ dataset: 'returns_wh', category: 'reason', measures: [{ column: 'refunds', aggregation: 'sum' }] }),
+      ask: async () => ({ threadId: await thread(), context: {}, question: 'returns wh refunds by reason' }), prompted: '- returns_wh (on "Warehouse"): reason (text), refunds (number)',
+      right: (r) => r.turns.at(-1)?.answer?.datasetId === w.whDoc && r.turns.at(-1)?.answer?.table === w.conn && r.turns.at(-1)?.card?.ok === true,
+    },
     { name: 'viewer, a hidden column', who: 'viewer', reply: answer(onOrders), ask: async () => ({ threadId: await thread(undefined, 'viewer'), context: {}, question: 'order share by region' }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
   ];
   ok('fixture: the viewer is restricted, and Orders\' cost is hidden from them', (await as('viewer', async () => [...await rowAccess.hiddenAnywhere(w.P)])).join() === 'cost');

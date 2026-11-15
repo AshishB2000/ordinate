@@ -40,6 +40,7 @@ import { sameSql, type SqlCard, type SqlTurn } from '../ai/answerSql';
 import { sqlCardFor } from './answerSql';
 import { verifiedSqlOn } from './verifiedLookup';
 import type { AnswerCard, Built, CardLearn, Failure } from './answers';
+import { inSourceTable } from './sourceAnswers';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
 export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot'> & { card?: Record<string, unknown> };
@@ -95,7 +96,8 @@ export const sqlDelivered = async (projectId: string, card: object, sql: SqlTurn
 export async function snapshotFor(projectId: string, card: AnswerCard, spec: AnswerSpec): Promise<AnswerSnapshot | undefined> {
   try {
     const now = new Date().toISOString();
-    return makeSnapshot(card, { asOf: now, firstAsked: now }, await accessPrint(projectId, spec.datasetId), periodsOf(spec)) ?? undefined;
+    const access = await inSourceTable(projectId, spec, () => accessPrint(projectId, spec.datasetId)); // a source table's view, as it is read on open
+    return makeSnapshot(card, { asOf: now, firstAsked: now }, access, periodsOf(spec)) ?? undefined;
   } catch {
     return undefined;
   }
@@ -152,10 +154,14 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
       out.push(kept && snapshot ? { ...turn, card: await sqlDelivered(projectId, kept, turn.sql, keptView(snapshot, snapshot.firstAsked, [])) } : turn);
       continue;
     }
-    const card = snapshot && turn.answer && (await accessNow(turn.answer.datasetId)) === snapshot.access ? cardOf(snapshot) : null;
-    out.push(card && snapshot && turn.answer
-      ? { ...turn, card: await delivered(projectId, card, turn.answer, turn, keptView(snapshot, snapshot.firstAsked, snapshot.periods)) }
-      : turn);
+    // An answer read straight from a source table is checked and delivered inside its view (./sourceAnswers): outside it
+    // (a caller no longer an editor, a table gone) its id is no dataset, so its figures stay here.
+    out.push(await inSourceTable(projectId, turn.answer, async () => {
+      const card = snapshot && turn.answer && (await accessNow(turn.answer.datasetId)) === snapshot.access ? cardOf(snapshot) : null;
+      return card && snapshot && turn.answer
+        ? { ...turn, card: await delivered(projectId, card, turn.answer, turn, keptView(snapshot, snapshot.firstAsked, snapshot.periods)) }
+        : turn;
+    }));
   }
   return out;
 }
@@ -184,16 +190,21 @@ export function registerSnapshots(compute: Compute): void {
       if (turn?.sql) return await refreshSql(projectId, threadId, turnId, turn, turn.sql);
       if (!turn || !turn.answer) return { ok: false, reason: answerNotThere() };
       const spec = turn.answer;
-      const built = await compute(projectId, spec);
-      if ('ok' in built) return built;
-      const access = await accessPrint(projectId, spec.datasetId);
-      const firstAsked = turn.snapshot?.firstAsked ?? turn.createdAt;
-      const periods = periodsOf(spec);
-      const snap = makeSnapshot(built.card, { asOf: new Date().toISOString(), firstAsked }, access, periods);
-      await copilot.setSnapshot(projectId, threadId, turnId, spec, snap);
-      return delivered(projectId, built.card, spec, turn, keptView(snap, firstAsked, periods, !!turn.snapshot && turn.snapshot.access !== access));
+      return await inSourceTable(projectId, spec, () => refreshCard(projectId, threadId, turnId, turn, spec, compute), true);
     } catch (err: any) {
       return { ok: false, reason: err?.message || answerNotRefreshed() };
     }
   }));
+}
+
+/** Refresh of a chart answer: its card computed now for the caller, kept in place of its snapshot (firstAsked stays). */
+async function refreshCard(projectId: string, threadId: string, turnId: string, turn: copilot.CopilotTurn, spec: AnswerSpec, compute: Compute): Promise<Record<string, unknown>> {
+  const built = await compute(projectId, spec);
+  if ('ok' in built) return built;
+  const access = await accessPrint(projectId, spec.datasetId);
+  const firstAsked = turn.snapshot?.firstAsked ?? turn.createdAt;
+  const periods = periodsOf(spec);
+  const snap = makeSnapshot(built.card, { asOf: new Date().toISOString(), firstAsked }, access, periods);
+  await copilot.setSnapshot(projectId, threadId, turnId, spec, snap);
+  return delivered(projectId, built.card, spec, turn, keptView(snap, firstAsked, periods, !!turn.snapshot && turn.snapshot.access !== access));
 }

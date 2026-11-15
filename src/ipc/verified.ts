@@ -11,6 +11,7 @@
 // A verified SQL question (./verifiedSql) is saved from `input.sql`, a new one only, and listed after the charts' as
 // its words, the datasets it reads and whether it runs: never its SQL, never a spec, so it offers no edit.
 
+import { keepFirst } from '../ai/sourceAnswerMessages';
 import { randomUUID } from 'crypto';
 import type { z } from 'zod';
 import { ipcMain } from './bus';
@@ -99,6 +100,7 @@ async function rowsFor(projectId: string, states: VerifiedState[]): Promise<Veri
 export async function saveVerifiedQuestion(projectId: string, input: SpecInput, at?: { id: string; base?: string }): Promise<Saved> {
   const spec = sanitizeStoredSpec(input.spec);
   if (!spec) return { ok: false, error: msg.verifiedNotRead(), field: 'spec' };
+  if (spec.table) return { ok: false, error: keepFirst(), field: 'spec' }; // a verified question names a dataset: keep the table as one first
   if (!questionKey(input.question)) return { ok: false, error: msg.verifiedNoWords(), field: 'question' };
   if (at && !(await readVerified(projectId, at.id))) return { ok: false, error: msg.verifiedGone() };
   const now = new Date().toISOString();

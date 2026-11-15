@@ -208,7 +208,7 @@ const writeChains = new Map<string, Promise<void>>();
 // Exported for the input-table store (inputTable/store.ts): an edit replaces the
 // base table like a refresh does, but keeps no snapshot — its history is versions.
 export async function persist(projectId: string, dataset: Dataset, progress: parquetStore.WriteProgress = {}): Promise<void> {
-  asOf.assertWritable(); // an as-of read must never write its past rows back as the present
+  asOf.assertWritable(projectId, dataset.id); // an as-of read never writes its past rows back as the present, nor a source view itself
   const prev = writeChains.get(dataset.id) || Promise.resolve();
   const run = prev.catch(() => { /* the previous write's failure was its caller's */ })
     .then(() => persistNow(projectId, dataset, progress));

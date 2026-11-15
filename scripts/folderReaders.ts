@@ -253,6 +253,7 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'analysis:unpublish': 'EDIT',
   'analysis:update': 'EDIT',
   'analysis:view': 'EDIT', // saved views follow their dashboard
+  'answer:keepTable': 'CREATE', // makes the Live dataset of a source table an editor's answer read (phase D)
   'answer:saveVisual': 'CREATE',
   'asset:importImage': 'PROJECT',
   'boundary:import': 'PROJECT',

@@ -22,6 +22,9 @@
 // A snapshot kept before a mask or drop step was added resolves to 'withheld'
 // the same way: it still holds the values the step takes away (NV-23).
 //
+// A source table's Live view (./sourceView, Assistant outcome C) rides the same three hooks: its record in memory, no
+// rows (LiveDatasetError, as any Live dataset's), no file, and never a write.
+//
 // A WRITE inside a scope is refused (datasets.persist calls assertWritable): an
 // as-of read hydrates snapshot rows, and persisting those as the current table
 // would be data loss dressed as a read.
@@ -34,6 +37,8 @@ import * as snapshots from './snapshots';
 import type { SnapshotInfo } from './snapshots';
 import { pickAsOf } from './snapshotNames';
 import * as parquetStore from '../engine/parquetStore';
+import { assertNotView, isSourceView, viewHook } from './sourceView';
+import { LiveDatasetError } from './liveDataset';
 
 type Resolved =
   | { kind: 'current' }
@@ -66,8 +71,9 @@ export function asOfIso(): string | undefined {
   return s ? s.iso : undefined;
 }
 
-export function assertWritable(): void {
+export function assertWritable(projectId?: string, id?: string): void {
   if (als.getStore()) throw new Error('A dataset write inside an as-of read was refused.');
+  if (projectId && id) assertNotView(projectId, id);
 }
 
 /** "Sep 26, 2026, 9:44 PM" — the time as the note under a card says it. */
@@ -112,6 +118,8 @@ async function resolve(projectId: string, id: string): Promise<{ scope: Scope; r
 // ── The three hooks datasets.ts asks first. `undefined` = read the present. ──
 
 export async function metaHook(projectId: string, id: string): Promise<DatasetMeta | null | undefined> {
+  const view = viewHook(projectId, id);
+  if (view) return view;
   const x = await resolve(projectId, id);
   if (!x || x.r.kind === 'current') return undefined;
   return x.r.kind === 'snapshot' ? structuredClone(x.r.meta) : null;
@@ -121,6 +129,7 @@ export async function residentHook(
   projectId: string,
   id: string,
 ): Promise<{ parquetPath: string; columns: DatasetMeta['columns'] } | null | undefined> {
+  if (isSourceView(projectId, id)) return null;
   const x = await resolve(projectId, id);
   if (!x || x.r.kind === 'current') return undefined;
   if (x.r.kind !== 'snapshot' || !parquetStore.isSupported()) return null;
@@ -128,6 +137,7 @@ export async function residentHook(
 }
 
 export async function datasetHook(projectId: string, id: string): Promise<Dataset | null | undefined> {
+  if (isSourceView(projectId, id)) throw new LiveDatasetError(id); // D6: a Live view has no rows here
   const x = await resolve(projectId, id);
   if (!x || x.r.kind === 'current') return undefined;
   if (x.r.kind !== 'snapshot') return null;

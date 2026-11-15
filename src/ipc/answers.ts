@@ -78,6 +78,10 @@ import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
+import { inSourceTable } from './sourceAnswers';
+import { register as registerKeep } from './sourceKeep';
+import type { AnswerLink } from './answerLink';
+import { keepFirst, tableNote } from '../ai/sourceAnswerMessages';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
 import { figureRefusal } from '../analysis/additivity';
 import { pendingMeasureRefusal } from '../analysis/pendingKinds';
@@ -138,7 +142,8 @@ export interface Built {
  * filter it cannot apply (thrown by the door, typed by the route).
  * `suggest`: a refused spec named something that does not exist, and this is what it may have meant.
  */
-export type Failure = { ok: false; reason: string; code?: LiveFailureCode | typeof TERM_CODE; suggest?: AnswerSuggest };
+/** `needs`: what an editor must add first (Ask an editor's reason): a link (outcome E, `link` the checked one), or a copy of a table not asked live. */
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode | typeof TERM_CODE; suggest?: AnswerSuggest; needs?: 'link' | 'copy'; link?: AnswerLink };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
@@ -184,6 +189,13 @@ function ranked(data: ChartData, top?: number): ChartData {
  */
 /** THE answer door: row access rules first (./rowDoors — a refusal throws), then the body with the caller's lock. */
 export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
+  if (!asked.table) return cardOf(projectId, asked, loose);
+  // An answer read straight from a source table runs inside its Live view (./sourceAnswers), or is refused.
+  const built = await inSourceTable(projectId, asked, () => cardOf(projectId, asked, loose), true);
+  return 'card' in built ? { ...built, provenance: { ...built.provenance, note: tableNote() } } : built;
+}
+
+async function cardOf(projectId: string, asked: AnswerSpec, loose: boolean): Promise<Built | Failure> {
   // A glossary term is expanded FIRST (a refusal THROWS, typed 'term'), before the lock and the Live split; the card keeps the reference.
   const x = await expandAnswerTerms(projectId, asked);
   const built = await withLockOf(projectId, x.spec && x.spec.datasetId, (lock, hidden) => computeCardWith(projectId, x.spec, loose, lock, x, hidden), [x.spec, x.steps]); // the question: the spec and its terms' steps
@@ -348,7 +360,8 @@ export interface PreviousAnswer { spec: AnswerSpec; block: string; ledger: Ledge
 export async function previousAnswer(projectId: string, turns: copilot.CopilotTurn[]): Promise<PreviousAnswer | null> {
   let spec: AnswerSpec | undefined;
   for (let i = turns.length - 1; i >= 0 && !spec; i--) if (turns[i].role === 'assistant') spec = turns[i].answer;
-  const meta = spec ? await datasets.getDatasetMeta(projectId, spec.datasetId) : null;
+  const asked = spec;
+  const meta = asked ? await inSourceTable(projectId, asked, () => datasets.getDatasetMeta(projectId, asked.datasetId)) : null; // a table's answer: its view
   if (!spec || !meta) return null;
   if (answerNames(spec).some((n) => !meta.columns.some((c) => c.name === n))) return null;
   const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
@@ -452,6 +465,7 @@ export async function appendAnswer(
 export function register(guard: Guard): void {
   registerSnapshots(computeCard); // `answer:refresh`, through THE answer door
   registerSources(); // `answer:alsoOn`
+  registerKeep(); // `answer:keepTable` (./sourceKeep)
   // Draw one card from a spec, now: a card no conversation turn keeps (a turn's own
   // comes with its conversation, or from `answer:refresh`). `learn` is its turn's name to remember, and `savedVisualId` the visual it was
   // saved as — handed back only while that visual exists, so a deleted one is
@@ -461,12 +475,14 @@ export function register(guard: Guard): void {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
-      const built = await computeCard(projectId, s);
-      if ('ok' in built) return built;
-      const said = sanitizeLearn(learn, s);
-      const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
-      const kept = typeof savedVisualId === 'string' && (await visuals.getVisual(projectId, savedVisualId)) ? savedVisualId : undefined;
-      return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}), ...(await verifiedMark(projectId, built.card.spec)), ...(await answeredFrom(projectId, s.datasetId)) };
+      return await inSourceTable(projectId, s, async () => { // a source table's answer: its view for the card and its words alike
+        const built = await computeCard(projectId, s);
+        if ('ok' in built) return built;
+        const said = sanitizeLearn(learn, s);
+        const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
+        const kept = typeof savedVisualId === 'string' && (await visuals.getVisual(projectId, savedVisualId)) ? savedVisualId : undefined;
+        return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}), ...(await verifiedMark(projectId, built.card.spec)), ...(await answeredFrom(projectId, s.datasetId)) };
+      }, true);
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }
@@ -544,6 +560,7 @@ export function register(guard: Guard): void {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
+      if (s.table) return { ok: false, reason: keepFirst() }; // a visual names a dataset: Keep as a dataset makes it (./sourceKeep)
       const built = await computeCard(projectId, s);
       if ('ok' in built) return built;
       const saved = await saveCardAsVisual(projectId, built.card);

@@ -31,8 +31,10 @@ export const HOME_DATASETS = 12;
 const DATASET_HITS = 60;
 /** Metrics and terms named on Home. */
 const MODEL_HITS = 8;
+/** Source tables an editor's Home question offers (./sourceAnswers): found in the same search as the datasets, a viewer's never. */
+export const HOME_TABLES = 4;
 
-export interface HomePicks { datasetIds: string[]; metricIds: string[]; termIds: string[] }
+export interface HomePicks { datasetIds: string[]; metricIds: string[]; termIds: string[]; tables: { connId: string; docId: string }[] }
 
 /** Where the picks come from: the index, or (for the differential) every store read. */
 export interface PickSources {
@@ -43,13 +45,15 @@ const LIVE: PickSources = { search: searchModel, newest: async (p, n) => (await 
 
 /** What a Home question sees, from `from`. Exported for scripts/test-askIndex.ts (index against reference, Object.is). */
 export async function picksFrom(projectId: string, question: string, from: PickSources): Promise<HomePicks> {
-  const hits = await from.search(projectId, question, { kinds: ['dataset', 'column'], limit: DATASET_HITS });
+  const hits = await from.search(projectId, question, { kinds: ['dataset', 'column', 'table'], limit: DATASET_HITS });
   const ids = [...new Set(hits.flatMap((h) => (h.kind === 'dataset' ? [h.id] : h.datasetId ? [h.datasetId] : [])))].slice(0, HOME_DATASETS);
+  // A table by its words only (a newest one, or one found by meaning alone, is no answer's source).
+  const tables = hits.flatMap((h) => (h.kind === 'table' && h.connId && h.score > 0 ? [{ connId: h.connId, docId: h.id }] : [])).slice(0, HOME_TABLES);
   if (ids.length < HOME_DATASETS) {
     for (const d of await from.newest(projectId, HOME_DATASETS * 2)) if (ids.length < HOME_DATASETS && !ids.includes(d.id)) ids.push(d.id);
   }
   const model = await from.search(projectId, question, { kinds: ['metric', 'term'], limit: MODEL_HITS });
-  return { datasetIds: ids, metricIds: model.flatMap((h) => (h.kind === 'metric' ? [h.id] : [])), termIds: model.flatMap((h) => (h.kind === 'term' ? [h.id] : [])) };
+  return { datasetIds: ids, metricIds: model.flatMap((h) => (h.kind === 'metric' ? [h.id] : [])), termIds: model.flatMap((h) => (h.kind === 'term' ? [h.id] : [])), tables };
 }
 
 /** Home's picks for `question`, once per ask. Its readers never change them. */

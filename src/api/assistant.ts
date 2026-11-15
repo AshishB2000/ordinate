@@ -110,6 +110,9 @@ export const assistant = {
   // "Also on ▸" on an answer card (src/ipc/answerSources.ts): the dashboards the caller may open that show this dataset,
   // found by reference (never a list of the project), at most five and how many more. Names only.
   'answer:alsoOn': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+  // "Keep as a dataset" on an answer read straight from a source table (src/ipc/sourceKeep.ts): the table's Live dataset made
+  // through the connection's own Live create, and the caller's answer turn re-pointed at it. `write`, as `connection:import` is.
+  'answer:keepTable': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, threadId: Uuid, turnId: z.string().min(1).max(100) }), project: byProjectId }),
 
   'plan:check': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, steps: Steps }), project: byProjectId }),
   'plan:start': rpc({

@@ -15,6 +15,7 @@ import { AnswerCard } from './AnswerCard';
 import { AnswerSql } from './AnswerSql';
 import type { ActivityStep, Provenance, Turn } from './api';
 import { DidYouMean, type Learn } from './DidYouMean';
+import { LinkCard } from './LinkCard';
 import s from './Dock.module.css';
 
 /** "kind: name · dataset: x · columns: a, b… · stats app-computed" — a footnote, not pills. */
@@ -76,6 +77,7 @@ export function Transcript({
   aside,
   agentName,
   onAskProject,
+  onAsk,
 }: {
   turns: readonly Turn[];
   pending: Pending | null;
@@ -93,6 +95,8 @@ export function Transcript({
   agentName?: string;
   /** An out-of-scope reply's one click: the question before it, to the Project assistant in a new conversation. */
   onAskProject?: (question: string) => void;
+  /** Ask a question again in this conversation: a checked link, once added, answers the question it was found for. */
+  onAsk?: (question: string) => void;
 }) {
   return (
     <>
@@ -135,6 +139,10 @@ export function Transcript({
           )}
           {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}
           {t.role === 'assistant' && t.suggest && <DidYouMean options={t.suggest.options} said={t.suggest.said} onPick={onFollowUp} />}
+          {/* Outcome E: the link the server checked, for an editor to add (./LinkCard). */}
+          {t.role === 'assistant' && t.link && (
+            <LinkCard projectId={projectId} link={t.link} question={turns[i - 1]?.role === 'user' ? turns[i - 1].text : ''} onAsk={onAsk} busy={!!pending} />
+          )}
           {t.role === 'assistant' && t.provenance && <div className={s.provenance}>{provenanceLine(t.provenance)}</div>}
           {aside && t.role === 'assistant' && aside(t, turns[i - 1])}
         </div>
