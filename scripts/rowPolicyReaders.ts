@@ -74,6 +74,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'drivers:explain': 'NET',
   'drivers:explainAlert': 'NET',
   'drivers:explainPoint': 'NET',
+  'editors:ask': 'META', // the caller's question, reason and note to the project's editors (src/server/mentions/asks.ts); returns no row or figure
   'embed:columns': 'META',
   'embed:status': 'META',
   'events:list': 'META',

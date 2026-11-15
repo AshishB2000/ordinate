@@ -804,6 +804,18 @@ notices at first use (one warning in the log) and ranks them itself.
 
 **Rolling back.** The older release ignores the function, the extension and the index.
 
+## Viewers can ask an editor for data (`0033_editor_asks`)
+
+A viewer whose Assistant question needs data the project does not have can send it to the project's
+editors and admins, who see it in the bell (and by email, once they turn on **Settings → You → Email me
+when a viewer asks for data**). The migration adds one table, `editor_asks` (a row per person told, with
+row-level security as the other per-member tables), and one column, `users.request_email`, with a
+constant default (`false`), so no table is rewritten. It reads no record. Without `DATABASE_URL`
+nothing changes: there are no viewers.
+
+**Rolling back.** The older release ignores the table and the column; the asks sent meanwhile stay in
+the table and show again after the next upgrade.
+
 ## Compose
 
 From a checkout:

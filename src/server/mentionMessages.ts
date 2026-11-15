@@ -39,3 +39,45 @@ export function mentionedYouOn(by: string, on: string): string {
 export function mentionEmailReason(by: string): string {
   return t('mentionMessages.you_get_this_email_because_mentioned', { by });
 }
+
+// ── "Ask an editor" (./mentions/asks.ts) ─────────────────────────────────────
+
+/** Asking an editor on a server with no user directory. */
+export function asksOff(): string {
+  return t('mentionMessages.asking_an_editor_needs_the_user');
+}
+
+/** A project with no one to ask. */
+export function noEditorsToAsk(): string {
+  return t('mentionMessages.this_project_has_no_editors_or');
+}
+
+/** The asker's day is used up. */
+export function tooManyAsks(max: number): string {
+  return t('mentionMessages.you_can_ask_the_editors_times', { max });
+}
+
+/** Outcome D: nothing in the project has it. */
+export function askReasonMissing(): string {
+  return t('mentionMessages.this_data_isn_t_in_ordinate');
+}
+
+/** Outcome E: it needs a link nobody defined. */
+export function askReasonLink(): string {
+  return t('mentionMessages.these_can_t_be_combined_yet');
+}
+
+/** A table on a connection that is not live-capable: it must be copied first. */
+export function askReasonCopy(): string {
+  return t('mentionMessages.this_data_has_to_be_copied');
+}
+
+/** The ask email's title. */
+export function askedForData(by: string, project: string): string {
+  return t('mentionMessages.asked_the_editors_of_for_data', { by, project });
+}
+
+/** Why an editor has the ask email, under it. */
+export function askEmailReason(): string {
+  return t('mentionMessages.you_get_this_email_because_you');
+}

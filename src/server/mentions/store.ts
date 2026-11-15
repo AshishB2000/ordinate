@@ -16,6 +16,13 @@ const READABLE = `$3::boolean OR m.project_id IN (
                    AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))
                  WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NULL)`;
 
+/** authz `writable`'s rule in SQL, for the caller ($1 org, $2 email, $3 is an org admin): every project, or an editor or admin grant. */
+export const WRITABLE = `$3::boolean OR a.project_id IN (
+                SELECT g.project_id FROM users u
+                  JOIN project_grants g ON g.org_id = u.org_id AND g.role IN ('editor', 'admin')
+                   AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))
+                 WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NULL)`;
+
 export interface MentionRow {
   projectId: string;
   pieceId: string;
@@ -101,32 +108,36 @@ export async function markGone(rows: Array<{ projectId: string; pieceId: string 
   );
 }
 
-/** How many of the caller's rows are unseen, on projects they may read now (as `listMine` filters them). */
+/** How many of the caller's rows are unseen, on projects they may read now (as `listMine` filters them), and their asks (./asks `listAsks`). */
 export async function unseenCount(): Promise<number> {
   const { user } = ctx();
   const r = await inOrg((c, org) =>
     c.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM mentions m
-        WHERE m.org_id = $1 AND m.user_email = $2 AND m.seen_at IS NULL AND (${READABLE})`,
+      `SELECT ((SELECT count(*) FROM mentions m
+                 WHERE m.org_id = $1 AND m.user_email = $2 AND m.seen_at IS NULL AND (${READABLE}))
+             + (SELECT count(*) FROM editor_asks a
+                 WHERE a.org_id = $1 AND a.user_email = $2 AND a.seen_at IS NULL AND (${WRITABLE})))::int AS n`,
       [org, user.email, user.role === 'admin'],
     ),
   );
   return r.rows[0]?.n ?? 0;
 }
 
-/** Mark the caller's row of one piece seen — or all of theirs made up to `through` (the newest Home showed them). */
+/** Mark the caller's row of one piece (or ask) seen — or all of theirs made up to `through` (the newest the bell showed them), asks too. */
 export async function markSeen(which: { projectId: string; pieceId: string } | { through: string }): Promise<void> {
   const one = 'pieceId' in which ? [which.projectId, which.pieceId, null] : [null, null, Number.isFinite(Date.parse(which.through)) ? new Date(which.through).toISOString() : null];
   if (one.every((x) => x === null)) return; // an unreadable time marks nothing
-  await inOrg((c, org) =>
-    c.query(
-      `UPDATE mentions SET seen_at = now()
-        WHERE org_id = $1 AND user_email = $2 AND seen_at IS NULL
-          AND (($3::uuid IS NOT NULL AND project_id = $3::uuid AND piece_id = $4::uuid)
-               OR ($5::timestamptz IS NOT NULL AND created_at <= LEAST($5::timestamptz, now())))`,
-      [org, ctx().user.email, ...one],
-    ),
-  );
+  await inOrg(async (c, org) => {
+    for (const [table, id] of [['mentions', 'piece_id'], ['editor_asks', 'id']]) {
+      await c.query(
+        `UPDATE ${table} SET seen_at = now()
+          WHERE org_id = $1 AND user_email = $2 AND seen_at IS NULL
+            AND (($3::uuid IS NOT NULL AND project_id = $3::uuid AND ${id} = $4::uuid)
+                 OR ($5::timestamptz IS NOT NULL AND created_at <= LEAST($5::timestamptz, now())))`,
+        [org, ctx().user.email, ...one],
+      );
+    }
+  });
 }
 
 /** The caller's "Email me when someone mentions me" (on unless they turned it off). */

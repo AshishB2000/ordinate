@@ -1,0 +1,97 @@
+/* "Ask an editor" (AskAnEditor.tsx) and "Alert me"'s reason (AlertFromAnswer.tsx). Tokens only; both themes follow them. */
+
+/* The offer under a reply: the reason on the left, the button (or what happened) on the right; wraps on a phone. */
+.offer {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.reason {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex: 1 1 14rem;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--t-13);
+  line-height: var(--lh-snug);
+}
+.reason > svg {
+  flex: none;
+  color: var(--muted);
+}
+.sent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--ok-text);
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+
+/* The composer. */
+.form {
+  display: grid;
+  gap: var(--sp-12);
+}
+.why {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: var(--t-13);
+  line-height: var(--lh-snug);
+}
+.why > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.whyLabel {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.error,
+.limit {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+  line-height: var(--lh-snug);
+}
+.error > svg,
+.limit > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.error {
+  background: var(--error-soft);
+  color: var(--error-text);
+}
+/* The day's asks are used up: not a failure, a wait. */
+.limit {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+
+/* "Alert me" on an answer no single number stands for: why, in the card's quiet note colour, not an error's. */
+.alertWhy {
+  flex-basis: 100%;
+  font-size: var(--t-11);
+  line-height: var(--lh-snug);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

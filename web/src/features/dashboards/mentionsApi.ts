@@ -1,5 +1,5 @@
 // @mentions on the web (docs/notifications/00-design.md §5.9-5.12): the caller's
-// "Mentioned you" list (in the bell), its seen marks, and their email setting. Every figure-free
+// "Mentioned you" list and viewers' asks (in the bell), their seen marks, and their email settings. Every figure-free
 // word here is the server's; the browser never derives a person's name.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,16 +18,32 @@ export interface HomeMention {
   at: string;
   seen: boolean;
 }
+/** A viewer's "Ask an editor" of a project the caller edits (src/server/mentions/asks.ts): their words, the reason, a name. */
+export interface AskRow {
+  projectId: string;
+  id: string;
+  by: string;
+  question: string;
+  reason: 'missing' | 'link' | 'copy';
+  /** The reason as the server words it. */
+  why: string;
+  note: string;
+  at: string;
+  seen: boolean;
+}
 export interface MentionList {
   available: boolean;
   items: HomeMention[];
-  /** The caller's unseen mentions in the database (some may not be among `items`). */
+  asks: AskRow[];
+  /** The caller's unseen mentions and asks in the database (some may not be among `items` and `asks`). */
   unseen: number;
 }
 export interface MentionPrefs {
   available: boolean;
   mail: boolean;
   emailMe: boolean;
+  /** "Email me when a viewer asks for data": off unless they turned it on. */
+  requestEmail: boolean;
 }
 
 export const MENTIONS_KEY = ['mentions:list'] as const;
@@ -41,7 +57,8 @@ export function useMentions(enabled = true) {
       const r = (await rpc('mentions:list')) as Partial<MentionList> & { ok?: boolean; error?: string };
       if (r && r.ok === false) throw new Error(r.error || 'Could not read your mentions.');
       const items = Array.isArray(r?.items) ? r.items : [];
-      return { available: r?.available === true, items, unseen: typeof r?.unseen === 'number' ? r.unseen : items.filter((m) => !m.seen).length };
+      const asks = Array.isArray(r?.asks) ? r.asks : [];
+      return { available: r?.available === true, items, asks, unseen: typeof r?.unseen === 'number' ? r.unseen : [...items, ...asks].filter((m) => !m.seen).length };
     },
   });
 }
@@ -64,19 +81,20 @@ export function useMentionPrefs() {
     queryFn: async (): Promise<MentionPrefs> => {
       const r = (await rpc('mentions:prefs')) as Partial<MentionPrefs> & { ok?: boolean; error?: string };
       if (r && r.ok === false) throw new Error(r.error || 'Could not read your notification settings.');
-      return { available: r?.available === true, mail: r?.mail === true, emailMe: r?.emailMe !== false };
+      return { available: r?.available === true, mail: r?.mail === true, emailMe: r?.emailMe !== false, requestEmail: r?.requestEmail === true };
     },
   });
 }
 
+/** One switch per call: `{ emailMe }` or `{ requestEmail }`. */
 export function useSetMentionPrefs() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (emailMe: boolean) => {
-      const r = (await rpc('mentions:setPrefs', { emailMe })) as { ok?: boolean; error?: string };
+    mutationFn: async (which: { emailMe: boolean } | { requestEmail: boolean }) => {
+      const r = (await rpc('mentions:setPrefs', which)) as { ok?: boolean; error?: string };
       if (!r || r.ok !== true) throw new Error(r?.error || 'Could not save that setting.');
-      return emailMe;
+      return which;
     },
-    onSuccess: (emailMe) => client.setQueryData<MentionPrefs>(['mentions:prefs'], (p) => (p ? { ...p, emailMe } : p)),
+    onSuccess: (which) => client.setQueryData<MentionPrefs>(['mentions:prefs'], (p) => (p ? { ...p, ...which } : p)),
   });
 }

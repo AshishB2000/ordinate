@@ -364,6 +364,51 @@ row rules (each manager sees only their region) becomes a dataset, where the rul
    folder). **Approve and publish**, **Edit**, **Decline with a note**.
 5. **Viewer gets it**: *Your dashboard Returns Q4 is ready*, with the link, or the editor's note.
 
+## Ask an editor and Alert me, as built (phase G)
+
+**Ask an editor.** Where the Assistant tells a viewer the data isn't theirs yet, the reason and
+**Ask an editor** (`web/src/features/assistant/AskAnEditor.tsx`): today on outcome D (the reply's
+`import` action, which an editor sees as Import / Paste / Connect), *This data isn't in Ordinate yet.*
+The reasons `link` (outcome E, *These can't be combined yet.*) and `copy` (a table on a connection
+that is not live-capable, *This data has to be copied into Ordinate first.*) are in the contract and
+the component; their cards land with phase D, which places the same component. The button opens a
+composer prefilled with the question and the reason, and an optional note.
+
+- **`editors:ask`** (`src/api/notifications.ts`, `src/server/mentions/asks.ts`): `read`, as
+  `comment:add` (asking changes nothing in the project), audited, project-scoped. META in
+  `rowPolicyReaders` and `columnAccessReaders`: the caller's own words, no row or figure.
+- **Who is told:** the project's editors and admins at send time (`writerEmails`: an org admin, or
+  an editor or admin grant of their own or a team's), never the asker, another viewer or another
+  project's. One `editor_asks` row each (0033) carries the question, the reason and the note as sent
+  (a viewer's conversation stays private); the bell lists only rows on projects the caller may still
+  edit, under **Asked for data**, and a click opens Connections (missing, copy) or the Data model's
+  Relationships (link). A push to their tabs (`asks:new`: who, where, why; no question or note), and
+  an email only for those who turned on **Settings → You → Email me when a viewer asks for data**
+  (`users.request_email`, off by default; E9's requests will use the same switch), through `deliver`
+  under the mention email budget.
+- **Not twice, not a flood** (shared counters, every pod): the same person, project, reason and
+  question (case and spacing aside) within a day is *Already sent to the project's editors today*,
+  and nothing is written; at most **10 sends per person a day**, across projects (*You can ask the
+  editors 10 times a day. Try again tomorrow.*). A refused or failed send is given back.
+- Without a database there is no directory: the send says so, and the bell has no asks.
+
+**Alert me** (`web/src/features/assistant/AlertFromAnswer.tsx`, `src/ipc/answerAlert.ts`) on an
+answer card, for those who may save an alert (`alerts:save` is `write`; a viewer is not offered it).
+`alerts:fromAnswer` (`write`, project-scoped) turns the stored spec into the alert dialog's subject,
+the same fields a KPI card's **Alert me…** hands it: the one measure, the answer's filters (a relative
+period stays a period, so the alert moves with the clock; a term is expanded as it stands), the
+figure the rule reads now through `testRule`, and a threshold to start from (falls below a tenth under
+it, to two significant figures). The category is not a filter: the dialog says the number covers
+every category together. The existing dialog, rules and delivery do the rest. Two measures, a
+"Calculate as", a top-N, a period in an earlier year, row access rules on the dataset and an
+unreadable spec are refused with the reason, beside the button. A SQL answer has no spec.
+
+Tested in `test-askEditor` (told: editors and admins only, NEGATIVE CONTROLS another viewer and
+another project's editors; the note never reaches another viewer; email only when on; dedupe; the
+limit; seen; a demoted editor; RLS) and `test-answerAlert` (the prefill's figure `Object.is` the
+by-hand dialog's `dashboard:metric`, the answer's own total and `alerts:test`; alerts:save stores the
+same rule as one typed by hand; each refusal; a viewer refused).
+
 ## Who sees what
 
 | Role | Source tables | Row rules | Can verify |
@@ -702,7 +747,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |
 | E | Shared folders shared with teams; connection tables per team; dashboard requests ([design](../team-folders/00-design.md)) | every list, search and reader checks the item's folder, with a safety-net test like row rules have |
 | F | SQL on Live datasets and source tables ([design](../live-data/01-live-sql.md)) | row rules, hidden columns and cost limits applied in the warehouse |
-| G | Ask-an-editor notifications, "Answered from ▾", "Also on", Alert me | nothing new |
+| G | Ask-an-editor notifications, "Answered from ▾", "Also on", Alert me: built ([as built](#ask-an-editor-and-alert-me-as-built-phase-g)) | nothing new |
 
 Each phase gets its own design note before code where it adds a channel or a reader: new `read`
 contracts are classified in `scripts/rowPolicyReaders.ts`, a new row-reading channel joins

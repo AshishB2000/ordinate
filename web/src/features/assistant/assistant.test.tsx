@@ -381,9 +381,10 @@ describe('the dock', () => {
     expect(await href('Import a file')).toBe(`/data/import?project=${PID}`);
     expect(await href('Paste data')).toBe(`/data/import?project=${PID}&source=paste`);
     expect(await href('Connect a source')).toBe(`/connections/${PID}`);
+    expect(within(dock).queryByTestId('ask-editor')).toBeNull(); // an editor has the ways in, not Ask an editor
   });
 
-  it('a project viewer gets the answer to that reply, without the ways in (they would write)', async () => {
+  it('a project viewer gets the answer to that reply, without the ways in (they would write), and Ask an editor', async () => {
     const turns = [
       { id: 't1', role: 'user', text: 'upload data', createdAt: '' },
       { id: 't2', role: 'assistant', text: 'Pick a file and I will take it from there.', createdAt: '' },
@@ -402,6 +403,12 @@ describe('the dock', () => {
     expect(await within(dock).findByText(turns[1].text)).toBeTruthy();
     expect(within(dock).queryByTestId('dock-get-data')).toBeNull();
     expect(within(dock).queryByRole('link', { name: 'Import a file' })).toBeNull();
+    // Outcome D for a viewer: the reason, and Ask an editor prefilled with what they asked (./AskAnEditor).
+    const offer = await within(dock).findByTestId('ask-editor');
+    expect(within(offer).getByText('This data isn’t in Ordinate yet.')).toBeTruthy();
+    fireEvent.click(within(offer).getByRole('button', { name: 'Ask an editor' }));
+    const composer = await screen.findByRole('dialog', { name: 'Ask an editor' });
+    expect((within(composer).getByRole('textbox', { name: 'Your question' }) as HTMLTextAreaElement).value).toBe('upload data');
   });
 
   it('a reply that proposes rebuilding another tool’s dashboard links to the screenshot page in this project', async () => {

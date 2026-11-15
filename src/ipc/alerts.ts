@@ -37,6 +37,7 @@ import { serverDataDir } from '../server/context';
 import { liveCodeOf } from './liveRoute';
 import { LIVE_DATASET_CODE } from '../data/liveDataset';
 import { markSeenFor, perMember, seenView } from '../server/alertInbox';
+import { alertFromAnswer } from './answerAlert';
 import { logger } from '../app/logger';
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
@@ -221,6 +222,9 @@ export function register(): void {
       return { ok: false, error: err?.message || 'Could not test the rule', ...liveCodeOf(err) };
     }
   });
+
+  // "Alert me" on an Assistant answer (./answerAlert): the dialog's subject and a threshold to start from, or why not.
+  ipcMain.handle('alerts:fromAnswer', async (_e, { projectId, spec }: any = {}) => alertFromAnswer(projectId, spec));
 
   // Evaluate now — the whole project, or one dataset after a manual Refresh.
   ipcMain.handle('alerts:evaluate', async (_e, { projectId, datasetId }: any = {}) => {

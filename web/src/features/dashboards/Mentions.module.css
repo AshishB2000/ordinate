@@ -177,3 +177,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── The bell: "Asked for data" (AskedYou.tsx) ──────────────────────── */
+/* The viewer's note, as they wrote it: set off by a rule, in the body colour (the muted one is for metadata). */
+.askNote {
+  padding-left: var(--sp-8);
+  border-left: 2px solid var(--border);
+  color: var(--text);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Where the click goes, at the line's end. */
+.askGo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex: none;
+  color: var(--accent-text);
+  font-weight: 600;
+}

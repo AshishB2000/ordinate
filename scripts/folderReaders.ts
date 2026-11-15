@@ -91,6 +91,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'drivers:explain': 'OPEN',
   'drivers:explainAlert': 'OPEN',
   'drivers:explainPoint': 'OPEN',
+  'editors:ask': 'PROJECT', // a viewer's ask goes to the project's editors and admins; E3 narrows them to who can open what it names
   'embed:columns': 'ITEM', // a dashboard's filterable columns for a signed embed
   'embed:status': 'PROJECT',
   'events:list': 'PROJECT',
@@ -237,6 +238,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
 export const WRITES: Readonly<Record<string, FolderClass>> = {
   'agent:instructions': 'PROJECT',
   'alerts:delete': 'EDIT',
+  'alerts:fromAnswer': 'FIGURE', // the alert dialog's figure, through the alert's own door (testRule)
   'alerts:patch': 'EDIT',
   'alerts:save': 'CREATE', // a rule follows its dashboard, else its dataset
   'alerts:setDigest': 'OWN',

@@ -106,6 +106,9 @@ export const dashboards = {
   'alerts:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, ruleId: Uuid }), project: byProjectId }),
   // Whether a rule WOULD fire now — reads only.
   'alerts:test': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, rule: Rule }), project: byProjectId }),
+  // "Alert me" on an Assistant answer (src/ipc/answerAlert.ts): the dialog's subject and a threshold to start from,
+  // from the answer's spec, or why it cannot be one. `write`, as alerts:save is: only someone who may save the rule asks.
+  'alerts:fromAnswer': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, spec: z.looseObject({ datasetId: Uuid }) }), project: byProjectId }),
   // The caller's OWN inbox (src/server/alertInbox.ts): any reader, never anyone else's badge.
   // `through`: Mark all seen covers the events the caller was SHOWN — the newest time the bell rendered.
   'alerts:markSeen': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional(), through: z.string().max(40).optional() }), project: byProjectId }),

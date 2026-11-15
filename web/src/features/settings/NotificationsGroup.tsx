@@ -1,7 +1,8 @@
 // Settings → You → Notifications (docs/notifications/00-design.md §5.12): "Email
 // me when someone mentions me" — the signed-in person's own switch, on unless
 // they turn it off. A mention still reaches them in the bell and as a notice in their
-// open tabs either way, and the row says so. Not shown on a server without a user
+// open tabs either way, and the row says so. "Email me when a viewer asks for data" (src/server/mentions/asks.ts) is
+// off unless they turn it on. Not shown on a server without a user
 // directory (no one can be mentioned there); disabled, and saying why, on one
 // that sends no email.
 
@@ -18,24 +19,38 @@ export function NotificationsGroup() {
   const set = useSetMentionPrefs();
   if (prefs.isSuccess && !prefs.data.available) return null;
   return (
-    <Group title="Notifications" desc="How Ordinate reaches you when someone mentions you in a comment.">
+    <Group title="Notifications" desc="How Ordinate reaches you when someone mentions you in a comment, or a viewer asks for data.">
       {prefs.isPending ? (
         <SkeletonRows rows={1} label="Loading your notification settings" />
       ) : prefs.isError ? (
         <ErrorState compact heading={4} title="Could not read your notification settings" message={prefs.error.message} onRetry={() => void prefs.refetch()} />
       ) : (
-        <Switch
-          className={s.switchRow}
-          label="Email me when someone mentions me"
-          hint={
-            prefs.data.mail
-              ? 'Mentions always reach you in the bell and as a notice in your open tabs.'
-              : 'This server does not send email; mentions still reach you in the bell and as a notice in your open tabs.'
-          }
-          checked={prefs.data.mail && prefs.data.emailMe}
-          disabled={!prefs.data.mail || set.isPending}
-          onCheckedChange={(on) => set.mutate(on, { onError: (err) => toast(err.message, { kind: 'error' }) })}
-        />
+        <>
+          <Switch
+            className={s.switchRow}
+            label="Email me when someone mentions me"
+            hint={
+              prefs.data.mail
+                ? 'Mentions always reach you in the bell and as a notice in your open tabs.'
+                : 'This server does not send email; mentions still reach you in the bell and as a notice in your open tabs.'
+            }
+            checked={prefs.data.mail && prefs.data.emailMe}
+            disabled={!prefs.data.mail || set.isPending}
+            onCheckedChange={(on) => set.mutate({ emailMe: on }, { onError: (err) => toast(err.message, { kind: 'error' }) })}
+          />
+          <Switch
+            className={s.switchRow}
+            label="Email me when a viewer asks for data"
+            hint={
+              prefs.data.mail
+                ? 'For projects you edit. A viewer’s ask always reaches you in the bell; email is off unless you turn it on.'
+                : 'No email goes out from this server; a viewer’s ask still reaches you in the bell.'
+            }
+            checked={prefs.data.mail && prefs.data.requestEmail}
+            disabled={!prefs.data.mail || set.isPending}
+            onCheckedChange={(on) => set.mutate({ requestEmail: on }, { onError: (err) => toast(err.message, { kind: 'error' }) })}
+          />
+        </>
       )}
     </Group>
   );

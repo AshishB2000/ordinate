@@ -51,6 +51,7 @@ import { DidYouMean, type MeantOption } from './DidYouMean';
 import { RememberName, type CardLearn } from './RememberName';
 import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
+import { AlertFromAnswer } from './AlertFromAnswer';
 import { keepInConversation, refreshAnswer } from './api';
 import { ACCESS_CHANGED, KeptAsOf, periodText } from './AnswerKept';
 import { AlsoOn, AnsweredFrom } from './AnswerSources';
@@ -288,6 +289,7 @@ export function AnswerCard({
             </Button>
             <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
             {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
+            <AlertFromAnswer projectId={projectId} spec={spec} />
             {card.learn && (
               <RememberName
                 projectId={projectId}
