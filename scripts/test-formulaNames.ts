@@ -139,7 +139,7 @@ async function metricReads<T>(fn: () => Promise<T>): Promise<{ out: T; reads: nu
   let reads = 0;
   const isMetric = (p: unknown): boolean => /[\\/]metrics[\\/]/.test(String(p));
   (recordFs as { readFile: unknown }).readFile = (p: string, enc?: BufferEncoding) => { if (isMetric(p)) reads++; return (readFile as (p: string, e?: BufferEncoding) => Promise<unknown>)(p, enc); };
-  (recordFs as { readMany: unknown }).readMany = (ps: readonly string[]) => { reads += ps.filter(isMetric).length; return readMany(ps); };
+  (recordFs as { readMany: unknown }).readMany = (ps: readonly string[], perQuery?: number) => { reads += ps.filter(isMetric).length; return readMany(ps, perQuery); };
   try {
     return { out: await fn(), reads };
   } finally {

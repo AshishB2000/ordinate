@@ -197,7 +197,7 @@ async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; reads: number; 
   let n = 0, lists = 0;
   const spy = recordFs as unknown as Record<'readFile' | 'readMany' | 'readdir' | 'listRecords', unknown>;
   spy.readFile = (...a: unknown[]) => { n++; return (readFile as (...x: unknown[]) => unknown)(...a); };
-  spy.readMany = (ps: readonly string[]) => { n += ps.length; return readMany(ps); };
+  spy.readMany = (ps: readonly string[], perQuery?: number) => { n += ps.length; return readMany(ps, perQuery); };
   spy.readdir = (...a: unknown[]) => { n++; return (readdir as (...x: unknown[]) => unknown)(...a); };
   spy.listRecords = async (dir: string) => {
     const listed = await listRecords(dir);

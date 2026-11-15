@@ -272,20 +272,17 @@ function tally(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: 
 /** Records read per query when the checks of a caller with a hidden column are prefetched. */
 const PREFETCH = 1000;
 
-/** The metric and term records `items` name, read a page of ids at a time: each one's text, or none (a dataset, a table). */
+/**
+ * The metric and term records `items` name, read a page of ids at a time: each one's text, or none (a dataset, a table).
+ * One readMany for every page, so the ask's memo holds them all from the start: a search's check of one waits for its
+ * page, not a read of its own (a race that cost a slow run 7 transactions).
+ */
 async function prefetch(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: string }>): Promise<(it: { kind: CountedKind; id: string }) => (() => string) | undefined> {
   const fileOf = (it: { kind: CountedKind; id: string }): string | null => (!isValidId(it.id) ? null : it.kind === 'term' ? terms.termFile(projectId, it.id) : it.kind === 'metric' ? metrics.metricFilePath(projectId, it.id) : null);
-  const paths = [...new Set(items.flatMap((it) => fileOf(it) ?? []))];
-  const pageOf = new Map<string, (path: string) => () => string>();
-  for (let i = 0; i < paths.length; i += PREFETCH) {
-    const page = paths.slice(i, i + PREFETCH);
-    const textOf = await readTexts(page);
-    for (const p of page) pageOf.set(p, textOf);
-  }
+  const textOf = await readTexts(items.flatMap((it) => fileOf(it) ?? []), PREFETCH);
   return (it) => {
     const file = fileOf(it);
-    const textOf = file === null ? undefined : pageOf.get(file);
-    return file !== null && textOf ? textOf(file) : undefined;
+    return file === null ? undefined : textOf(file);
   };
 }
 

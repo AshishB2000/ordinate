@@ -4,9 +4,9 @@
 
 import * as recordFs from './recordFs';
 
-/** `textOf(path)`: what readFile gives for that record, or the ENOENT it throws. */
-export async function readTexts(paths: readonly string[]): Promise<(path: string) => () => string> {
-  const bodies = await recordFs.readMany([...new Set(paths)]);
+/** `textOf(path)`: what readFile gives for that record, or the ENOENT it throws. `perQuery`: readMany's. */
+export async function readTexts(paths: readonly string[], perQuery?: number): Promise<(path: string) => () => string> {
+  const bodies = await recordFs.readMany([...new Set(paths)], perQuery);
   return (p) => () => {
     const body = bodies.get(p);
     if (body === undefined) throw Object.assign(new Error('no such record'), { code: 'ENOENT' });

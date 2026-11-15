@@ -14,6 +14,10 @@
 //   3. MEMO: inside withReadMemo a second list, and a readFile of a listed record, make no query; a write in
 //      between is seen by the next list.
 //   4. Inside `locked` the list reads on the hold's transaction and is the same list.
+//   5. A BATCH IN FLIGHT (readMany, its rows held back): inside withReadMemo, a readFile of a record it reads — in the
+//      page under way or a later one — makes no query of its own; a write meanwhile is seen by the next read, never
+//      the batch's older row. NEGATIVE CONTROLS: outside the memo each readFile queries; a write the memo is not told
+//      of (another pod's) is not seen, so that read was the write's doing.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-recordListBatch.js
 
@@ -227,10 +231,34 @@ async function fileLeg(w: World): Promise<void> {
 
 // ── with Postgres ──────────────────────────────────────────────────────────
 let queries = 0;
+// Set: a batch read's rows (readMany's query) reach it only once this settles, and `selected` says they are in hand.
+let held: Promise<void> | null = null;
+let selected = (): void => undefined;
 function countQueries(): void {
   const proto = Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
   const real = proto.query;
-  proto.query = function (this: unknown, ...args: unknown[]): unknown { queries++; return real.apply(this, args); };
+  proto.query = function (this: unknown, ...args: unknown[]): unknown {
+    queries++;
+    const r = real.apply(this, args);
+    const gate = held;
+    const text = String((args[0] as { text?: string } | undefined)?.text ?? args[0]);
+    return gate && text.includes('ANY($2') ? (r as Promise<unknown>).then(async (rows) => { selected(); await gate; return rows; }) : r;
+  };
+}
+/** `batch()` with its rows held back until `meanwhile()` has been started (its first page's rows in hand): the statements of both. */
+async function whileBatch<T>(batch: () => Promise<unknown>, meanwhile: () => Promise<T>): Promise<[number, T]> {
+  let release = (): void => undefined;
+  held = new Promise((r) => { release = r; });
+  const rowsIn = new Promise<void>((r) => { selected = r; });
+  return counted(async () => {
+    const pending = batch();
+    await rowsIn;
+    const out = meanwhile();
+    held = null;
+    release();
+    await pending;
+    return out;
+  });
 }
 const counted = async <T>(fn: () => Promise<T>): Promise<[number, T]> => {
   const from = queries;
@@ -316,8 +344,33 @@ async function dbLeg(pool: Pool, w: World): Promise<void> {
 
   // 4. LOCKED
   const plain = await as(() => datasets.listDatasets(w.P));
-  const held = await as(() => recordFs.locked(path.join(dir, w.ds + '.json'), () => datasets.listDatasets(w.P)));
-  ok('locked: the same list, read on the hold', same(held, plain));
+  const onHold = await as(() => recordFs.locked(path.join(dir, w.ds + '.json'), () => datasets.listDatasets(w.P)));
+  ok('locked: the same list, read on the hold', same(onHold, plain));
+
+  // 5. A BATCH IN FLIGHT: x's page under way, y's (one record a query) not started.
+  const other = (await as(() => recordFs.readdir(dir))).find((n) => n.endsWith('.json') && !n.endsWith('.search.json') && ![w.ds, w.overCap, ...w.unreadable].some((id) => n.includes(id)));
+  const [x, y] = [path.join(dir, w.ds + '.json'), path.join(dir, String(other))];
+  const both = (): Promise<[string, string]> => Promise.all([recordFs.readFile(x, 'utf8'), recordFs.readFile(y, 'utf8')]); // both asked while x's rows are held
+  const [inMemo, read] = await as(() => recordFs.withReadMemo(() => whileBatch(() => recordFs.readMany([x, y], 1), both)));
+  const want = await as(both);
+  ok(`memo: a readFile of a record a batch is reading waits for it, in its page or a later one: no query of its own (${inMemo} statements: 2 pages × 3)`, inMemo === 6 && same(read, want), String(inMemo));
+  const [outside] = await as(() => whileBatch(() => recordFs.readMany([x, y], 1), both));
+  ok(`NEGATIVE CONTROL: outside the memo each readFile queries (${outside} statements)`, outside === 12, String(outside));
+
+  const original = want[0];
+  const changed = JSON.stringify({ ...JSON.parse(original), name: 'Orders while read' }, null, 2);
+  const seen = async (write: () => Promise<unknown>): Promise<string> => as(() => recordFs.withReadMemo(async () => {
+    await whileBatch(() => recordFs.readMany([x]), write);
+    return recordFs.readFile(x, 'utf8');
+  }));
+  try {
+    ok('memo: a write while a batch read is in flight is seen by the next read, never the batch\'s older row', (await seen(() => recordFs.writeFile(x, changed))) === changed);
+    await as(() => recordFs.writeFile(x, original));
+    const elsewhere = await seen(() => pool.query("UPDATE records SET body = $2 WHERE org_id = 'acme' AND path = $1", [`projects/${w.P}/datasets/${w.ds}.json`, changed]));
+    ok('NEGATIVE CONTROL: a write the memo is not told of (another pod\'s) is not seen: the batch\'s row is served', elsewhere === original);
+  } finally {
+    await as(() => recordFs.writeFile(x, original));
+  }
 }
 
 (async () => {
