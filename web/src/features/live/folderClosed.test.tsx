@@ -1,4 +1,4 @@
-// A bookmarked dashboard or dataset in a folder the caller cannot open (docs/team-folders D12): the page found
+// A bookmarked dashboard, dataset, story or report in a folder the caller cannot open (docs/team-folders D12): the page found
 // nothing, asked `folder:of`, and says the server's sentence instead of "not found". NEGATIVE CONTROLS: when
 // folder:of answers {ok:true} (a missing id) the page says "not found" as before, and a page that loaded never asks.
 
@@ -24,6 +24,8 @@ const serve = (closed: boolean, extra: Record<string, { body: unknown }> = {}) =
     'projects:roles': { body: { [P]: 'viewer' } },
     'analysis:open': { body: { ok: false, error: 'That dashboard could not be loaded.' } },
     'dataset:columns': { body: null },
+    'story:get': { body: null },
+    'reports:open': { body: { ok: false, error: 'That report is gone.' } },
     'folder:of': { body: closed ? { ok: false, code: 'folder', reason: 'closed', error: CLOSED } : { ok: true } },
     ...extra,
   });
@@ -42,6 +44,25 @@ describe('a bookmark in a folder the caller cannot open', () => {
     expect(await screen.findByText(CLOSED, {}, LOAD)).toBeTruthy();
     expect(screen.queryByText('Dataset not found')).toBeNull();
     expect(calls.find((c) => c.channel === 'folder:of')?.payload).toEqual({ projectId: P, kind: 'dataset', id: A });
+  });
+  it('a story says so too (it follows what it shows)', async () => {
+    const calls = serve(true);
+    renderApp(`/stories/${P}/${A}`);
+    expect(await screen.findByText(CLOSED, {}, LOAD)).toBeTruthy();
+    expect(calls.find((c) => c.channel === 'folder:of')?.payload).toEqual({ projectId: P, kind: 'story', id: A });
+  });
+  it('a report says so too', async () => {
+    const calls = serve(true);
+    renderApp(`/reports/${P}/${A}`);
+    expect(await screen.findByText(CLOSED, {}, LOAD)).toBeTruthy();
+    expect(screen.queryByText('That report is gone.')).toBeNull();
+    expect(calls.find((c) => c.channel === 'folder:of')?.payload).toEqual({ projectId: P, kind: 'report', id: A });
+  });
+  it('NEGATIVE CONTROL: a missing report says it is gone, as before', async () => {
+    serve(false);
+    renderApp(`/reports/${P}/${A}`);
+    expect(await screen.findByText('That report is gone.', {}, LOAD)).toBeTruthy();
+    expect(screen.queryByText(CLOSED)).toBeNull();
   });
   it('NEGATIVE CONTROL: a missing one is "not found", as before', async () => {
     serve(false);

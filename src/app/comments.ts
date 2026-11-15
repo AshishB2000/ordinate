@@ -164,6 +164,10 @@ async function loadLocal(projectId: string): Promise<Comment[]> {
 
 // ── operations ───────────────────────────────────────────────────────────────
 
+/** What a write on a missing thread, and an add with nothing to be about, answer (ipc/comments answers a closed one the same). */
+export const THREAD_GONE = 'That comment is no longer here.';
+export const NO_TARGET = 'A comment needs some text and something to be about.';
+
 /** Every live thread of a project, with any sync conflict copies folded in. */
 export async function list(projectId: string): Promise<Result> {
   if (!projectDir(projectId)) return { ok: false, error: 'Unknown project.' };
@@ -201,7 +205,7 @@ function mutate(projectId: string, change: (all: Comment[], now: string) => Comm
 function onThread(projectId: string, id: string, fn: (c: Comment, now: string) => Comment | null | string): Promise<Result> {
   return mutate(projectId, (all, now) => {
     const i = all.findIndex((c) => c.id === id && !c.deletedAt);
-    if (i < 0) return 'That comment is no longer here.';
+    if (i < 0) return THREAD_GONE;
     const next = fn(all[i], now);
     if (typeof next === 'string') return next;
     if (!next) return all; // already in that state — a no-op, not an error
@@ -218,7 +222,7 @@ export async function add(projectId: string, target: unknown, body: unknown, gat
   let out: { piece: { id: string; commentId: string }; mentioned: string[] } | null = null;
   const res = await mutate(projectId, (all, now) => {
     const c = model.makeComment(randomUUID(), target, body, author(), now);
-    if (!c) return 'A comment needs some text and something to be about.';
+    if (!c) return NO_TARGET;
     const g = gate('', c.body);
     if (typeof g === 'string') return g;
     out = { piece: { id: c.id, commentId: c.id }, mentioned: g };

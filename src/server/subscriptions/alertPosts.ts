@@ -107,7 +107,8 @@ async function post(projectId: string, events: AlertEvent[]): Promise<number> {
       for (const id of channelIds) {
         const c = await getChannel(id);
         if (!c) continue; // removed since: Admin → Channels warned that this rule used it
-        if ((await deliver(c, { kind: 'alert', projectId, ruleId: rule.id, message: model }, memo)).ok) ok++;
+        const anchor = rule.createdFrom?.analysisId ? { kind: 'dashboard' as const, id: rule.createdFrom.analysisId } : { kind: 'dataset' as const, id: rule.datasetId };
+        if ((await deliver(c, { kind: 'alert', projectId, ruleId: rule.id, message: model, anchor }, memo)).ok) ok++;
       }
       sent += ok;
       await trail(ok > 0);

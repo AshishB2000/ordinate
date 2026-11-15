@@ -71,6 +71,7 @@ async function resolve(projectId: string): Promise<Caller> {
   const pool = poolOf();
   const seeded = perRequest(ranks).get(key);
   const rank = seeded !== undefined ? seeded : await grantRank(pool, who, key);
+  if (seeded === undefined) seedRank(key, rank); // `rankOn` in this request (the folder resolver's) needs no second query
   if (rank >= EDITOR_RANK) return UNRESTRICTED;
   if (!pool) return { restricted: true, userId: null, teamIds: [] };
   const r = await pool.query<{ id: string; teams: string[] }>(

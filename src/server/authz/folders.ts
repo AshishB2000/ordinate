@@ -20,7 +20,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { ctx, orgKey } from '../context';
 import { inOrg, orgDb } from '../db/inOrg';
-import { inOrg as inOrgOf } from '../db/orgTx';
+import { inOrg as inOrgOf, readOnceInOrg } from '../db/orgTx';
 import { tagRefusals } from '../../data/refusalTag';
 import * as msg from '../folderMessages';
 import { rankOn } from './caller';
@@ -215,7 +215,7 @@ async function treeOf(c: PoolClient, org: string, projectId: string, email: stri
 async function resolve(projectId: string): Promise<FolderAccess> {
   const rank = await rankOn(projectId);
   if (rank >= 3) return ALL;
-  if (!orgDb()) return accessFrom(projectId, rank, []);
+  if (!orgDb() || perRequest(bareMemo).has(orgKey(projectId))) return accessFrom(projectId, rank, []); // no folders (known this request)
   const email = ctx().user.email;
   return accessFrom(projectId, rank, await inOrg((c, org) => treeOf(c, org, projectId, email)));
 }
@@ -237,6 +237,32 @@ export function folderAccessOn(projectId: string): Promise<FolderAccess> {
     hit.catch(() => memo.delete(key)); // a failed lookup is not remembered as an answer
   }
   return hit;
+}
+
+const bareMemo = new WeakMap<object, Map<string, true>>(); // per request: projects `foldersRestrict` found without a folder
+let batched = true;
+/** Test seam (scripts/folderNetSends.ts): its NEGATIVE CONTROL resolves each project on its own, as before the batch. */
+export function setFolderBatchForTest(on: boolean): void {
+  batched = on;
+}
+
+/**
+ * The projects among `projectIds` where folders may restrict the caller — those with a folder besides Everyone — from
+ * ONE round trip for a list across projects (projects:overview). The rest are remembered for this request as having
+ * none, so their resolver asks no tree. None, with no read, for a caller nothing restricts (an org admin, a published
+ * page, a `wholeProject` walk) or without a database.
+ */
+export async function foldersRestrict(projectIds: readonly string[]): Promise<ReadonlySet<string>> {
+  const who = ctx();
+  const pool = orgDb();
+  const ids = [...new Set(projectIds.map((p) => p.toLowerCase()))];
+  if (!pool || !ids.length || who.user.role === 'admin' || who.published === true || inWholeProject()) return new Set();
+  if (!batched) return new Set(ids);
+  const rows = await readOnceInOrg<{ project_id: string }>(pool, who.org.id, `SELECT DISTINCT project_id::text AS project_id FROM folders WHERE org_id = current_setting('ordinate.org')`);
+  const has = new Set(rows.map((r) => r.project_id.toLowerCase()));
+  const bare = perRequest(bareMemo);
+  for (const id of ids) if (!has.has(id)) bare.set(orgKey(id), true);
+  return new Set(ids.filter((id) => has.has(id)));
 }
 
 const checkKind = (kind: string): void => {

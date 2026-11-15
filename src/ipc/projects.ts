@@ -19,6 +19,7 @@ import * as sample from '../app/sampleProject';
 import * as onboarding from '../app/onboarding';
 import { waitForLease } from '../app/runLease';
 import { FilterValueRefusal } from '../app/bundleFilterValues';
+import { openOnly, restrictingProjects } from '../server/authz/folderGate';
 
 type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
 /** `sample:seed` calls in flight, by org. */
@@ -128,14 +129,19 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
    */
   ipcMain.handle('projects:overview', async () => {
     const sample = config.get().sample;
+    const list = await projects.listProjects();
+    // Shared folders: in a project with a folder, a caller it restricts counts what they open (docs/team-folders,
+    // "countKinds"). Which projects have one is ONE round trip for the whole list, none for an admin; the rest cost nothing.
+    const restricts = await restrictingProjects(list.map((p) => p.id));
     const count = async (id: string, sub: string): Promise<number> => {
+      let names: string[];
       try {
-        return (await recordFs.readdir(path.join(projectDir(id), sub))).filter((n) => /^[0-9a-f-]{36}\.json$/i.test(n)).length;
+        names = (await recordFs.readdir(path.join(projectDir(id), sub))).filter((n) => /^[0-9a-f-]{36}\.json$/i.test(n));
       } catch (_) {
         return 0;
       }
+      return sub === 'datasets' && restricts.has(id.toLowerCase()) ? (await openOnly(id, 'dataset', names, (n) => n.slice(0, -'.json'.length))).length : names.length;
     };
-    const list = await projects.listProjects();
     return Promise.all(list.map(async (p) => ({
       id: p.id,
       name: p.name,
@@ -144,7 +150,8 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
       archived: !!p.archivedAt,
       datasets: await count(p.id, 'datasets'),
       // A viewer counts the published dashboards they can open (docs/analysis/00-model.md); anyone else, every file.
-      dashboards: (await analysis.readsPublishedOnly(p.id)) ? (await analysis.listAnalyses(p.id)).length : await count(p.id, 'analyses'),
+      // So does an editor a folder restricts (D8: what they read as published, the folders they open).
+      dashboards: (await analysis.readsPublishedOnly(p.id)) || restricts.has(p.id.toLowerCase()) ? (await analysis.listAnalyses(p.id)).length : await count(p.id, 'analyses'),
       // The badge lasts as long as the sample does: remove it, and this is
       // just the user's project again.
       sample: !!sample && sample.projectId === p.id

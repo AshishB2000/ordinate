@@ -23,6 +23,7 @@ import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { osUser } from '../app/catalog';
 import { logger } from '../app/logger';
 import * as msg from './topicMessages';
+import { levelsOf } from '../server/authz/folderGate';
 
 export const MAX_TOPICS = 50;
 export const MAX_TOPIC_DATASETS = 12; // the Assistant's cap: a topic always fits whole in its facts
@@ -156,7 +157,8 @@ export async function readTopic(projectId: string, id: string): Promise<Tagged<T
 /**
  * Which of `topics`' members exist now: dataset ids (with their column names, read lazily), metric ids, term ids. Only
  * their own records, in ONE query (../app/recordTexts), never a list of the project. Metadata only. A member exists as
- * its store's list would hold it: a record its parser accepts.
+ * its store's list would hold it: a record its parser accepts — and, for a caller shared folders restrict, one whose
+ * dataset they open (docs/team-folders: a topic's members are filtered to what the caller opens); `closed` names the rest.
  */
 async function membersOf(projectId: string, topics: ReadonlyArray<Pick<Topic, 'datasets' | 'metricIds' | 'termIds'>>) {
   const valid = (ids: string[]): string[] => [...new Set(ids)].filter(isValidId);
@@ -171,16 +173,20 @@ async function membersOf(projectId: string, topics: ReadonlyArray<Pick<Topic, 'd
       return null; // corrupt: its list skips it too
     }
   };
-  const sets = new Set(dsIds.filter((id) => parsed(datasetFilePath(projectId, id), (b) => datasets.summaryOf(projectId, b))));
+  const level = await levelsOf(projectId, 'dataset'); // null: nothing restricts the caller
+  const closed = new Set<string>();
+  const opens = (id: string, datasetId: string): boolean => !level || level(datasetId) !== 'none' || (closed.add(id), false);
+  const sets = new Set(dsIds.filter((id) => parsed(datasetFilePath(projectId, id), (b) => datasets.summaryOf(projectId, b)) && opens(id, id)));
   const cols = new Map<string, Promise<Set<string>>>();
   const columnsOf = (id: string): Promise<Set<string>> => {
     if (!cols.has(id)) cols.set(id, datasets.getDatasetMeta(projectId, id, false, textOf(datasetFilePath(projectId, id))).then((m) => new Set((m?.columns ?? []).map((c) => c.name))));
     return cols.get(id)!;
   };
+  const member = (m: { datasetId: string } | null, id: string): boolean => !!m && opens(id, m.datasetId);
   return {
-    sets, columnsOf,
-    metrics: new Set(mIds.filter((id) => parsed(metrics.metricFilePath(projectId, id), (b) => metrics.summaryOf(projectId, b)))),
-    terms: new Set(tIds.filter((id) => parsed(terms.termFile(projectId, id), (b) => terms.termOf(projectId, b)))),
+    sets, columnsOf, closed,
+    metrics: new Set(mIds.filter((id) => member(parsed(metrics.metricFilePath(projectId, id), (b) => metrics.summaryOf(projectId, b)), id))),
+    terms: new Set(tIds.filter((id) => member(parsed(terms.termFile(projectId, id), (b) => terms.termOf(projectId, b)), id))),
   };
 }
 
@@ -242,7 +248,7 @@ export async function topicsForReaders(projectId: string, list: Topic[]): Promis
     const kept: TopicDataset[] = [];
     for (const d of t.datasets) {
       if (!have.sets.has(d.id)) {
-        stale++;
+        if (!have.closed.has(d.id)) stale++; // a closed member is left out, never counted as gone
         continue;
       }
       if (!d.fields) {
@@ -256,9 +262,20 @@ export async function topicsForReaders(projectId: string, list: Topic[]): Promis
     }
     const metricIds = t.metricIds.filter((id) => have.metrics.has(id));
     const termIds = t.termIds.filter((id) => have.terms.has(id));
-    stale += t.metricIds.length - metricIds.length + t.termIds.length - termIds.length;
+    stale += t.metricIds.filter((id) => !have.metrics.has(id) && !have.closed.has(id)).length + t.termIds.filter((id) => !have.terms.has(id) && !have.closed.has(id)).length;
     return { topic: { ...t, datasets: kept, metricIds, termIds }, stale };
   }));
+}
+
+/**
+ * `t` as the caller may be sent it: without the members in folders they cannot open (the same object when none are).
+ * `topic:get` sends it with the tag of what was sent, so a save from that copy refuses (409) instead of dropping them.
+ */
+export async function withoutClosed(projectId: string, t: Topic): Promise<Topic> {
+  if (!(await levelsOf(projectId, 'dataset'))) return t; // nothing restricts the caller: no read
+  const { closed } = await membersOf(projectId, [t]);
+  if (!closed.size) return t;
+  return { ...t, datasets: t.datasets.filter((d) => !closed.has(d.id)), metricIds: t.metricIds.filter((id) => !closed.has(id)), termIds: t.termIds.filter((id) => !closed.has(id)) };
 }
 
 export async function topicForReaders(projectId: string, t: Topic): Promise<{ topic: Topic; stale: number }> {

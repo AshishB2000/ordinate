@@ -30,12 +30,13 @@ const answer = (people: typeof PEOPLE) => (p: unknown) => {
   return { body: { ok: true, available: true, people: people.filter((x) => x.email.includes(q) || x.name.toLowerCase().includes(q)) } };
 };
 
-function Box({ enabled = true, onClose }: { enabled?: boolean; onClose?: () => void }) {
+function Box({ enabled = true, onClose, target }: { enabled?: boolean; onClose?: () => void; target?: { kind: 'dataset'; id: string } }) {
   const [v, setV] = useState('');
   return (
     <Drawer open onOpenChange={(o) => !o && onClose?.()} title="Comments">
       <MentionInput
         projectId={P}
+        target={target}
         enabled={enabled}
         label="New comment"
         value={v}
@@ -49,12 +50,12 @@ function Box({ enabled = true, onClose }: { enabled?: boolean; onClose?: () => v
   );
 }
 
-function mount(enabled = true, people = PEOPLE) {
+function mount(enabled = true, people = PEOPLE, target?: { kind: 'dataset'; id: string }) {
   const calls = serveRpc({ 'comment:mentionable': answer(people) });
   const closed = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <Box enabled={enabled} onClose={closed} />
+      <Box enabled={enabled} onClose={closed} target={target} />
     </QueryClientProvider>,
   );
   const box = screen.getByLabelText('New comment') as HTMLTextAreaElement;
@@ -63,6 +64,13 @@ function mount(enabled = true, people = PEOPLE) {
 }
 
 describe('the @ picker', () => {
+  it('asks for the people who can open what the comment is on (shared folders)', async () => {
+    const T = { kind: 'dataset' as const, id: '22222222-2222-4222-8222-222222222222' };
+    const { calls, type } = mount(true, PEOPLE, T);
+    type('Look @');
+    await screen.findByRole('listbox', { name: 'People who can read this project' });
+    expect(calls.find((c) => c.channel === 'comment:mentionable')?.payload).toEqual({ projectId: P, q: '', target: T });
+  });
   it('finds the word after an @ at a word start, and nothing else', () => {
     expect(mentionQuery('hi @an', 6)).toEqual({ from: 3, q: 'an' });
     expect(mentionQuery('@', 1)).toEqual({ from: 0, q: '' });

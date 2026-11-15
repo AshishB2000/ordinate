@@ -28,6 +28,7 @@ import type { Card, Page } from './dashboards';
 import { t } from '../app/i18n';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
+import { followsAll, openOrNull } from './followsOpen'; // shared folders: a report follows its dashboard (docs/team-folders D3)
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
 export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
@@ -404,9 +405,10 @@ export async function readAll(projectId: string): Promise<Report[]> {
     return []; // no reports dir yet is the normal case, not an error
   }
   const out: Report[] = [];
+  const opens = await followsAll(projectId); // shared folders; null: nothing restricts the caller
   for await (const rec of records) {
     const r = await reportFrom(projectId, rec.name.slice(0, -5), rec.text);
-    if (r) out.push(r);
+    if (r && (!opens || (await opens(namedBy(r))))) out.push(r);
   }
   return out;
 }
@@ -417,8 +419,8 @@ export function reportOf(projectId: string, raw: string): Report | null {
   return data && typeof data.id === 'string' && data.id ? normalize(data, projectId) : null;
 }
 
-export function getReport(projectId: string, id: string): Promise<Report | null> {
-  return reportFrom(projectId, id, () => recordFs.readFile(reportFilePath(projectId, id), 'utf8'));
+export async function getReport(projectId: string, id: string): Promise<Report | null> {
+  return openOrNull(projectId, await reportFrom(projectId, id, () => recordFs.readFile(reportFilePath(projectId, id), 'utf8')), namedBy); // closed: as missing (D12)
 }
 
 /** getReport over `read` (the record's text): readAll's reports come from one listing. */
@@ -430,6 +432,9 @@ async function reportFrom(projectId: string, id: string, read: () => string | Pr
     return null;
   }
 }
+
+/** What a report's access follows (docs/team-folders, "What lives where"): its dashboard, else everything it names (its scorecard's metrics). */
+const namedBy = (r: Report): unknown => (r.analysisId ? { analysisId: r.analysisId } : r);
 
 export interface ReportInput {
   analysisId?: unknown;
@@ -459,7 +464,8 @@ export async function saveReport(projectId: string, input: ReportInput): Promise
 /** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
 export async function readReport(projectId: string, id: string): Promise<Tagged<Report> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('report', reportFilePath(projectId, id), (d) => (d && typeof d.id === 'string' && d.id ? normalize(d, projectId) : null));
+  const t = await readTagged('report', reportFilePath(projectId, id), (d) => (d && typeof d.id === 'string' && d.id ? normalize(d, projectId) : null));
+  return openOrNull(projectId, t, (x) => namedBy(x.rec)); // closed: as missing, so its guarded save refuses too
 }
 
 /**

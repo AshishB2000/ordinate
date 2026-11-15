@@ -19,6 +19,7 @@ import { computeCardMetric } from './dashboards';
 import { previewDefinition, resolveMetric } from './metrics';
 import { liveCodeOf } from './liveRoute';
 import { gateRows, restrictedOn } from '../data/rowAccess';
+import { historyClosed } from '../app/recordOpen';
 
 // What changed between two saved versions (docs/version-diff/00-design.md).
 //
@@ -208,6 +209,7 @@ async function readPair(input: Input): Promise<Pair | { ok: false; error: string
   const id = String(input.id || '');
   const type = input.type;
   if (!versions.isVersionType(type)) return { ok: false, error: M.versionGone() };
+  if (await historyClosed(projectId, type, id)) return { ok: false, error: M.versionGone() }; // its record's folder is closed to the caller (team-folders)
   // A dataset's versions are its whole table (row-policy D9). A visual's diff never words its overrides' values.
   if (type === 'dataset') await gateRows(projectId, id);
   // A dashboard's history is its draft's: a viewer reads none of it (docs/analysis/00-model.md), as for a missing one.

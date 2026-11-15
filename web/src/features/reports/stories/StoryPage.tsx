@@ -31,6 +31,7 @@ import s from './Story.module.css';
 import { CommentDoor } from '../../dashboards/CommentsPanel';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
 import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
+import { useFolderClosed } from '../../live/folderClosed';
 
 type Snap = { name: string; blocks: StoryBlock[] };
 type Pending = { kind: 'visual' | 'metric' | 'metrics_row'; place: (b: StoryBlock) => void } | { kind: 'pin'; blockId: string; datasetId: string } | null;
@@ -416,13 +417,14 @@ export default function StoryPageRoute() {
     refetchOnWindowFocus: false,
     gcTime: 0,
   });
+  const folder = useFolderClosed(projectId, 'story', storyId, q.isSuccess && !q.data); // nothing: in a folder the caller cannot open? (team-folders D12)
   const { gen, reload } = useReload(['story:get', projectId, storyId]);
   useDropOnLeave(['story:get', projectId, storyId]);
-  if (q.isPending || roles.isPending) return <PageSkeleton />;
+  if (q.isPending || roles.isPending || folder.pending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (
       <div className={s.storyPage}>
-        <ErrorState title="That story could not be opened" message={q.isError ? q.error.message : 'It may have been deleted.'} onRetry={() => void q.refetch()} />
+        <ErrorState title="That story could not be opened" message={q.isError ? q.error.message : folder.sentence ?? 'It may have been deleted.'} onRetry={() => void q.refetch()} />
       </div>
     );
   }

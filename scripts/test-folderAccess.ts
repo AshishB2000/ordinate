@@ -317,6 +317,20 @@ async function db(): Promise<void> {
     const next = connects;
     await run(who.opsViewer, () => F.folderAccessOn(P));
     ok('NEGATIVE CONTROL: the next request asks again (the memo dies with the request)', connects === next + 1);
+    // A list across projects (projects:overview): which have a folder, in one round trip through forced RLS; the rest bare.
+    const batch = await run(who.opsViewer, async () => {
+      const n0 = connects;
+      const has = [...(await F.foldersRestrict([P, Q]))];
+      const one = connects - n0;
+      await F.folderAccessOn(Q); // known bare: no tree
+      const bare = connects - n0;
+      await F.folderAccessOn(P);
+      return { has, one, bare, foldered: connects - n0 };
+    });
+    ok('db: foldersRestrict names the project with folders (P, not Q) in one round trip, as the app\'s role; Q\'s resolver then asks nothing, P\'s asks its tree',
+      JSON.stringify(batch) === JSON.stringify({ has: [P.toLowerCase()], one: 1, bare: 1, foldered: 2 }), show(batch));
+    const adminB = connects;
+    ok('NEGATIVE CONTROL: for an org admin it names none and reads nothing', (await run(who.boss, () => F.foldersRestrict([P, Q]))).size === 0 && connects === adminB);
     const adminN = connects;
     await run(who.boss, async () => { await F.folderAccessOn(P); await F.levelOn(P, 'dataset', item.hr); });
     ok('db: an org admin needs no query at all', connects === adminN);

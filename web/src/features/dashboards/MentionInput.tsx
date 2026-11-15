@@ -12,6 +12,7 @@ import { Textarea } from '../../ui/Field';
 import { useCaret } from '../../ui/useCaret';
 import { mentionToken } from '../../../../src/app/mentionToken.ts';
 import s from './Mentions.module.css';
+import type { TargetKind } from './api';
 
 export interface Person {
   email: string;
@@ -26,6 +27,8 @@ export function mentionQuery(text: string, caret: number): { from: number; q: st
 
 type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> & {
   projectId: string;
+  /** What the comment is on: the server offers only people who can open it (shared folders). */
+  target?: { kind: TargetKind; id: string };
   /** Mentions are on here (`comment:list` says so). */
   enabled: boolean;
   label: string;
@@ -34,7 +37,7 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
   onValueChange: (v: string) => void;
 };
 
-export function MentionInput({ projectId, enabled, label, hint, value, onValueChange, onKeyDown, onBlur, ...rest }: Props) {
+export function MentionInput({ projectId, target, enabled, label, hint, value, onValueChange, onKeyDown, onBlur, ...rest }: Props) {
   const input = useRef<HTMLTextAreaElement>(null);
   const place = useCaret(input);
   const listId = useId();
@@ -48,11 +51,11 @@ export function MentionInput({ projectId, enabled, label, hint, value, onValueCh
   }, [at?.q]);
   const open = enabled && at !== null;
   const people = useQuery({
-    queryKey: ['comment:mentionable', projectId, q],
+    queryKey: ['comment:mentionable', projectId, target?.kind, target?.id, q],
     enabled: open,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
-    queryFn: async () => ((await rpc('comment:mentionable', { projectId, q })) as { people?: Person[] }).people ?? [],
+    queryFn: async () => ((await rpc('comment:mentionable', { projectId, q, ...(target ? { target: { kind: target.kind, id: target.id } } : {}) })) as { people?: Person[] }).people ?? [],
   });
   // Only the answer to what is typed NOW may be picked: while the asked word trails the typed one, or the list on
   // screen is the previous word's, Enter must never insert someone the server did not offer for this word.

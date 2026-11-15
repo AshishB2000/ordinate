@@ -7,10 +7,13 @@
 //   - lists (`openOnly`) leave out items in a folder the caller cannot open, from one placement query;
 //   - reads by id (`opens`) answer false for them, and the store returns null, as for a missing id (D12);
 //   - the doors (`folderGate`) refuse `closed` for a question on, or reading, such a dataset (D9; reach is E5);
-//   - the storage net (`gateFolder`, under datasets.getDataset and residentSource) refuses every other reader (D11).
+//   - the storage net (`gateFolder`, under datasets.getDataset and residentSource) refuses every other reader (D11);
+//   - pushes, recipients and mentions (`openers`) reach only those who open the item they are about (D17).
 
+import type { Pool } from 'pg';
 import { isValidId } from '../../app/ids';
-import { atLeast, folderAccessOn, FolderError, levelIn, placedIn, wholeProject, type FolderLevel, type PlacedKind } from './folders';
+import { atLeast, folderAccessOn, FolderError, foldersRestrict, levelIn, openerEmails, placedIn, wholeProject, type FolderLevel, type PlacedKind } from './folders';
+import { readerEmails, writerEmails } from './index';
 
 // Test seams (scripts/test-folderSafetyNet.ts): its NEGATIVE CONTROLS turn every check here off, or only the doors'
 // check of the other datasets a question reads (then a cached answer joined over a closed dataset is served).
@@ -21,6 +24,11 @@ export function setFolderChecksForTest(on: boolean): void {
 }
 export function setDoorReadsForTest(on: boolean): void {
   doorReads = on;
+}
+
+/** `foldersRestrict` (one round trip for a list across projects, projects:overview); with the checks off, none and no read. */
+export function restrictingProjects(projectIds: readonly string[]): Promise<ReadonlySet<string>> {
+  return enabled ? foldersRestrict(projectIds) : Promise.resolve(new Set());
 }
 
 /** Each item's level, or null when nothing restricts the caller here (no query was needed to say so). */
@@ -82,4 +90,13 @@ export async function folderGate(projectId: string, datasetId: string, reads?: (
  */
 export async function gateFolder(projectId: string, id: string): Promise<void> {
   if (isValidId(projectId) && isValidId(id) && !(await opens(projectId, 'dataset', id))) throw new FolderError('closed');
+}
+
+/**
+ * Who opens `anchor` at `min` (D17): `openerEmails`, whoever asks — a push, a recipient list or a mention reaches
+ * only them. With the checks off (a test's negative control) every reader (or writer) of the project, as before E3.
+ */
+export function openers(pool: Pool, org: string, projectId: string, anchor: { kind: PlacedKind; id: string }, min: 'view' | 'edit'): Promise<string[]> {
+  if (!enabled) return (min === 'edit' ? writerEmails : readerEmails)(pool, org, projectId);
+  return openerEmails(pool, org, projectId, anchor, min);
 }
