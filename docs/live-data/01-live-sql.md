@@ -345,6 +345,61 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   warehouse reads it. The threat-model rows R-L12…R-L15 go in with F3, when a statement first reaches
   a warehouse through this path.
 
+### F3 as built
+
+- **Files:** `src/engine/live/liveSql.ts` (the executor, one job: a statement over Live datasets to a table),
+  the lane in `src/ipc/answerSql.ts` (`closedWhy`, `tablesFor`, `runAnswerSql` → `runLive`, `SQL_PER_HOUR` before the
+  second call), `src/ipc/answerSnapshots.ts` (a Live table kept as of the warehouse's answer), `src/ai/answerSql.ts`
+  (a Live table in the second call's facts: no size, the VISIBLE columns, `LIVE_SQL_RULES`; `SqlCard.asOf`), seven
+  sentences in `src/engine/liveSqlMessages.ts` and one in `src/ai/answerSqlMessages.ts`, translated in the four drafts.
+  `liveBytesCap` moved from the schema sync to `src/connectors/liveRun.ts`, so the sample and an answer share one
+  ceiling. The web card (`AnswerSql.tsx`) says *Live · 2:05 AM* when it was not kept, as a chart card does.
+- **Routing, by the vocabulary** (the picked datasets; a turn's `datasetIds` on Refresh): none Live is phase B
+  unchanged (F-D15); all Live is F; some is refused before the model writes (F-D9). Verify passes no vocabulary, so it
+  stays on the gate and is refused in its own sentence until F4; a verified SQL question on a Live dataset still goes
+  to the model (`sqlProblem`).
+- **The order:** targets (each Live, ONE connection, none a semantic layer's) → `withLockOf` on every table of the
+  vocabulary with every name the statement writes as the question (a hidden column named anywhere is the gate's
+  `hidden`, rules that cannot apply refuse whole) → DuckDB's parse → `translate` over the VISIBLE columns, today the
+  UTC day (`usageStore.utcDay`) → DuckDB's binder (DESCRIBE over empty views typed DOUBLE/DATE/VARCHAR: it refuses
+  `SELECT region, qty … GROUP BY region`, which the translator takes) → a column the schema sync found dropped →
+  `withLockOf(…, the columns read)` per table read, nested → `printLiveSql` → the cache → one flight → the dry run
+  (where the connector prices: free, uncounted; over `liveBytesCap` nothing is sent; a failed dry run never runs blind)
+  → `warehouse()`. Rows by position: a number finite or NULL, −0 as 0; text as text; a date ISO text already.
+- **The cache key is F-D12's**: `orgKey('livesql' · project · connection · [dataset, epoch, schemaSyncedAt] per table
+  · printed SQL · params)`, looked up at the lowest `maxCacheAgeSec` of the tables read; the stale fallback as
+  `liveQuery`'s, `asOf.stale`. Two callers with no lock and the same read columns share an entry (the view projects
+  only the columns read), so an editor's and a hidden-column viewer's answer can be the admin's cache hit.
+- **`SQL_PER_HOUR` = 30**, a constant (open question 1 stands), per member per connection through `counters.take`
+  (`livesql:<connection>:<email>`, one hour), taken for every model-written Live SQL answer, a cache hit included,
+  before the second call. Refresh and a verified re-ask take none: they write no statement, and the daily limit and
+  the cache bound them. No new environment variable.
+- **A viewer** gets the same lane under their lock, with the hidden columns out of the facts, the vocabulary, the
+  view and `SELECT *` (F-D14; open question 3's default). A required date filter is not added for SQL (the note's
+  rule for source tables); BigQuery refuses a statement without it, typed.
+- **Tests:** `test-liveSqlAnswers` — without a database 34 checks: the corpus through `copilot:ask` Object.is-equal
+  to F2's reference for an admin (61/61), an editor and a viewer from whom `amt` is hidden (12/12 each); one counted
+  statement per answer (the fake's calls = `live_usage`), a cache hit none; the dry run over the ceiling sends nothing
+  (CONTROL: under it, priced then one statement); the daily limit (CONTROL: lifted); the 31st answer in an hour refused
+  before the model writes (CONTROL: another member's is not); two connections, a Live beside a copy, WITH RECURSIVE, a
+  qualified name, a hidden column (the gate's sentence) and a binder refusal, each with a passing twin and nothing
+  sent (CONTROL: the translator alone takes the binder's case); reopening sends nothing, Refresh past the cache is
+  one counted statement; the canary (two warehouse tables, a defining query, the secret: in no reply or prompt, the
+  secret in no log line; CONTROL: the warehouse was sent them). With `DATABASE_URL` 43: a locked viewer ≡ the
+  reference locked to East (16/16), the editor ≡ the whole table, a second lock (West) a second statement ≡ West's,
+  the first again a cache hit; and the corpus through the real `amazon-redshift` connector on Postgres, 61/61, with no
+  host, database or password in a reply. `test-liveSafetyNet`: an SQL answer's Refresh moves from "refuses
+  `live_dataset`" to routed, `getDataset` never called (CONTROL: one planted in the lane is caught); verifying SQL over
+  Live still refuses, typed. `test-answerSql` §3: a Live dataset whose connection is gone is refused before the model
+  writes, in that sentence. `test-liveUsage`'s one-door scan is unchanged.
+- **Threat model:** R-L12…R-L18 are in `docs/phase-7-web/threat-model.md` §4.7. The fresh-on-ask row that held R-L12
+  is R-L19 now.
+- **What F4 needs:** `saveVerifiedSql` and `verifiedSqlAsk` to call `runAnswerSql` with the turn's datasets (Verify
+  passes `null` today, which keeps it on the gate) and `sqlProblem` to translate (`parseSql` + `translate` with the
+  asker's vocabulary) instead of refusing `isLive`; the re-ask is already keyed per entitlement. **What F5 needs:** the
+  vocabulary of `runLive` is `{id, names}` per table and `targetsOf` resolves each through `liveTarget`: phase D's
+  in-memory view goes in there, and its names in `tablesFor`.
+
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15
 (43735675013) skipped both warehouses for want of them. They must be added (on

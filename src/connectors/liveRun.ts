@@ -97,6 +97,22 @@ export async function boundCall(
 }
 
 /**
+ * What one Live statement may bill, and so what its dry run's estimate may say: LIVE_MAX_BYTES_BILLED, or the
+ * connection's own lower ceiling where it has one (BigQuery's "Max bytes billed per query" — the connector refuses a
+ * run past it). The schema sync's sample and an SQL answer (src/engine/live/liveSql.ts) are both held to it.
+ */
+export function liveBytesCap(values: Record<string, unknown>): number {
+  let cap: number;
+  try {
+    cap = maxBytesBilled(process.env.LIVE_MAX_BYTES_BILLED);
+  } catch {
+    cap = maxBytesBilled(undefined);
+  }
+  const own = Number(values.maxBytesBilled);
+  return Number.isSafeInteger(own) && own > 0 ? Math.min(cap, own) : cap;
+}
+
+/**
  * A free dry run's byte estimate for one compiled statement, where the
  * connector offers one (BigQuery) — the schema sync's cost check before its
  * sample (L2.5). The same context and guard as `runLiveBound`; no row is read

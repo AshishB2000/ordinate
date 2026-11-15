@@ -79,23 +79,24 @@ export async function setupKit(ok: Ok): Promise<Kit | null> {
   return { pid: project.id, env, today, rows };
 }
 
-/** The reference's view of one table: the Live view's projection, over the extract, the lock as a byte-equal WHERE. */
-function referenceView(t: (typeof TABLES)[number], lock: boolean): { name: string; sql: string } {
+/** The reference's view of one table: the Live view's projection, over the extract, the lock as a byte-equal WHERE (`true`: East). */
+function referenceView(t: (typeof TABLES)[number], lock: boolean | string): { name: string; sql: string } {
   const cols = t.columns.map((c) => {
     const q = quoteIdent(c.name);
     if (c.type === 'date') return `TRY_CAST(${q} AS DATE) AS ${q}`;
     if (c.type === 'text') return `CASE WHEN ${q} = '' THEN NULL ELSE ${q} END AS ${q}`;
     return q;
   });
-  const where = lock && t.slug === 'orders' ? ` WHERE "region" IN ('${LOCKED_VALUE}')` : '';
+  const value = lock === true ? LOCKED_VALUE : lock;
+  const where = value && t.slug === 'orders' ? ` WHERE "region" IN ('${value.replace(/'/g, "''")}')` : '';
   return { name: t.slug, sql: `SELECT ${cols.join(', ')} FROM ${t.raw}${where}` };
 }
 
 const isoMidnight = /^(\d{4}-\d{2}-\d{2}) 00:00:00$/;
 const zero = (v: unknown): unknown => (Object.is(v, -0) ? 0 : v);
 
-/** DuckDB running the model's text over the extract, normalised (P1, R4); null with the error when it does not run. */
-export async function reference(kit: Kit, sql: string, lock: boolean): Promise<Table | { error: string }> {
+/** DuckDB running the model's text over the extract, normalised (P1, R4); null with the error when it does not run. `lock`: `orders` held to East (true) or to that value. */
+export async function reference(kit: Kit, sql: string, lock: boolean | string): Promise<Table | { error: string }> {
   const res = await sqlDatasets.runSql(kit.pid, sql, [], print.LIVE_SQL_ROWS, TABLES.map((t) => referenceView(t, lock)));
   if (!res.ok) return { error: res.error };
   const rows = res.rows.map((r) => r.map((v, i) => {

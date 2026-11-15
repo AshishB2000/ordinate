@@ -18,7 +18,9 @@
 // (./answerSources). Saved visuals and dashboards are untouched.
 //
 // An SQL answer (./answerSql) keeps its result table the same way, as its `card` (`kind: 'sql'`): its fingerprint is of the caller's
-// access on EVERY dataset the statement read (`sqlAccessPrint`), and Refresh runs the SQL again through the gate.
+// access on EVERY dataset the statement read (`sqlAccessPrint`), and Refresh runs the SQL again through the gate. Over Live
+// datasets (docs/live-data/01-live-sql.md, F3) it is kept as of when the warehouse answered (a cached or stale table's
+// own time), and Refresh is one counted statement unless the cache holds it.
 
 import { createHash } from 'crypto';
 import { ipcMain } from './bus';
@@ -75,7 +77,7 @@ export async function sqlAccessPrint(projectId: string, datasetIds: readonly str
 export async function sqlSnapshotFor(projectId: string, card: SqlCard, sql: SqlTurn): Promise<AnswerSnapshot | undefined> {
   try {
     const now = new Date().toISOString();
-    return makeSnapshot(card, { asOf: now, firstAsked: now }, await sqlAccessPrint(projectId, sql.datasetIds), []) ?? undefined;
+    return makeSnapshot(card, { asOf: card.asOf?.at ?? now, firstAsked: now }, await sqlAccessPrint(projectId, sql.datasetIds), []) ?? undefined;
   } catch {
     return undefined;
   }
@@ -160,13 +162,13 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
   return out;
 }
 
-/** Refresh of an SQL answer: its SQL run again through the gate for the caller, kept in place of its snapshot (firstAsked stays). */
+/** Refresh of an SQL answer: its SQL run again for the caller (the gate, or the warehouse for Live), kept in place of its snapshot (firstAsked stays). */
 async function refreshSql(projectId: string, threadId: string, turnId: string, turn: copilot.CopilotTurn, sql: SqlTurn): Promise<Record<string, unknown>> {
   const built = await sqlCardFor(projectId, sql);
   if (!built.ok) return built; // the gate's sentence; a Live dataset's is typed by the route
   const access = await sqlAccessPrint(projectId, sql.datasetIds);
   const firstAsked = turn.snapshot?.firstAsked ?? turn.createdAt;
-  const snap = makeSnapshot(built.card, { asOf: new Date().toISOString(), firstAsked }, access, []);
+  const snap = makeSnapshot(built.card, { asOf: built.card.asOf?.at ?? new Date().toISOString(), firstAsked }, access, []);
   await copilot.setSnapshot(projectId, threadId, turnId, { sql: sql.text }, snap);
   return sqlDelivered(projectId, built.card, sql, keptView(snap, firstAsked, [], !!turn.snapshot && turn.snapshot.access !== access));
 }

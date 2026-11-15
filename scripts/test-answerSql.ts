@@ -9,7 +9,8 @@
 //      NEGATIVE CONTROL: a chart-form answer makes 1 call and no second.
 //   2. DIFFERENTIAL: the card's columns and every cell are Object.is-equal to `sql:run` on the same SQL; its words are
 //      the app's (rows, columns, what it read); a label and one number come with a chart.
-//   3. REFUSALS, each with a passing twin: a Live dataset (refused before any SQL is written: 1 call); a write statement;
+//   3. REFUSALS, each with a passing twin: a Live dataset whose connection is gone (refused before any SQL is written:
+//      1 call; SQL that answers from Live is scripts/test-liveSqlAnswers.ts); a write statement;
 //      a FROM outside the datasets; a column hidden from the viewer (the storage net, sql:run's NET class); SQL reading a
 //      dataset the first call did not pick; SQL over no dataset.
 //   4. SNAPSHOTS: the turn keeps its table; reopening runs no SQL and brings it back Object.is-equal; a dataset whose
@@ -195,7 +196,7 @@ async function fileLeg(): Promise<void> {
   // 3. Refusals, each with a passing twin.
   const refusedWith = (a: Awaited<ReturnType<typeof ask>>, sentence: string): boolean => a.r.ok && !a.turn?.sql && !a.turn?.card && String(a.turn?.text).includes(sentence);
   const liveAsk = await ask(ADMIN, 'live customers', sqlAction(['Orders live']), 'SELECT customer FROM orders_live');
-  ok('3. a Live dataset: refused with the gate\'s sentence BEFORE any SQL is written (1 call)', refusedWith(liveAsk, liveMessages.liveRefusedMessage()) && liveAsk.sqls === 0, show(liveAsk.turn));
+  ok('3. a Live dataset whose connection is gone: refused with its sentence BEFORE any SQL is written (1 call)', refusedWith(liveAsk, liveMessages.liveConnectionGoneMessage()) && liveAsk.sqls === 0, show(liveAsk.turn));
   const liveByText = await ask(ADMIN, 'live customers', sqlAction(['Orders']), 'SELECT customer FROM "Orders live"');
   ok('3. …and SQL that names it anyway: the gate refuses it (requireExtract)', refusedWith(liveByText, liveMessages.liveRefusedMessage()), show(liveByText.turn));
   ok('3. TWIN: the same question on the extract answers', (await ask(ADMIN, 'customers', sqlAction(['Orders']), 'SELECT DISTINCT customer FROM orders ORDER BY customer')).turn?.card?.rowCount === 3);

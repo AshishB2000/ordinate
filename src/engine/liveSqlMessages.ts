@@ -112,3 +112,40 @@ export function sqlNoTable(): string {
 export function sqlTooDeep(): string {
   return t('liveSqlMessages.this_statement_is_nested_too_deeply');
 }
+
+// ── The executor (F3: src/engine/live/liveSql.ts) ────────────────────────────
+
+/** A statement over Live datasets on two connections (F-D9): one warehouse cannot read the other's tables. */
+export function sqlTwoConnections(): string {
+  return t('liveSqlMessages.one_sql_answer_can_read_live');
+}
+
+/** A statement over a Live dataset and a copied one (F-D9): the warehouse cannot read our copy. */
+export function sqlMixedEngines(): string {
+  return t('liveSqlMessages.one_sql_answer_can_t_read');
+}
+
+/** A dataset answered by a semantic layer: its layer takes questions, never SQL. */
+export function sqlOnLayer(): string {
+  return t('liveSqlMessages.a_dataset_answered_by_a_semantic');
+}
+
+/** The member's SQL_PER_HOUR Live SQL answers on this connection are spent. `limit` and `minutes` formatted. */
+export function sqlPerHour(limit: string, minutes: string): string {
+  return t('liveSqlMessages.you_have_had_sql_answers_from', { limit, minutes });
+}
+
+/** BigQuery's free dry run says the statement would bill past the ceiling: nothing was sent. Sizes formatted ("14.2 GB"). */
+export function sqlTooCostly(size: string, limit: string): string {
+  return t('liveSqlMessages.refused_before_running_this_query_would', { size, limit });
+}
+
+/** DuckDB's binder refused the statement over empty views typed as the Live ones; `detail` is its message about the model's own names. */
+export function sqlBindError(detail: string): string {
+  return t('liveSqlMessages.this_statement_doesn_t_add_up', { detail });
+}
+
+/** A statement past the lane's length cap (MAX_SQL_TEXT, formatted). */
+export function sqlTooLong(max: string): string {
+  return t('liveSqlMessages.the_sql_is_longer_than_characters', { max });
+}

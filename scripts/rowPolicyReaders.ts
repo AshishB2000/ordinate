@@ -20,7 +20,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'answer:alsoOn': 'META', // dashboard ids and names the caller may open (a viewer the published copies), found by dataset; no row, no figure
   'answer:card': 'DOOR',
   'answer:explain': 'DOOR',
-  'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced. An SQL answer's turn (src/ipc/answerSql.ts): its SQL through sql:run's gate, where the storage net refuses a restricted caller (NET); test-answerSql
+  'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced. An SQL answer's turn (src/ipc/answerSql.ts): its SQL through sql:run's gate, where the storage net refuses a restricted caller (NET); over Live datasets (F3, src/engine/live/liveSql.ts) printed under each table's lock (withLockOf per table); test-answerSql, test-liveSqlAnswers
   'answer:rerun': 'DOOR',
   'asset:read': 'META',
   'boundary:get': 'META',
@@ -50,7 +50,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'connections:list': 'REDACT', // a caller who may not see source names gets id, name, connector, status and dataset count only (N2, p2-01)
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
-  'copilot:ask': 'EXPLICIT', // an SQL answer (src/ipc/answerSql.ts) and a verified SQL question's rerun go through sql:run's gate: a restricted caller is refused by the storage net, before any SQL is written (NET); test-answerSql
+  'copilot:ask': 'EXPLICIT', // an SQL answer (src/ipc/answerSql.ts) and a verified SQL question's rerun go through sql:run's gate: a restricted caller is refused by the storage net, before any SQL is written (NET); over Live datasets (F3) the statement is printed under each table's lock (withLockOf per table, src/engine/live/liveSql.ts), test-liveSqlAnswers; test-answerSql
   'copilot:deleteThread': 'META',
   'copilot:history': 'EXPLICIT', // a kept answer card is sent only while the caller's row lock and hidden columns on its dataset match the ones it was computed under (src/ipc/answerSnapshots.ts); test-answerSnapshots
   'copilot:newThread': 'META',

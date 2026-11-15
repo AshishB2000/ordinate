@@ -43,7 +43,7 @@ export async function sqlProblem(projectId: string, q: VerifiedSqlQuestion, deep
 }
 
 export interface SqlSaveInput { question: string; phrasings?: string[]; note?: string; sql: string }
-type Saved = { ok: true; q: VerifiedSqlQuestion } | { ok: false; error: string; field?: 'question' | 'phrasings' | 'spec' };
+type Saved = { ok: true; q: VerifiedSqlQuestion } | { ok: false; error: string; field?: 'question' | 'phrasings' | 'spec'; code?: 'live_refused' };
 
 /**
  * Verify an SQL answer: the statement runs once through the gate for the editor (it must run to be kept), and what is
@@ -53,8 +53,8 @@ type Saved = { ok: true; q: VerifiedSqlQuestion } | { ok: false; error: string; 
 export async function saveVerifiedSql(projectId: string, input: SqlSaveInput): Promise<Saved> {
   if (!questionKey(input.question)) return { ok: false, error: vmsg.verifiedNoWords(), field: 'question' };
   const run = await runAnswerSql(projectId, input.sql, null, input.question);
-  // A Live dataset's refusal goes as the gate says it, so the route types it (live_dataset); any other reason is why it cannot be verified.
-  if (!run.ok) return { ok: false, error: run.reason === liveRefusedMessage() ? run.reason : vmsg.verifiedDoesNotDraw(run.reason), field: 'spec' };
+  // SQL over a Live dataset answers (phase F, F3) but is not verified yet (F4): said so, typed; any other reason is why it cannot be verified.
+  if (!run.ok) return run.reason === liveRefusedMessage() ? { ok: false, code: 'live_refused', error: msg.verifiedSqlOnLive(), field: 'spec' } : { ok: false, error: vmsg.verifiedDoesNotDraw(run.reason), field: 'spec' };
   const now = new Date().toISOString();
   const q = sanitizeVerifiedSql({
     id: randomUUID(), projectId, question: input.question, phrasings: input.phrasings ?? [], note: input.note,
