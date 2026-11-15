@@ -265,11 +265,107 @@ AI agents over MCP and API tokens act as their person and get that person's role
   reading them all took about 650 ms each. The read-them-all path stays as the reference a
   differential test holds the index to (`test-verifiedIndex`), and answers without a database.
 
+## Scale rules
+
+Reviewed on 15 November 2026, after the verified match moved to an index (#499): the same mistake,
+reading a whole list into the app and filtering it there, was in more places on the ask path. Test
+projects have five datasets, so no test caught it.
+
+### What one question read
+
+Every store's list read its folder, then each record in its own transaction (begin, select,
+commit), one after another, and nothing was kept for the length of a question, so one question
+repeated the same lists. Local Postgres 17, where a round trip costs about 0.03 ms:
+
+| Read | Before | One query |
+|---|---|---|
+| All datasets (2,000) | 223 ms | 0.9 ms |
+| All metrics (5,000) | 544 ms | 2.3 ms |
+| All terms (2,000) | 214 ms | 0.8 ms |
+| Verified match, no hit (5,000) | 658 ms | 0.27 ms (#499) |
+
+Counted from the code, for 2,000 datasets, 5,000 metrics and 2,000 terms: about 45,000
+single-record reads for one question from Home, and about 110,000 for an agent with a topic. The
+worst places:
+
+| Where | What it did | Fix |
+|---|---|---|
+| Hidden-column check on metrics | For a person with any hidden column, re-read every metric once per metric: about 50 million reads per call at 5,000 metrics, up to 3 calls a question | Once per request |
+| Repeated lists | All datasets 4 times, all terms 4 times, a topic's members 4 times, the chart vocabulary up to 3 times, `catalog.json` parsed 50 to 60 times | Kept for the length of the question |
+| Every list | One transaction per record | One query, paged at 100 records or 8 MiB |
+| A dataset open | Every row loaded into the app to summarise its columns | `statsResident` and `qualityResident`, as the Data page |
+| A dashboard open | Every metric in the project computed, Live ones against the warehouse's daily limit | Only the dashboard's own metrics |
+| Checking verified questions | The whole project's vocabulary built to check at most 20 | Only what their charts name |
+| Home | Every dataset, visual and dashboard name in the prompt; the 12 datasets with columns were the first 12 | Counts, and the 12 step 3 ranks highest |
+| An agent's outside-the-topic check | Every dataset read, then every dataset compared with every metric and term | The step 3 index |
+
+### The rules
+
+- **No question lists the whole project.** Its facts come from step 3's index (its top results)
+  and from what is open. A negative-control test proves an ask calls no whole-project list.
+- **Step 3 is one Postgres index**, `assistant_search`, built as ⌘K's is (0022): rewritten in the
+  same transaction as each save, a marker and a lazy rebuild, words split by the app, and the
+  read-everything path kept as the reference a differential test holds it to.
+- **Access is filtered inside the query.** Coarse grants (which teams may see a source table,
+  whether a dataset is closed to viewers) are columns of the index and part of the `WHERE`. Only a
+  person's own row and column checks run after ranking, on the few results.
+- **Meaning and words merge by rank** (reciprocal rank fusion: 1/(60 + rank) in each list, summed),
+  never by comparing their scores. Without fingerprints it is words alone.
+- **Fingerprints are made by a job**, never inside a save: the save stores the text's hash, a job
+  claims what needs one (`SKIP LOCKED`), each row records the model that made it, and a model
+  change refingerprints in the background. Until then an item is found by its words.
+- **Row values never go into Postgres.** "Acme" and "West" are matched in the engine, on the
+  top-ranked datasets' text columns, under the person's row lock; on a Live dataset through the
+  warehouse door or not at all.
+- **A budget test** (`test-askBudget`) builds 2,000 datasets, 5,000 metrics, 2,000 terms and 5,000
+  verified questions, counts the queries and record reads one question makes (from Home, on a
+  dataset, on a dashboard, through an agent with a topic, and reopening a conversation), and
+  fails above a ceiling. Each change lowers the ceilings it earns.
+- `catalog.json` stays one record per project; a project whose catalog passes 4 MiB is logged
+  once, and it is split per dataset only when a real project nears the 8 MiB cap.
+
+### Answers keep the figures they had
+
+An answer stored only its chart form, so it was computed again each time its conversation
+opened: new rows changed an old answer under the words around it, "yesterday" moved to another
+day, and a conversation with 15 charts ran 15 queries on every open, Live ones in the warehouse.
+Now:
+
+- **The turn stores a snapshot:** the card as the server computed it (bars or table, caption,
+  bullets, filter labels, the resolved dates of a relative period) and its time. Reopening shows
+  "As of Nov 1, 2:03 PM" with **Refresh**, and runs no query. Saved visuals and dashboards stay
+  live. The AI's sentence still carries no figures.
+- **Only while your access is unchanged:** each snapshot stores a fingerprint of the person's row
+  lock on that dataset and their hidden columns. On open the server works it out again, reading
+  no rows; if it differs, or the dataset is gone, the stored figures never reach the browser: the
+  card is computed under today's access and says so. The channel is a reader in the row-policy
+  safety net.
+- **Refresh replaces the snapshot:** "As of Nov 15, 9:10 AM · first asked Nov 1".
+- **A relative period shows its dates:** "Yesterday: Oct 31, 2026". A follow-up is a new answer,
+  computed live.
+- **An answer saved before this** gets its snapshot on its first open, labelled with that time,
+  never backdated.
+- **At most 64 KB a snapshot;** a bigger table answer stays live, labelled Live.
+
+### The changes, in order
+
+| PR | What |
+|---|---|
+| 1 | The hidden-column metric check, once per request |
+| 2 | Lists kept for the length of a question; the catalog size log; `test-askBudget` at the counts of the day |
+| 2b | Answers keep their figures |
+| 3 | One query per list in the record store, for every screen |
+| 4 | An open dataset uses the DuckDB stats; a dashboard computes only its own metrics |
+| 5 | Verified checks read only what they name; MCP's `answer_verified_question` uses the index |
+| 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
+| 7 | Fingerprints and the rank merge (phase C) |
+
 ## Build order
 
 | Phase | What | Needs |
 |---|---|---|
-| 0 | The Assistant page (merged, #488) and `fix/assistant-answers` (#492): one AI call per answer, "last quarter" from the calendar as dashboards do, every dashboard date preset | Merge #492 |
+| 0 | The Assistant page (#488); #492: one AI call per answer, "last quarter" from the calendar as dashboards do, every dashboard date preset; conversations in their own tables, all kept and paged (#493, #495, #498); agents (#496); the verified match inside what is open (#497) and by index (#499) | done |
+| 0+ | [Scale rules](#scale-rules): no whole-project list on the ask path, and answers that keep their figures | the PR chain below |
 | A | Word search over the whole Data model; follow links; table facts in the prompt; `calc` in the chart form; Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line | pgvector and a fingerprint model; otherwise stays on A |
