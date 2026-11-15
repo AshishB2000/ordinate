@@ -34,6 +34,7 @@
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
+import { metricNames } from './metricNames';
 import { pendingMetric, pendingSentence } from './pendingKinds';
 import { ExternalMetricError, externalRefusal, isExternalMetricError, noRowsError, type EXTERNAL_CODE } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
@@ -175,7 +176,7 @@ export async function planMetricMeasures(
   const considered = drawnMeasures(encoding);
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };
   const leafAt = new Map<string, number>();
-  let byName: Map<string, Metric> | null = null;
+  const names = metricNames(projectId); // the metrics a formula names, read as they are named
   let meta: DatasetMeta | null | undefined; // read once, by the first snapshot
 
   // The names a formula may total — its own, its forward tables' and its many sides' — and the table each is on.
@@ -244,10 +245,10 @@ export async function planMetricMeasures(
     }
     const operands = new Map<string, Operand | null>();
     for (const agg of compiled.program.aggregates) operands.set(agg.ref, leafOf(agg.column, agg.aggregation, m.filters, m.name, tableOf));
+    await names.load(compiled.program.metricRefs.map((r) => r.toLowerCase()));
     for (const ref of compiled.program.metricRefs) {
       const key = ref.toLowerCase();
-      if (!byName) byName = await metrics.metricsByName(projectId);
-      const other = byName.get(key);
+      const other = await names.get(key);
       // Unknown, or back round a loop: no value — never zero (ipc/metrics.resolveByName).
       if (!other || stack.has(key)) {
         operands.set(ref, null);

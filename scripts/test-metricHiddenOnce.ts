@@ -43,18 +43,22 @@ const as = <T>(role: Role, fn: () => Promise<T>): Promise<T> =>
 const asAdmin = <T>(fn: () => Promise<T>): Promise<T> => as('admin', fn);
 const asViewer = <T>(fn: () => Promise<T>): Promise<T> => as('viewer', fn);
 
-/** Metric record reads while `fn` runs. */
+/** Metric record reads while `fn` runs: each readFile, and each record a listing of metrics/ yields. */
 async function metricReads<T>(fn: () => Promise<T>): Promise<{ out: T; reads: number }> {
-  const readFile = recordFs.readFile;
+  const { readFile, listRecords } = recordFs;
   let reads = 0;
   (recordFs as { readFile: unknown }).readFile = (p: string, enc?: BufferEncoding) => {
     if (typeof p === 'string' && /[\\/]metrics[\\/]/.test(p)) reads++;
     return (readFile as (p: string, e?: BufferEncoding) => Promise<unknown>)(p, enc);
   };
+  (recordFs as { listRecords: unknown }).listRecords = async (dir: string) => {
+    const listed = await listRecords(dir);
+    return /[\\/]metrics$/.test(dir) ? (async function* () { for await (const r of listed) { reads++; yield r; } })() : listed;
+  };
   try {
     return { out: await fn(), reads };
   } finally {
-    (recordFs as { readFile: unknown }).readFile = readFile;
+    Object.assign(recordFs, { readFile, listRecords });
   }
 }
 

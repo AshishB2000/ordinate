@@ -23,6 +23,7 @@
 import { createHash } from 'crypto';
 import * as metrics from './metrics';
 import type { Metric } from './metrics';
+import { metricNames, type MetricNames } from './metricNames';
 import { getTerm, type Term } from './terms';
 import { compileMetricFormula } from './metricFormula';
 import { bindFormulaText } from './params';
@@ -135,7 +136,7 @@ async function relatedDatasets(projectId: string, m: Metric, measures: readonly 
   }
 }
 
-interface Walk { projectId: string; memo: Map<string, Promise<string | null>>; byName?: Promise<Map<string, Metric>> }
+interface Walk { projectId: string; memo: Map<string, Promise<string | null>>; names?: MetricNames }
 
 async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise<Record<string, string>> {
   const deps: Record<string, string> = {};
@@ -167,8 +168,11 @@ async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise
     if (!compiled.ok) deps.formula = 'uncompiled';
     else {
       measures.push(...compiled.program.aggregates.map((a) => a.column).filter((c) => c[0] !== '{')); // an LOD reads its own dataset
-      for (const name of [...new Set(compiled.program.metricRefs.map((r) => r.toLowerCase()))].sort()) {
-        const other = (await (w.byName ??= metrics.metricsByName(w.projectId))).get(name);
+      const said = [...new Set(compiled.program.metricRefs.map((r) => r.toLowerCase()))].sort();
+      const names = (w.names ??= metricNames(w.projectId));
+      await names.load(said);
+      for (const name of said) {
+        const other = await names.get(name);
         if (other) await dep(`metric:${other.id}`);
         else deps[`name:${name}`] = 'missing'; // a metric later given this name changes the figure
       }

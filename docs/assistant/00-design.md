@@ -422,6 +422,7 @@ Now:
 | 5 | Verified checks read only what they name; MCP's `answer_verified_question` uses the index |
 | 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
 | 6c | A caller with a hidden column: its dataset and metric checks off the index |
+| 6d | A formula metric's names off the index; `metricsByName` in one pass |
 | 7a | pgvector where Ordinate runs, optional everywhere (`0029_pgvector`): CI, the nightly, the release boot, Compose and the chart's kind run use `pgvector/pgvector:pg17-trixie`; the extension and `assistant_search_vectors` are made only where present; `src/server/vectorStore.ts` |
 | 7b | Fingerprints and the rank merge (phase C): next, see below |
 
@@ -477,9 +478,24 @@ ones. NEGATIVE CONTROLS: a
 dataset's `up:` key or its whole part out of the index, a metric's name key out: each fails.
 
 **Left on the ask path for a caller with a hidden column:** the counts still check each metric and
-term the caller can find (5,000 and 2,000 records, a thousand a query, at the budget's size). And
-for anyone, a formula metric's figure (`factMetrics`' additivity, `resolveMetric`) still reads
-every metric by name: `test-askNoProjectLists` keeps its formula on a dataset no case computes.
+term the caller can find (5,000 and 2,000 records, a thousand a query, at the budget's size).
+
+**A formula metric's figure (PR 6d).** It no longer reads every metric by name. A formula or a
+period metric looks up only the names it says (`src/analysis/metricNames.ts`): the bracketed and
+bare names of its text and of its text with the dashboard's parameters bound, a period's base by
+its name, and theirs in turn, through 0028's name keys, read in one query a level and kept as
+`metricsByName` keeps them (the first of each lower-cased name in `listMetrics`' order). The
+resolver, a chart's formula measures, a date control's parts, status pins and scenarios ask as they
+go; additivity, targets, drivers and a tree's split take a map of what the formula reaches. Without
+the index, or when it fails, `metricsByName` itself. `metricsByName`, still what a check of every
+metric reads (the Metrics table's additivity, MCP's `list_metrics`, the formula editor's
+cycle check), reads its records in one pass: at 5,000 metrics, 153 queries and 175 ms instead of
+15,153 and 722 ms (it read each record again by its id).
+`test-formulaNames` holds every figure path Object.is-equal to the full map, for an admin and a
+restricted viewer, over chains, periods, cycles, a chain past the depth, names differing in case, a
+name inside another, a Live and a layer's metric, a filtered one, a name a parameter binds, renamed
+and deleted ones; NEGATIVE CONTROL: a name key out of the index fails it. `test-askNoProjectLists`
+now computes a formula metric in the dataset and dashboard cases: zero lists.
 
 ## Build order
 

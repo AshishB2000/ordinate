@@ -31,6 +31,7 @@ import * as datasets from '../data/datasets';
 import * as metrics from './metrics';
 import type { Metric, MetricDefinition, MetricFormat } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
+import { metricNames, type MetricNames } from './metricNames';
 import { isNewerKind } from './pendingKinds';
 import { noRowsError } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
@@ -116,7 +117,7 @@ interface Ctx {
   scope: FilterStep[];
   params: ParamValues;
   drivers: Driver[];
-  byName: Map<string, Metric> | null;
+  names: MetricNames;
   byId: Map<string, Metric | null>;
   /** Pieces per (dataset, column, scope, driver filters): a nudge moves values, never rows, so every pass shares them. */
   inputs: Map<string, Promise<Partition[] | null>>;
@@ -137,18 +138,13 @@ interface Pass {
 function newCtx(projectId: string, scope: FilterStep[], params: ParamValues, drivers: Driver[]): Ctx {
   return {
     projectId, scope, params, drivers: effectiveDrivers(drivers, params),
-    byName: null, byId: new Map(), inputs: new Map(), touched: new Set(), notes: new Set(), scopes: new Map(),
+    names: metricNames(projectId), byId: new Map(), inputs: new Map(), touched: new Set(), notes: new Set(), scopes: new Map(),
   };
 }
 
 async function metricById(ctx: Ctx, id: string): Promise<Metric | null> {
   if (!ctx.byId.has(id)) ctx.byId.set(id, await metrics.getMetric(ctx.projectId, id));
   return ctx.byId.get(id) || null;
-}
-
-async function namesFor(ctx: Ctx): Promise<Map<string, Metric>> {
-  if (!ctx.byName) ctx.byName = await metrics.metricsByName(ctx.projectId);
-  return ctx.byName;
 }
 
 // ── pieces ───────────────────────────────────────────────────────────────────
@@ -240,8 +236,9 @@ async function resolveDefinition(pass: Pass, datasetId: string, definition: Metr
   for (const agg of compiled.program.aggregates) {
     values.set(agg.ref, await operand(pass, datasetId, { column: agg.column, aggregation: agg.aggregation }, all));
   }
+  await ctx.names.load(compiled.program.metricRefs.map((r) => String(r).toLowerCase()));
   for (const ref of compiled.program.metricRefs) {
-    const m = (await namesFor(ctx)).get(String(ref).toLowerCase());
+    const m = await ctx.names.get(String(ref).toLowerCase());
     values.set(ref, m ? await metricValue(pass, m, depth + 1) : null);
   }
   return evaluateMetricFormula(compiled.program, values);
@@ -450,8 +447,9 @@ export async function scenarioTargets(projectId: string, baseMetricIds: string[]
     const compiled = compileMetricFormula(m.definition.formula, meta ? meta.columns.map((c) => c.name) : []);
     if (!compiled.ok) return;
     for (const a of compiled.program.aggregates) if (!isCountLike(a.aggregation)) add(a.column);
+    await ctx.names.load(compiled.program.metricRefs.map((x) => String(x).toLowerCase()));
     for (const ref of compiled.program.metricRefs) {
-      const r = (await namesFor(ctx)).get(String(ref).toLowerCase());
+      const r = await ctx.names.get(String(ref).toLowerCase());
       if (r) await visit(r, via, depth + 1);
     }
   };

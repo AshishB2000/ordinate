@@ -5,6 +5,7 @@
 import * as metrics from '../analysis/metrics';
 import { metricHidden } from '../analysis/columnHidden';
 import { metricAdditivity } from '../analysis/additivity';
+import { metricNames, metricsReached } from '../analysis/metricNames';
 import { metricDate } from '../analysis/metricTimeScope';
 import { statusFor } from '../analysis/statusStore';
 import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
@@ -74,10 +75,9 @@ export async function factMetrics(projectId: string, on: ReadonlySet<string>, sc
   try {
     const status = statusFor(projectId); // once per request (part 4)
     const list = await metricsOn(projectId, on, also);
-    // Only a formula or a period metric reads other metrics by name (../analysis/additivity): the rest never build the map.
-    // shortcut: one of those reads every metric by name; upgrade to a lookup of the names its formula references.
-    let byName: Promise<Map<string, metrics.Metric>> | null = null;
-    const namesFor = (d: metrics.MetricDefinition) => (metrics.isFormulaDefinition(d) || metrics.isPeriodDefinition(d) ? (byName ??= metrics.metricsByName(projectId)) : Promise.resolve(new Map<string, metrics.Metric>()));
+    // Only a formula or a period metric reads other metrics by name (../analysis/additivity): only the names it reaches, each read once.
+    const names = metricNames(projectId);
+    const namesFor = async (d: metrics.MetricDefinition) => (metrics.isFormulaDefinition(d) || metrics.isPeriodDefinition(d) ? metricsReached(projectId, [d], scope?.params, names) : new Map<string, metrics.Metric>());
     const out: FactMetric[] = [];
     const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {

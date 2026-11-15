@@ -1,8 +1,8 @@
 // No Assistant question lists the whole project (docs/assistant/00-design.md, "Scale rules", Q9 and Q15): its facts
 // come from step 3's index (src/ipc/assistantSearch.ts) and from what is open, and the names a model's answer says are
 // resolved through the same index (src/ipc/specVocabulary.ts vocabularyFor). Through the real `copilot:ask` handler, the
-// model stubbed (as test-askBudget.ts), with every whole-project list spied: datasets.listDatasets, metrics.listMetrics,
-// terms.listFullTerms and listTerms, visuals.listVisuals, analysis.listAnalyses, topics.listTopics, agents.listAgents,
+// model stubbed (as test-askBudget.ts), with every whole-project list spied: datasets.listDatasets, metrics.listMetrics
+// and metricsByName, terms.listFullTerms and listTerms, visuals.listVisuals, analysis.listAnalyses, topics.listTopics, agents.listAgents,
 // verifiedQuestions.listTagged, and recordFs.listRecords on a directory of the project.
 //
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on); without it, a skip line (no database: the lists ARE
@@ -11,9 +11,11 @@
 //      topic (an answer inside it; the model saying it is outside; an answer on a dataset outside it), a model answer
 //      with a typo ("Did you mean"), a follow-up that refines the previous answer, and a restricted viewer from Home with
 //      a column hidden from them (Orders' cost: their checks read the few datasets that may hide one, and only the metrics
-//      a formula names, ../src/data/rowAccess hiddenAnywhere, ../src/analysis/columnHidden). Each reply is checked too.
+//      a formula names, ../src/data/rowAccess hiddenAnywhere, ../src/analysis/columnHidden). A formula metric sits on
+//      Orders, which the dataset and dashboard cases compute: its figure and additivity read only the metrics it names
+//      (../src/analysis/metricNames). Each reply is checked too.
 //   2. NEGATIVE CONTROL: the same asks with the index off (assistantSearch._setIndexed(false), the reference paths) DO
-//      call them, each case.
+//      call them, each case; the formula's figure through metricsByName.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-askNoProjectLists.js   (ASK_LIST_TRACE=1 prints each caller)
 
@@ -82,9 +84,9 @@ async function world(): Promise<World> {
       tile(0, { type: 'visual', visualId: byRegion }), tile(3, { type: 'metric', metric: { datasetId: orders, column: 'amount', aggregation: 'sum', metricId: revenue.id } }), tile(6, { type: 'visual', visualId: byCity }),
     ] }] }))!;
     if (!vq.ok) throw new Error('fixture: verified question');
-    // Orders' cost is hidden from a viewer in no team; a formula metric names Revenue (the viewer's checks walk it). On
-    // Returns, which no other case computes: a formula's FIGURE still reads every metric by name (factMetrics' shortcut).
-    await metrics.saveMetric(P, { name: 'Order share', datasetId: returns, definition: { formula: '[Revenue] / 3' } });
+    // Orders' cost is hidden from a viewer in no team; a formula metric names Revenue (the viewer's checks walk it), on
+    // Orders, which the dataset and dashboard cases compute: its figure and its additivity read Revenue by name alone.
+    await metrics.saveMetric(P, { name: 'Order share', datasetId: orders, definition: { formula: '[Revenue] / 3' } });
     const ruled = await rec.serialized(rec.datasetFilePath(P, orders), (raw) => {
       raw.columnAccess = access.buildColumnAccess(raw, [{ column: 'cost', visibleTo: [{ teamId: '11111111-1111-4111-8111-111111111111' }] }], 'admin@acme.test', new Date().toISOString());
       return true;
@@ -112,6 +114,7 @@ async function listed<T>(P: string, fn: () => Promise<T>): Promise<{ out: T; cal
   };
   spy(datasets, 'listDatasets');
   spy(metrics, 'listMetrics');
+  spy(metrics, 'metricsByName');
   spy(terms, 'listFullTerms');
   spy(terms, 'listTerms');
   spy(visuals, 'listVisuals');
@@ -135,7 +138,8 @@ async function dbLeg(): Promise<void> {
   require('../src/ipc/search').register();
   const replies: unknown[] = [];
   (execConfig as { executionReady: unknown }).executionReady = async () => true;
-  (analyze as { askCopilot: unknown }).askCopilot = async () => replies.shift() ?? { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } };
+  let facts = '';
+  (analyze as { askCopilot: unknown }).askCopilot = async (_prior: unknown, sent: string) => { facts = sent; return replies.shift() ?? { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }; };
   (analyze as { dispatch: unknown }).dispatch = async () => { throw new Error('no model call in this suite'); };
   const call = (ch: string, payload: object, who: Role = 'admin'): Promise<any> => as(who, () => handlers.get(ch)!({}, { projectId: w.P, ...payload }));
   const thread = async (agentId?: string, who: Role = 'admin'): Promise<string> => (await call('copilot:newThread', agentId ? { agentId } : {}, who)).thread.id;
@@ -153,11 +157,12 @@ async function dbLeg(): Promise<void> {
   };
   ok('fixture: an ask from Home answers with the chart, from the model', !!(await started()));
 
-  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role };
+  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role; formula?: true };
+  const shared = /Order share\b[^\n]*\b5\b/; // its figure in the facts: Revenue (15) / 3
   const cases: Case[] = [
     { name: 'home', reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: {}, question: Q }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
-    { name: 'dataset open', reply: answer({ category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.orders }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset' && r.turns.at(-1)?.answer?.datasetId === w.orders },
-    { name: 'dashboard', reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: { kind: 'analysis', id: w.board }, question: Q }), right: (r) => r.provenance?.kind === 'analysis' && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    { name: 'dataset open', formula: true, reply: answer({ category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.orders }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset' && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    { name: 'dashboard', formula: true, reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: { kind: 'analysis', id: w.board }, question: Q }), right: (r) => r.provenance?.kind === 'analysis' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'agent, inside', reply: answer(onOrders), ask: async () => ({ threadId: await thread(w.agent), context: {}, question: Q }), right: (r) => r.agent?.id === w.agent && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'agent, outside', reply: { ok: true, text: 'Not here.', suggestedAction: { kind: 'outside', intent: 'refunds' } }, ask: async () => ({ threadId: await thread(w.agent), context: {}, question: 'refunds by reason' }), right: (r) => r.turns.at(-1)?.outside?.dataset === 'Returns' && r.turns.at(-1)?.text === `${msg.outsideTopic('Retail')}\n${msg.outsideOffer('Returns')}` },
     { name: 'agent, answer outside', reply: answer({ dataset: 'Returns', category: 'reason', measures: [{ column: 'refunds', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(w.agent), context: {}, question: 'refunds by reason' }), right: (r) => r.turns.at(-1)?.outside?.dataset === 'Returns' && !r.turns.at(-1)?.answer },
@@ -177,12 +182,14 @@ async function dbLeg(): Promise<void> {
     const r = await run(c);
     ok(`${c.name}: the ask answers as it should`, r.out.ok === true && c.right(r.out), JSON.stringify(r.out).slice(0, 400));
     ok(`${c.name}: no whole-project list (${r.calls.length})`, r.calls.length === 0, r.calls.join(', '));
+    if (c.formula) ok(`${c.name}: …and the formula metric was computed: Order share's figure is in the facts`, shared.test(facts), facts.split('\n').filter((l) => l.includes('Order share')).join(' | ') || facts.slice(0, 300));
   }
   assistantSearch._setIndexed(false);
   try {
     for (const c of cases) {
       const r = await run(c);
       ok(`NEGATIVE CONTROL: ${c.name}, the index off: the reference lists (${r.calls.length}: ${[...new Set(r.calls)].slice(0, 4).join(', ')})`, r.calls.length > 0 && r.out.ok === true && c.right(r.out), JSON.stringify(r.out).slice(0, 300));
+      if (c.formula) ok(`NEGATIVE CONTROL: ${c.name}, the index off: …the formula's figure reads every metric by name`, r.calls.includes('metricsByName') && shared.test(facts));
     }
   } finally {
     assistantSearch._setIndexed(true);

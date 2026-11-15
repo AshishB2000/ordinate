@@ -309,7 +309,10 @@ export function summaryOf(projectId: string, raw: string): MetricSummary | null 
   return isValidMetric(data) ? toSummary(normalize(data, projectId)) : null;
 }
 
-export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
+export const listMetrics = (projectId: string): Promise<MetricSummary[]> => listed(projectId);
+
+/** listMetrics, ONE pass over the directory; `texts`, when given, gets each listed record's text by its file's id. */
+async function listed(projectId: string, texts?: Map<string, () => string>): Promise<MetricSummary[]> {
   if (!isValidId(projectId)) return [];
   let records;
   try {
@@ -322,6 +325,7 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
   for await (const r of records) {
     const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
+    texts?.set(id, r.text);
     try {
       const m = summaryOf(projectId, r.text());
       if (m) out.push(m);
@@ -359,21 +363,19 @@ export async function getMetric(projectId: string, id: string, text?: () => stri
 }
 
 /**
- * Load a project's metrics as FULL records, keyed by lowercased name.
- *
- * This is what a formula metric resolves `[Revenue]` against, so it is one
- * directory read for a whole resolution rather than one per reference. A
- * duplicate name keeps the FIRST by sort order, which `listMetrics` has already
- * made deterministic — two metrics called "Revenue" is a mistake the editor
- * prevents, and picking one by disk order would make it a different mistake on
- * every machine.
+ * A project's metrics as FULL records, keyed by lowercased name: the reference a formula's `[Revenue]` resolves
+ * against (a figure path reads only the names it says: ./metricNames). ONE directory read, each record parsed from the
+ * text the listing has. A duplicate name keeps the FIRST by sort order, which `listMetrics` has already made
+ * deterministic — two metrics called "Revenue" is a mistake the editor prevents, and picking one by disk order would
+ * make it a different mistake on every machine.
  */
 export async function metricsByName(projectId: string): Promise<Map<string, Metric>> {
+  const texts = new Map<string, () => string>();
   const out = new Map<string, Metric>();
-  for (const s of await listMetrics(projectId)) {
+  for (const s of await listed(projectId, texts)) {
     const key = s.name.toLowerCase();
     if (out.has(key)) continue;
-    const full = await getMetric(projectId, s.id);
+    const full = await getMetric(projectId, s.id, texts.get(s.id)); // a record listed under another id reads that id's file, as before
     if (full) out.set(key, full);
   }
   return out;

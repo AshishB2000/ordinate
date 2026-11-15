@@ -15,10 +15,10 @@ import type { ParsedColumn } from '../data/parse';
 import type { VizEncoding } from '../analysis/visuals';
 import type { ParamValues } from '../analysis/params';
 import { metricShape, evalLinear } from '../analysis/driverShape';
+import { metricsReached } from '../analysis/metricNames';
 import type { DriverShape, Operand } from '../analysis/driverShape';
 import { memberEffects } from '../analysis/drivers';
 import type { MemberAgg } from '../analysis/drivers';
-import * as metrics from '../analysis/metrics';
 import * as msg from '../analysis/metricTreeMessages';
 import { topSegments } from '../analysis/metricTreeMath';
 import { vizDataFor } from './visuals';
@@ -142,7 +142,7 @@ export async function splitSegments(
   const col = columns.find((c) => c.name === column);
   if (!col) return { ok: false, error: msg.splitColumnGone(column) };
   if (col.type !== 'text') return { ok: false, error: msg.splitNotText(column) };
-  const shape = metricShape(metric.datasetId, columns, metric.definition, metric.filters, await metrics.metricsByName(projectId), params, metric.name);
+  const shape = metricShape(metric.datasetId, columns, metric.definition, metric.filters, await metricsReached(projectId, [metric.definition], params), params, metric.name);
   if (shape.kind === 'none') return { ok: false, error: shape.reason };
 
   const [a, b] = await Promise.all([

@@ -300,7 +300,7 @@ function linear(m: Map<number, number>): Linear {
  * `{column, aggregation}` (pass `filters: []`).
  *
  * `byName` is the project's metrics by LOWER-CASED name (metrics.metricsByName),
- * used to follow `[References]`. Never throws.
+ * or those `def` reaches (./metricNames metricsReached), used to follow `[References]`. Never throws.
  */
 export function metricShape(
   datasetId: string,

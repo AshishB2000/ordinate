@@ -246,7 +246,7 @@ async function metricLeg(W: W): Promise<void> {
   const [vOn, vOff] = await both(() => W.as('east', async () => (await answers.specMetrics(P)).map((m) => m.id)));
   ok('5. the specMetrics vocabulary is the same, index on and off', same(vOn, vOff) && vOn.length > 0, [vOn.length, vOff.length]);
 
-  let lists = 0; // a whole metrics directory listed: listMetrics' (and metricsByName's, through it) read
+  let lists = 0; // a whole metrics directory listed: listMetrics' or metricsByName's read
   const real = recordFs.listRecords;
   (recordFs as { listRecords: unknown }).listRecords = (dir: string) => { if (/[\\/]metrics$/.test(dir)) lists++; return real(dir); };
   let off = 0;

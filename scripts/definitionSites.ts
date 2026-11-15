@@ -62,6 +62,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/pendingKinds.ts': { count: 7, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
   'src/analysis/statusPin.ts': { count: 3, how: 'keeps' }, // the pin hashes the definition whole; an external one reads no column
   'src/analysis/columnHidden.ts': { count: 2, how: 'keeps' }, // a formula's names, then the definition walked whole for hidden columns
+  'src/analysis/metricNames.ts': { count: 2, how: 'keeps' }, // a formula's names and a period's base, looked up by name: an external one names none
   'src/analysis/metricTimeScope.ts': { count: 8, how: 'keeps' }, // formulas, a period's base's date, a funnel's time: an external one counts by its own dataset
   'src/analysis/metricUsage.ts': { count: 3, how: 'keeps' }, // formula references and a period's base only
   'src/ipc/metricCheck.ts': { count: 2, how: 'keeps' }, // formula references only

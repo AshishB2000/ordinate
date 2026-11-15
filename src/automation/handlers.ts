@@ -28,6 +28,7 @@ import { refreshAsJob } from '../data/refreshJob';
 import { refreshDependents } from '../data/datasetDependents';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as metrics from '../analysis/metrics';
+import { metricNames } from '../analysis/metricNames';
 import { describeDefinitionShort } from '../analysis/metricFormat';
 import { metricAdditivity } from '../analysis/additivity';
 import { targetField, targetHidden } from '../ipc/targetResolve';
@@ -242,8 +243,7 @@ async function metricRow(ctx: Ctx, m: Awaited<ReturnType<typeof metrics.listMetr
 }
 
 export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promise<unknown> {
-  const byName = await metrics.metricsByName(ctx.projectId);
-  const m = byName.get(ref.trim().toLowerCase()) || (await metrics.getMetric(ctx.projectId, ref.trim()));
+  const m = (await metricNames(ctx.projectId).get(ref.trim().toLowerCase())) || (await metrics.getMetric(ctx.projectId, ref.trim()));
   if (!m) throw new AutomationError('not_found', `No metric called "${ref}".`);
   const reads: MetricRead[] = [];
   // Glossary terms as its scope: the door expands each (a deleted or unusable one is refused with its sentence).

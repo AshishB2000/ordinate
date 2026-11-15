@@ -11,7 +11,7 @@
 
 import * as metrics from '../analysis/metrics';
 import type { Metric } from '../analysis/metrics';
-import { metricsByName } from '../analysis/metrics';
+import { metricsReached } from '../analysis/metricNames';
 import type { MetricTargetSpec } from '../analysis/metricTarget';
 import { metricDate, metricScope } from '../analysis/metricTimeScope';
 import { additivityOf } from '../analysis/additivity';
@@ -121,7 +121,7 @@ async function frameOf(projectId: string, m: Metric, spec: MetricTargetSpec, sco
   const p = await periodFrame(projectId, m, s.filters);
   if (typeof p === 'string') return p;
   const dateCol = await metricDate(projectId, m);
-  const byName = await metricsByName(projectId);
+  const byName = await metricsReached(projectId, [p.judged.definition]);
   const columns = (await datasets.getDatasetMeta(projectId, m.datasetId))?.columns ?? [];
   const adds = additivityOf(p.judged, columns, byName).time;
   if (adds && !spec.per) return msg.targetNeedsPer();
@@ -284,7 +284,7 @@ export async function checkTarget(projectId: string, m: Pick<Metric, 'id' | 'nam
   // A period metric's target adds up as its base does (periodFrame); a base that is gone is the period check's to say.
   const judged = (period && (await metrics.getMetric(projectId, period.base))) || m;
   // shortcut: the metric's own filters don't change whether it adds up, so none are passed; read them in if one ever does
-  const adds = additivityOf({ ...judged, filters: [] }, columns, await metricsByName(projectId)).time;
+  const adds = additivityOf({ ...judged, filters: [] }, columns, await metricsReached(projectId, [judged.definition])).time;
   if (adds && !spec.per) return refuse(msg.targetNeedsPer());
   if (spec.per && !(await metricDate(projectId, m))) return refuse(msg.targetNeedsDate());
   if ('metricId' in spec.source) {

@@ -223,7 +223,18 @@ const MAX_SAID = 2_000;
 export async function metricsSaidIn(projectId: string, formula: string): Promise<metrics.Metric[] | null> {
   if (!indexedFor(projectId)) return null;
   const said = mentionable(formula, MAX_SAID);
-  const hits = said && (said.length ? await keyedModel(projectId, 'metric', said.map(lowerKey)) : []);
+  const named = said && (await metricsNamed(projectId, said));
+  return named ? [...named.values()] : null;
+}
+
+/**
+ * What `metricsByName(projectId)` holds under each of `names` (a name lower-cased is its key there), and under any other
+ * name whose metrics the lookup read: every metric with a name key of `names` (trimmed and lower-cased), the first of
+ * each lower-cased name in listMetrics' order, its full record. Null without the index: the caller reads every metric.
+ */
+export async function metricsNamed(projectId: string, names: readonly string[]): Promise<Map<string, metrics.Metric> | null> {
+  if (!indexedFor(projectId)) return null;
+  const hits = names.length ? await keyedModel(projectId, 'metric', names.map(lowerKey)) : [];
   if (!hits) return null;
   const file = (id: string) => metrics.metricFilePath(projectId, id);
   const ids = [...new Set(hits.map((h) => h.id))].filter((id) => isValidId(id));
@@ -235,5 +246,5 @@ export async function metricsSaidIn(projectId: string, formula: string): Promise
     const full = await metrics.getMetric(projectId, s.id, textOf(file(s.id)));
     if (full) byName.set(key, full);
   }
-  return [...byName.values()];
+  return byName;
 }
