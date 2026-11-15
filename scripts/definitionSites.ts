@@ -32,7 +32,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/semanticMeasures.ts': { count: 2, how: 'answers' }, // a formula measure on a semantic dataset: formulaOverLayer, or columnOnLayer
   'src/ipc/semanticFigures.ts': { count: 3, how: 'answers' }, // a mirror's KPI spec and its chart name: `{ metric: external }` on its own semantic dataset only; a story's metric block asks the KPI door, or says why (b3)
   // refuses
-  'src/ipc/answers.ts': { count: 6, how: 'refuses' }, // never a spec's column measure; a mirror is named in the vocabulary by id only (its figure: the semantic door's)
+  'src/ipc/specVocabulary.ts': { count: 6, how: 'refuses' }, // never a spec's column measure; a mirror is named in the vocabulary by id only (its figure: the semantic door's). Moved from answers.ts with the vocabulary builders (PR 5).
   'src/ai/planExec.ts': { count: 1, how: 'refuses' }, // a plan step cannot name it
   'src/ipc/periodMetric.ts': { count: 3, how: 'refuses' }, // a period over an external base: its base's resolution throws ExternalMetricError
   'src/analysis/additivity.ts': { count: 15, how: 'refuses' }, // adds up where the layer says plain sum or count (b2: `additive`), and a calc over one that does not is refused naming the layer; a period over an external base adds as it does
