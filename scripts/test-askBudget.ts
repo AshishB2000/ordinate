@@ -60,16 +60,16 @@ const as = <T>(role: Role, fn: () => Promise<T>, org = 'acme'): Promise<T> =>
 
 const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 };
 
-// The ceilings: the counts measured on this PR (PR 2: an ask keeps what it read for its length) plus 10%. A record read
-// is a call into recordFs, one the memo answers included; a query is what reached Postgres. Before PR 2, (a) was
-// 129,540 queries and 43,188 reads, (c) about 300,000 and 100,000. Later PRs lower them: PR 3 one query per list,
-// PR 4 an open dataset and dashboard, PR 6 the step 3 index.
+// The ceilings: the counts measured with PR 3 (a store's list reads its records a page at a time) plus 10%. A record
+// read is a call into recordFs, one the memo answers included; a query is what reached Postgres. Before PR 2, (a) was
+// 129,540 queries and 43,188 reads, (c) about 300,000 and 100,000; after PR 2, about 27,000 queries each. Later PRs
+// lower them: PR 4 an open dataset and dashboard, PR 6 the step 3 index.
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
-  home: at(27_072, 27_120),
-  dataset: at(27_078, 35_103),
-  agent: at(27_114, 68_112),
-  viewer: at(27_078, 41_123),
+  home: at(330, 7_111),
+  dataset: at(336, 7_095),
+  agent: at(333, 7_090),
+  viewer: at(330, 14_112),
 };
 
 interface World { P: string; orders: string; agent: string }
