@@ -405,6 +405,7 @@ export const MAIN_FILES = [
   'src/ipc/metricSaveMessages.ts',
   'src/app/ossieMessages.ts',
   'src/ai/answerSnapshotMessages.ts',
+  'src/server/folderMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
