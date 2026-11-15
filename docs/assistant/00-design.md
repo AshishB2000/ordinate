@@ -375,7 +375,7 @@ Now:
   computed live.
 - **An answer saved before this** gets its snapshot on its first open, labelled with that time,
   never backdated.
-- **At most 64 KB a snapshot;** a bigger table answer stays live, labelled Live.
+- **At most 64 KB a snapshot;** a bigger table answer is computed each time it opens, labelled "Updates on open" ("Live" is the word for a warehouse dataset).
 
 ### The changes, in order
 
