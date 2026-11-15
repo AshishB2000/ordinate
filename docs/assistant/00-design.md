@@ -491,7 +491,7 @@ every metric by name: `test-askNoProjectLists` keeps its formula on a dataset no
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line | pgvector and a fingerprint model; otherwise stays on A |
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |
-| E | Shared folders shared with teams; connection tables per team; dashboard requests | every list, search and reader checks the item's folder, with a safety-net test like row rules have |
+| E | Shared folders shared with teams; connection tables per team; dashboard requests ([design](../team-folders/00-design.md)) | every list, search and reader checks the item's folder, with a safety-net test like row rules have |
 | F | SQL on Live datasets and source tables | row rules, hidden columns and cost limits applied in the warehouse |
 | G | Ask-an-editor notifications, "Answered from ▾", "Also on", Alert me | nothing new |
 
