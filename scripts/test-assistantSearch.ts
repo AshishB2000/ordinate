@@ -191,7 +191,7 @@ const markers = async (pool: Pool, P: string): Promise<Record<string, string>> =
 
 /** Record reads and rebuild pages while `fn` runs. */
 async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; n: number }> {
-  const orig = { readFile: recordFs.readFile, readMany: recordFs.readMany, readdir: recordFs.readdir, rowsUnder: recordFs.rowsUnder };
+  const orig = { readFile: recordFs.readFile, readMany: recordFs.readMany, readdir: recordFs.readdir, rowsUnder: recordFs.rowsUnder, listRecords: recordFs.listRecords };
   let n = 0;
   const m = recordFs as unknown as Record<string, unknown>;
   for (const [k, f] of Object.entries(orig)) m[k] = (...a: unknown[]) => { n++; return (f as (...x: unknown[]) => unknown)(...a); };
@@ -214,11 +214,11 @@ async function dbLeg(pool: Pool): Promise<void> {
 
   // ── 2. a built index reads no record ────────────────────────────────────
   const q = await reads(() => idx(ADMIN, P, 'revenue by territory', { limit: 12 }));
-  ok('built: a query reads no record (readFile, readMany, readdir, rowsUnder) and rebuilds nothing', q.n === 0 && !!q.out?.length && JSON.stringify(await markers(pool, P)) === JSON.stringify(built), q);
+  ok('built: a query reads no record (readFile, readMany, readdir, rowsUnder, listRecords) and rebuilds nothing', q.n === 0 && !!q.out?.length && JSON.stringify(await markers(pool, P)) === JSON.stringify(built), q);
   const c = await reads(() => as(EDITOR, P, () => search.indexedCount(P)));
   ok('…nor do the counts', c.n === 0 && c.out?.table === 2, c);
   const r = await reads(() => ref(ADMIN, P, 'revenue by territory', { limit: 12 }));
-  ok('NEGATIVE CONTROL: the reference reads the stores', r.n > 10 && same(r.out, q.out), r.n);
+  ok('NEGATIVE CONTROL: the reference reads the stores', r.n > 0 && same(r.out, q.out), r.n); // a store's list is one paged query (#502), so a few calls
 
   // ── 3. on write, no rebuild ─────────────────────────────────────────────
   const catalogRows = async () => Object.fromEntries((await pool.query(
