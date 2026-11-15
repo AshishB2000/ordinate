@@ -6,7 +6,7 @@
 
 import { computeCard } from '../ipc/answers';
 import { verifiedStates, type VerifiedState } from '../ipc/verifiedState';
-import { questionKey } from '../analysis/verifiedRules';
+import { verifiedNamed } from '../ipc/verifiedLookup';
 import * as datasets from '../data/datasets';
 import { listInstructions, FENCE_RE } from '../app/instructions';
 import { GUIDANCE_FRAMING } from '../ai/guidanceFacts';
@@ -61,9 +61,7 @@ export async function listVerifiedQuestions(ctx: Ctx): Promise<{ questions: McpV
 }
 
 export async function answerVerifiedQuestion(ctx: Ctx, question: string): Promise<McpVerifiedAnswer> {
-  const key = questionKey(question);
-  const hit = (await verifiedStates(ctx.projectId)).find((s) =>
-    s.q.id === question || (key !== '' && [s.q.question, ...s.q.phrasings].some((t) => questionKey(t) === key)));
+  const hit = await verifiedNamed(ctx.projectId, question); // by the index: that one record, or those of its key
   if (!hit || hit.hidden) throw new AutomationError('not_found', noVerifiedQuestion(question));
   if (hit.problem !== null) throw new AutomationError('runtime', hit.problem);
   const { q } = hit;

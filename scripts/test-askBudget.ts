@@ -13,7 +13,7 @@
 //   2. A catalog.json past 4 MiB is logged once per org and project, by its size only; one under it is not.
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on); without it, a skip line:
 //   3. THE BUDGET: each case's counts ≤ its ceilings (printed).
-//   4. NEGATIVE CONTROL: case (a) with the question's read memo off (../src/ipc/askMemo `_setAskMemo`) is over them.
+//   4. NEGATIVE CONTROL: case (c) with the question's read memo off (../src/ipc/askMemo `_setAskMemo`) is over them.
 //   5. SAME REPLY: in every case, memo on and off, the model is sent the same facts, and the reply's answer, chart,
 //      provenance, action, ledger, audit and guidance are the same, with Object.is.
 //
@@ -63,7 +63,8 @@ const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 }
 // The ceilings: the counts measured with PR 3 (a store's list reads its records a page at a time) plus 10%. A record
 // read is a call into recordFs, one the memo answers included; a query is what reached Postgres. Before PR 2, (a) was
 // 129,540 queries and 43,188 reads, (c) about 300,000 and 100,000; after PR 2, about 27,000 queries each. Later PRs
-// lower them: PR 4 an open dataset and dashboard, PR 6 the step 3 index.
+// lower them: PR 4 an open dataset and dashboard, PR 6 the step 3 index. PR 5 checks a verified question against only
+// what its chart names; with the memo off, (a) no longer builds the whole vocabulary twice, so the control is (c).
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
   home: at(330, 7_111),
@@ -241,8 +242,8 @@ async function dbLeg(pool: Pool): Promise<void> {
       askMemo._setAskMemo(true);
     }
     line(name + ' (memo off)', off);
-    if (name === 'home') {
-      ok('NEGATIVE CONTROL: home with the memo off is over both ceilings', off.queries > CEILING.home.queries && off.reads > CEILING.home.reads, `${off.queries} queries, ${off.reads} reads`);
+    if (name === 'agent') {
+      ok('NEGATIVE CONTROL: the agent with the memo off is over both ceilings', off.queries > CEILING.agent.queries && off.reads > CEILING.agent.reads, `${off.queries} queries, ${off.reads} reads`);
     }
     factsOf.set(name, on.facts[0]);
     const [a, b] = [replyOf(on.out), replyOf(off.out)];

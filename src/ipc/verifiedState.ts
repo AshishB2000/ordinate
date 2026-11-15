@@ -15,9 +15,11 @@ import { hasValueFilter, type VerifiedQuestion } from '../analysis/verifiedRules
 import { listTagged } from '../analysis/verifiedQuestions';
 import type { Tagged } from '../app/editConflict';
 import * as msg from '../analysis/verifiedMessages';
-import { listMetrics } from '../analysis/metrics';
+import { listMetrics, type MetricSummary } from '../analysis/metrics';
+import { getTerm } from '../analysis/terms';
 import { pendingMetric } from '../analysis/pendingKinds';
 import { specDatasets, specMetrics, specTerms } from './answers';
+import { specDatasetsOf, specMetricsFrom, specTermOf } from './specVocabulary';
 import { perAsk } from './askMemo';
 
 /** `pending`: the ids of metrics of a kind this release cannot draw (part 5): `computeCard` refuses those in its own words. */
@@ -29,6 +31,28 @@ export function verifiedEnv(projectId: string): Promise<VerifiedEnv> {
     const [datasets, metrics, terms, all] = await Promise.all([specDatasets(projectId), specMetrics(projectId), specTerms(projectId), listMetrics(projectId)]);
     return { datasets, metrics, terms, pending: new Set(all.filter(pendingMetric).map((m) => m.id)) };
   });
+}
+
+/**
+ * `verifiedEnv` cut to what `questions` name, to check a few (an index lookup's candidates, a draft, a card's mark):
+ * their datasets, the terms their filters name, the metrics their measures name and, on each one's dataset, every
+ * metric of its name (refineSpec's `byName`: the FIRST of a name is the one the name means). For each of `questions`,
+ * `verifiedProblem` reads the same here as in the whole env (scripts/test-verifiedNarrowEnv.ts). `pending` is the
+ * whole set when a measure names a metric, else empty: only a named metric is looked up in it.
+ */
+export async function verifiedEnvFor(projectId: string, questions: readonly VerifiedQuestion[]): Promise<VerifiedEnv> {
+  const ids = (of: (q: VerifiedQuestion) => Array<string | undefined>): string[] => [...new Set(questions.flatMap(of))].filter((id): id is string => !!id);
+  const named = new Set(ids((q) => q.spec.measures.map((m) => m.metricId)));
+  // shortcut: a measure naming a metric lists the project's metric summaries, to find the metrics of its name on its dataset; upgrade to a (dataset, name) lookup when step 3's index lands.
+  const all = named.size ? await perAsk(`metricSummaries\0${projectId}`, () => listMetrics(projectId)) : [];
+  const nameOn = (s: MetricSummary): string => `${s.datasetId}\0${s.name.trim().toLowerCase()}`;
+  const same = new Set(all.filter((s) => named.has(s.id)).map(nameOn));
+  const [datasets, metrics, terms] = await Promise.all([
+    specDatasetsOf(projectId, ids((q) => [q.spec.datasetId])),
+    specMetricsFrom(projectId, async () => all.filter((s) => same.has(nameOn(s)))), // in the list's order: `find` takes the first
+    Promise.all(ids((q) => q.spec.filters.map((f) => ('term' in f ? f.term : undefined))).map((id) => getTerm(projectId, id))),
+  ]);
+  return { datasets, metrics, terms: terms.flatMap((t) => (t ? [specTermOf(t)] : [])), pending: new Set(all.filter(pendingMetric).map((m) => m.id)) };
 }
 
 /** Why `q` no longer runs, in a sentence, or null. The same check a follow-up makes of the previous answer (./answers `previousAnswer`). */
