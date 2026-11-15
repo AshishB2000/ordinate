@@ -39,11 +39,12 @@ export function liveRefusalOf(x: unknown): string | null {
   if (!x || typeof x !== 'object') return null;
   const o = x as { ok?: unknown; code?: unknown; error?: unknown; reason?: unknown; message?: unknown };
   const row = text(o.code) === ROW_OFF_CODE;
-  if (!LIVE_OFF_CODES.has(text(o.code)) && !row) return null;
+  const folder = text(o.code) === FOLDER_OFF_CODE;
+  if (!LIVE_OFF_CODES.has(text(o.code)) && !row && !folder) return null;
   if (!(x instanceof Error) && o.ok !== false) return null;
   // `reason` is a sentence on an answer card, a machine code beside `error` on a chart refusal.
   const reason = text(o.reason);
-  return text(o.error) || text(o.message) || (/\s/.test(reason) ? reason : '') || (row ? ROW_OFF_FALLBACK : LIVE_OFF_FALLBACK);
+  return text(o.error) || text(o.message) || (/\s/.test(reason) ? reason : '') || (row ? ROW_OFF_FALLBACK : folder ? FOLDER_OFF_FALLBACK : LIVE_OFF_FALLBACK);
 }
 
 /**
@@ -57,6 +58,18 @@ export const ROW_OFF_FALLBACK = 'Your access to this dataset covers only some of
 /** Is `x` (a reply, a thrown RpcError or a LiveRefusalError) a row access refusal? */
 export function isRowRefusal(x: unknown): boolean {
   return !!x && typeof x === 'object' && text((x as { code?: unknown }).code) === ROW_OFF_CODE && liveRefusalOf(x) !== null;
+}
+
+/**
+ * Shared folders (docs/team-folders D15): the item, or a figure's dataset, is in a folder the caller cannot
+ * open. The same refusal state as row access rules — the server's sentence, no retry, no "Make a copy".
+ */
+export const FOLDER_OFF_CODE = 'folder';
+export const FOLDER_OFF_FALLBACK = "This is in a folder you can't open.";
+
+/** Is `x` (a reply, a thrown RpcError or a LiveRefusalError) a folder refusal? */
+export function isFolderRefusal(x: unknown): boolean {
+  return !!x && typeof x === 'object' && text((x as { code?: unknown }).code) === FOLDER_OFF_CODE && liveRefusalOf(x) !== null;
 }
 
 /** When a refusal arrives without a sentence (never expected): what it means, in the catalog's words. */

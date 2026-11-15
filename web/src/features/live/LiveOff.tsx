@@ -24,7 +24,7 @@ import { toast } from '../../ui/Toast';
 import { rowsText } from '../data/format';
 import { useCanEdit } from '../projects/api';
 import { LIVE_OFF, layerWhy, type LiveOffFeature } from './offFeatures';
-import { isRowRefusal, liveRefusalOf } from './refusal';
+import { isFolderRefusal, isRowRefusal, liveRefusalOf } from './refusal';
 import s from './Live.module.css';
 
 type CopyReply = { ok: true; dataset: { id: string; name: string; rowCount: number }; warnings?: string[] } | { ok: false; error?: string; code?: string };
@@ -131,20 +131,21 @@ export function LiveOffPage({ title, projectId, datasetId, feature }: { title: s
  * dashboard tile, a KPI card, an answer card or the builder's stage.
  */
 export function LiveRefusal({ refusal, projectId, datasetId, liveTitle, liveMessage }: {
-  /** The refused reply or the thrown error itself: whether it is Live's or a row access refusal is read from it. */
+  /** The refused reply or the thrown error itself: whether it is Live's, a row access or a folder refusal is read from it. */
   refusal: unknown;
   projectId: string;
   datasetId?: string;
-  /** A Live refusal's own heading / sentence on a page that words it (a row access refusal keeps the server's). */
+  /** A Live refusal's own heading / sentence on a page that words it (an access refusal keeps the server's). */
   liveTitle?: string;
   liveMessage?: string;
 }) {
-  const row = isRowRefusal(refusal);
+  const folder = isFolderRefusal(refusal);
+  const row = isRowRefusal(refusal) || folder; // access, not Live: the server's sentence and a lock, never "Make a copy"
   const sentence = liveRefusalOf(refusal) ?? '';
   const message = row ? sentence : liveMessage ?? sentence;
   const title = row ? 'Limited by your access' : liveTitle ?? 'Off for this Live dataset';
   return (
-    <div className={s.refusal} data-live-refusal="" data-row-refusal={row ? '' : undefined}>
+    <div className={s.refusal} data-live-refusal="" data-row-refusal={row && !folder ? '' : undefined} data-folder-refusal={folder ? '' : undefined}>
       <EmptyState
         compact
         heading={3}

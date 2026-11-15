@@ -51,6 +51,7 @@ import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusal
 import { isTermNotExpandedError, tagTermRefusals, termRaised } from '../data/termStep';
 import { externalRaised, isExternalMetricError, tagExternalRefusals } from '../analysis/externalMetric';
 import { seedRank, register as registerCaller } from './authz/caller';
+import { FOLDER_CODE, folderRaised, isFolderError, tagFolderRefusals } from './authz/folders';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
@@ -456,6 +457,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       const rowRefusals = rowPolicyRaised();
       const termRefusals = termRaised();
       const externalRefusals = externalRaised();
+      const folderRefusals = folderRaised();
       let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
@@ -465,6 +467,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (rowPolicyRaised() !== rowRefusals) tagRowPolicyRefusals(result); // a row access refusal a handler caught keeps its type
       if (termRaised() !== termRefusals) tagTermRefusals(result); // so does a filter it cannot apply (PR 05a)
       if (externalRaised() !== externalRefusals) tagExternalRefusals(result); // and a metric only another tool's semantic layer can answer (part 7 b0)
+      if (folderRaised() !== folderRefusals) tagFolderRefusals(result); // and a folder the caller cannot open (docs/team-folders D15)
       const body = encode(result);
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
@@ -489,6 +492,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // Row access rules (docs/row-policy): a typed 409 with the catalog's sentence — never a figure, never another team's value.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: ROW_POLICY_CODE, code: ROW_POLICY_CODE, reason: err.reason, message: err.message });
+      }
+      if (isFolderError(err)) {
+        // Shared folders (docs/team-folders D15): a typed 409 with the catalog's sentence — never a folder, team or item name.
+        await record('denied', decision.projectId);
+        return reply.code(409).send({ error: FOLDER_CODE, code: FOLDER_CODE, reason: err.reason, message: err.message });
       }
       if (isTermNotExpandedError(err) || isExternalMetricError(err)) {
         // A glossary term no door expanded, a filter this pod cannot read (PR 05a), or a layer's metric (part 7 b0): a typed 409 with the catalog's sentence — never a figure.
