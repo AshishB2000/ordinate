@@ -27,16 +27,16 @@ const normalize = (projectId: string) => (data: any): VerifiedQuestion | null =>
 /** Every question of the project with the tag of what is stored, newest `updatedAt` first. A corrupt file is skipped. */
 export async function listTagged(projectId: string): Promise<Tagged<VerifiedQuestion>[]> {
   if (!isValidId(projectId)) return [];
-  let names: string[];
+  let records;
   try {
-    names = await recordFs.readdir(dirOf(projectId));
+    records = await recordFs.listRecords(dirOf(projectId));
   } catch (_) {
     return []; // none yet
   }
   const out: Tagged<VerifiedQuestion>[] = [];
-  for (const n of names) {
-    const id = n.endsWith('.json') ? n.slice(0, -5) : '';
-    const t = isValidId(id) ? await readVerified(projectId, id) : null; // a stray or temp file, or a corrupt one: null
+  for await (const r of records) {
+    const id = r.name.slice(0, -5);
+    const t = isValidId(id) ? await readTagged('verified', r.text, normalize(projectId)) : null; // a stray or temp file, or a corrupt one: null
     if (t && t.rec.id === id) out.push(t);
   }
   return out.sort((a, b) => (a.rec.updatedAt < b.rec.updatedAt ? 1 : a.rec.updatedAt > b.rec.updatedAt ? -1 : 0));

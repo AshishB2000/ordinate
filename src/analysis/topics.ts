@@ -125,18 +125,18 @@ export function sanitizeTopic(data: any, projectId: string): Topic {
 /** Every topic of the project, by name (locale-aware). Corrupt files are skipped. */
 export async function listTopics(projectId: string): Promise<Topic[]> {
   if (!isValidId(projectId)) return [];
-  let names: string[];
+  let records;
   try {
-    names = await recordFs.readdir(topicsDir(projectId));
+    records = await recordFs.listRecords(topicsDir(projectId));
   } catch (_) {
     return []; // no topics yet
   }
   const out: Topic[] = [];
-  for (const n of names) {
-    const id = n.endsWith('.json') ? n.slice(0, -5) : '';
+  for await (const r of records) {
+    const id = r.name.slice(0, -5);
     if (!isValidId(id)) continue; // a stray or temp file
     try {
-      const data = JSON.parse(await recordFs.readFile(topicFile(projectId, id), 'utf8'));
+      const data = JSON.parse(r.text());
       if (isValidTopic(data)) out.push(sanitizeTopic(data, projectId));
     } catch (err) {
       if ((err as { code?: string }).code !== 'ENOENT') logger.error('[topics] Skipping corrupt or unreadable topic:', id, (err as Error).message);

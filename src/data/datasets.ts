@@ -389,20 +389,19 @@ export const summaryOf = (projectId: string, raw: string): DatasetSummary | null
 export async function listDatasets(projectId: string): Promise<DatasetSummary[]> {
   if (!isValidId(projectId)) return [];
   const dir = datasetsDir(projectId);
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(dir, { withFileTypes: true });
+    records = await recordFs.listRecords(dir);
   } catch (_) {
     return []; // no datasets dir yet
   }
 
   const out: DatasetSummary[] = [];
-  for (const dirent of dirents) {
-    if (!dirent.isFile() || !dirent.name.endsWith('.json')) continue;
-    const id = dirent.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const s = summaryOf(projectId, await recordFs.readFile(datasetFilePath(projectId, id), 'utf8'));
+      const s = summaryOf(projectId, r.text());
       if (s) out.push(s);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {

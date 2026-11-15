@@ -46,9 +46,9 @@ export function contentTag(kind: SaveKind, rec: unknown): string {
  * ONE read of a record file: the store's own `normalize` of it, and the tag of
  * the bytes as stored. Null when it is missing, unreadable or not a record.
  */
-export async function readTagged<T>(kind: SaveKind, file: string, normalize: (data: any) => T | null): Promise<Tagged<T> | null> { // any: parsed stored JSON
+export async function readTagged<T>(kind: SaveKind, file: string | (() => string), normalize: (data: any) => T | null): Promise<Tagged<T> | null> { // any: parsed stored JSON; `file`, or a listed record's text
   try {
-    const data: unknown = JSON.parse(await recordFs.readFile(file, 'utf8'));
+    const data: unknown = JSON.parse(typeof file === 'string' ? await recordFs.readFile(file, 'utf8') : file());
     const rec = normalize(data);
     return rec ? { rec, tag: contentTag(kind, data) } : null;
   } catch (_) {

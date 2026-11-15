@@ -60,10 +60,15 @@ function normalize(data: any, projectId: string): Notebook {
   };
 }
 
-export async function getNotebook(projectId: string, id: string): Promise<Notebook | null> {
+export function getNotebook(projectId: string, id: string): Promise<Notebook | null> {
+  return notebookFrom(projectId, id, () => recordFs.readFile(file(projectId, id), 'utf8'));
+}
+
+/** getNotebook over `read` (the record's text): the list's come from one listing. */
+async function notebookFrom(projectId: string, id: string, read: () => string | Promise<string>): Promise<Notebook | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
+    const data = JSON.parse(await read());
     if (!data || data.id !== id) return null;
     return normalize(data, projectId);
   } catch (_) {
@@ -73,17 +78,16 @@ export async function getNotebook(projectId: string, id: string): Promise<Notebo
 
 export async function listNotebooks(projectId: string): Promise<NotebookSummary[]> {
   if (!isValidId(projectId)) return [];
-  let names: string[];
+  let records;
   try {
-    names = await recordFs.readdir(dir(projectId));
+    records = await recordFs.listRecords(dir(projectId));
   } catch (_) {
     return [];
   }
   const out: NotebookSummary[] = [];
-  for (const n of names) {
-    if (!n.endsWith('.json')) continue;
-    const id = n.slice(0, -5);
-    const nb = isValidId(id) ? await getNotebook(projectId, id) : null;
+  for await (const r of records) {
+    const id = r.name.slice(0, -5);
+    const nb = isValidId(id) ? await notebookFrom(projectId, id, r.text) : null;
     if (!nb) continue; // corrupt or foreign: skipped, never fatal
     const kinds: NotebookSummary['kinds'] = {};
     for (const c of nb.cells) kinds[c.kind] = (kinds[c.kind] || 0) + 1;

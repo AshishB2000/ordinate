@@ -444,20 +444,19 @@ export function connectionOf(projectId: string, id: string, raw: string): Connec
 export async function listConnections(projectId: string): Promise<Connection[]> {
   if (!isValidId(projectId)) return [];
   const dir = connectionsDir(projectId);
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(dir, { withFileTypes: true });
+    records = await recordFs.listRecords(dir);
   } catch (_) {
     return []; // no connections dir yet
   }
 
   const out: Connection[] = [];
-  for (const dirent of dirents) {
-    if (!dirent.isFile() || !dirent.name.endsWith('.json')) continue;
-    const id = dirent.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const c = connectionOf(projectId, id, await recordFs.readFile(connectionFilePath(projectId, id), 'utf8'));
+      const c = connectionOf(projectId, id, r.text());
       if (c) out.push(c);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {

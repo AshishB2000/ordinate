@@ -397,16 +397,15 @@ export async function listReports(projectId: string): Promise<ReportSummary[]> {
  *  summaries, and reading the dir twice is how the two drift. */
 export async function readAll(projectId: string): Promise<Report[]> {
   if (!isValidId(projectId)) return [];
-  let dirents: recordFs.Dirent[];
+  let records;
   try {
-    dirents = await recordFs.readdir(reportsDir(projectId), { withFileTypes: true });
+    records = await recordFs.listRecords(reportsDir(projectId));
   } catch (_) {
     return []; // no reports dir yet is the normal case, not an error
   }
   const out: Report[] = [];
-  for (const d of dirents) {
-    if (!d.isFile() || !d.name.endsWith('.json')) continue;
-    const r = await getReport(projectId, d.name.slice(0, -5));
+  for await (const rec of records) {
+    const r = await reportFrom(projectId, rec.name.slice(0, -5), rec.text);
     if (r) out.push(r);
   }
   return out;
@@ -418,10 +417,15 @@ export function reportOf(projectId: string, raw: string): Report | null {
   return data && typeof data.id === 'string' && data.id ? normalize(data, projectId) : null;
 }
 
-export async function getReport(projectId: string, id: string): Promise<Report | null> {
+export function getReport(projectId: string, id: string): Promise<Report | null> {
+  return reportFrom(projectId, id, () => recordFs.readFile(reportFilePath(projectId, id), 'utf8'));
+}
+
+/** getReport over `read` (the record's text): readAll's reports come from one listing. */
+async function reportFrom(projectId: string, id: string, read: () => string | Promise<string>): Promise<Report | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    return reportOf(projectId, await recordFs.readFile(reportFilePath(projectId, id), 'utf8'));
+    return reportOf(projectId, await read());
   } catch (_) {
     return null;
   }

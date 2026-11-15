@@ -56,10 +56,10 @@ export async function importBoundaryFile(projectId: string, file: string): Promi
   return importBoundaryText(projectId, name, await recordFs.readFile(file, 'utf8'));
 }
 
-async function readOne(projectId: string, id: string): Promise<any> {
+async function readOne(projectId: string, id: string, read = (): string | Promise<string> => recordFs.readFile(path.join(dir(projectId), id + '.json'), 'utf8')): Promise<any> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    return JSON.parse(await recordFs.readFile(path.join(dir(projectId), id + '.json'), 'utf8'));
+    return JSON.parse(await read());
   } catch (_) {
     return null;
   }
@@ -67,12 +67,12 @@ async function readOne(projectId: string, id: string): Promise<any> {
 
 export async function listBoundaries(projectId: string): Promise<BoundaryMeta[]> {
   if (!isValidId(projectId)) return [];
-  const names = await recordFs.readdir(dir(projectId)).catch(() => [] as string[]);
+  const records = await recordFs.listRecords(dir(projectId)).catch(() => [] as recordFs.ListedRecord[]);
   const out: BoundaryMeta[] = [];
-  for (const n of names) {
-    const id = n.replace(/\.json$/, '');
-    if (!n.endsWith('.json') || !isValidId(id)) continue;
-    const rec = await readOne(projectId, id);
+  for await (const r of records) {
+    const id = r.name.slice(0, -5);
+    if (!isValidId(id)) continue;
+    const rec = await readOne(projectId, id, r.text);
     if (rec && rec.meta) out.push(rec.meta);
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));

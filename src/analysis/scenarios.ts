@@ -82,19 +82,18 @@ function summaryOf(s: Scenario): ScenarioSummary {
 
 export async function listScenarios(projectId: string): Promise<ScenarioSummary[]> {
   if (!isValidId(projectId)) return [];
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(dir(projectId), { withFileTypes: true });
+    records = await recordFs.listRecords(dir(projectId));
   } catch (_) {
     return [];
   }
   const out: ScenarioSummary[] = [];
-  for (const d of dirents) {
-    if (!d.isFile() || !d.name.endsWith('.json')) continue;
-    const id = d.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue;
     try {
-      const data = JSON.parse(await recordFs.readFile(file(projectId, id), 'utf8'));
+      const data = JSON.parse(r.text());
       if (!data || typeof data.id !== 'string') continue;
       out.push(summaryOf(normalize(data, projectId)));
     } catch (err: any) {

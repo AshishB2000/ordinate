@@ -525,8 +525,8 @@ fence (`runner.ts:120-153`):
 - **Each delete happens inside `locked(runPath)`**, re-checking the lease and the TTL on a fresh
   read (finding 7). A run that a step claimed between the scan and the delete is kept.
 - It runs at `plan:start`, after the new run is written (for that user), and in the sweep job (for
-  the org). `ponytail:` one `readdir` per project and a read per run; an index record when an org
-  has hundreds of projects.
+  the org). `ponytail:` one `readdir` per project, its runs read a page at a time
+  (`recordFs.listRecords`); an index record when an org has hundreds of projects.
 
 ### 3.6 Jobs: list, cancel and clear across pods; the popover merges
 

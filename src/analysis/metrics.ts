@@ -311,20 +311,19 @@ export function summaryOf(projectId: string, raw: string): MetricSummary | null 
 
 export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
   if (!isValidId(projectId)) return [];
-  let dirents;
+  let records;
   try {
-    dirents = await recordFs.readdir(metricsDir(projectId), { withFileTypes: true });
+    records = await recordFs.listRecords(metricsDir(projectId));
   } catch (_) {
     return []; // no metrics dir yet
   }
 
   const out: MetricSummary[] = [];
-  for (const dirent of dirents) {
-    if (!dirent.isFile() || !dirent.name.endsWith('.json')) continue;
-    const id = dirent.name.slice(0, -'.json'.length);
+  for await (const r of records) {
+    const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const m = summaryOf(projectId, await recordFs.readFile(metricFilePath(projectId, id), 'utf8'));
+      const m = summaryOf(projectId, r.text());
       if (m) out.push(m);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {

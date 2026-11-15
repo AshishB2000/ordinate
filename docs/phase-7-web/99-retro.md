@@ -160,7 +160,8 @@ No cross-project IDOR was found in the 213 contracts reviewed at T6.3.
   MapLibre advisory allowlist entry is due for review by 2027-01-04.
 - **Functional gaps:** `pipelines:run` is one RPC (more than 60 s → 504); pipeline `report`/`publish`
   nodes and automation PNG/PDF export refuse on the server; scheduled server-side reports are not
-  built; listing records is one query per record (log T5.1); secrets rotation accepts one master key
+  built; ~~listing records is one query per record (log T5.1)~~ — since 2026-11, a store's list reads its records
+  100 or 8 MiB a page (`recordFs.listRecords`: 2,000 datasets 218 → 19 ms); secrets rotation accepts one master key
   per pod (log T5.3).
 - **Carried desktop bugs, pinned not fixed:** `geoMatch` gives West Virginia Virginia's value (log
   T1.3); the candlestick port uses the label index where the desktop never drew a candle (log T1.1).
