@@ -200,7 +200,8 @@ async function main(): Promise<void> {
   // The tick's `now` is when the run was QUEUED: ten minutes before it lands.
   reported.length = 0;
   await sched.tickNow(Date.now() - 10 * MIN);
-  await until(() => reported.length === 1 && jobs.snapshot().active.length === 0);
+  // g's own outcome: a late report from section 2 must not stand in for it (one did on a loaded CI runner).
+  await until(() => reported.some((o) => names.get(o.datasetId) === 'g') && jobs.snapshot().active.length === 0);
   const g = await auto('g');
   ok('3. a run that landed 10 min after it was queued recorded that length', typeof g?.lastAutoMs === 'number' && g.lastAutoMs >= 10 * MIN, JSON.stringify(g));
   const list3 = await datasets.listDatasets(pid);
