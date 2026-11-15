@@ -161,8 +161,11 @@ export function leaks(text: string): boolean {
   return text.includes(W_CANARY) || text.includes(POLICY_CANARY);
 }
 
-/** Keys that differ between two runs of the same question: times, and record or turn ids (figures never sit under them). */
-const VOLATILE = new Set(['asOf', 'computedAt', 'generatedAt', 'threadId', 'turnId', 'askId', 'createdAt', 'updatedAt', 'downloadToken', 'token', 'at', 'id']);
+/**
+ * Keys that differ between two runs of the same question: times, and record or turn ids (figures never sit under them);
+ * and an answer card's `answeredFrom`, which says where the rows come from to an editor only (test-answerSourceLinks).
+ */
+const VOLATILE = new Set(['asOf', 'computedAt', 'generatedAt', 'threadId', 'turnId', 'askId', 'createdAt', 'updatedAt', 'downloadToken', 'token', 'at', 'id', 'answeredFrom']);
 
 /**
  * The first difference between two replies, after mapping `swap`'s ids onto each

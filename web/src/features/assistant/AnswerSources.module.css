@@ -1,0 +1,141 @@
+/* "Answered from ▾" and "Also on ▸" (./AnswerSources): two quiet text buttons in the answer card's meta row, each
+   opening the kit's popover — the facts as label/value lines, the dashboards as the kit's menu rows. */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: 100%;
+  min-height: 22px;
+  padding: 0 var(--sp-4);
+  margin: 0 var(--sp-4) 0 calc(-1 * var(--sp-4));
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-11);
+  cursor: pointer;
+}
+.trigger:hover,
+.trigger[data-state='open'] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.trigger:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.trigger > svg {
+  flex: none;
+}
+.word {
+  white-space: nowrap;
+}
+/* The dataset's name: what the meta row always said, now the way in. */
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.trigger:hover .name,
+.trigger[data-state='open'] .name {
+  color: var(--text-strong);
+}
+
+/* Inside the kit's popover (its padding, its gap), every line's text where a menu row's is: the facts at one width,
+   a short list never a sliver. */
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: min(296px, calc(100vw - 56px));
+  margin: 0;
+  padding: var(--sp-4) var(--sp-8);
+}
+.fact {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--sp-8);
+  align-items: baseline;
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+}
+.fact dt {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.fact dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.dataset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+}
+.link:hover {
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.link > svg {
+  flex: none;
+}
+
+.heading {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-8) 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  min-width: min(256px, calc(100vw - 56px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  composes: item from '../../ui/floating.module.css';
+  text-decoration: none;
+}
+.rowName {
+  composes: itemText from '../../ui/floating.module.css';
+}
+.empty,
+.more {
+  margin: 0;
+  padding: 0 var(--sp-8);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.empty {
+  padding-block: var(--sp-4);
+}
+.more {
+  padding-bottom: var(--sp-4);
+}

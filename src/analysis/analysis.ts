@@ -289,6 +289,13 @@ export function summaryOf(projectId: string, data: any, publishedOnly: boolean):
   };
 }
 
+/** One stored record (parsed) as `publishedOnly` reads it: the draft, or its published copy; null when that reader has none. */
+export function analysisOf(projectId: string, data: any, publishedOnly: boolean): Analysis | null { // any: the parsed record
+  if (!isValidAnalysis(data)) return null;
+  const stored = normalize(data, projectId);
+  return publishedOnly ? asPublished(stored) : stored;
+}
+
 // Return summaries for a project's analyses, newest-updated first. Skips
 // corrupt/missing files quietly (ENOENT silent; real damage logged).
 export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]> {

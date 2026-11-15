@@ -382,7 +382,8 @@ async function charts(P: string): Promise<void> {
   const fPlainStub = await stubbed(() => call('answer:card', fPlainSpec));
   ok('NEGATIVE CONTROL: no labels, the bullet reads "Filtered to region = EU", byte-identical to a card built with no list', fPlain.bullets.includes('Filtered to region = EU.')
     && json(fPlain.filterLabels) === '["region = EU"]' && differ(fPlain, fPlainStub) === '' && json(fPlain) === json(fPlainStub), differ(fPlain, fPlainStub));
-  ok('NEGATIVE CONTROL: …its keys in the order the card always had', Object.keys(fPlain).join() === 'ok,spec,title,chartType,datasetName,data,caption,headline,bullets,chips,filterLabels,steps,notes,asOf', Object.keys(fPlain).join());
+  // `uses` and `answeredFrom` ("Answered from ▾", src/ipc/answerSources.ts) come last, after every key labels touch.
+  ok('NEGATIVE CONTROL: …its keys in the order the card always had', Object.keys(fPlain).join() === 'ok,spec,title,chartType,datasetName,data,caption,headline,bullets,chips,filterLabels,steps,notes,asOf,uses,answeredFrom', Object.keys(fPlain).join());
   // (A code under MIN_LOOSE characters is never suggested, so this one is longer.)
   const LONG = `Region code ${'x'.repeat(90)}`; // longer than an option's 80-character cut
   const E = (await datasets.saveDataset(P, { name: 'Codes', sourceKind: 'csv', columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['EMEA', 1], ['APAC', 2], [LONG, 3]] }))!.id;

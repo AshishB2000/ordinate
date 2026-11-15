@@ -49,7 +49,7 @@ Agreed on the flow page (Nov 2026). Related: [Explore](../explore/00-design.md),
 | 4 | One AI call returns a chart form, or SQL only when the form can't express it. | 1 (2 for SQL) | partly |
 | 5 | Every dataset, column, metric and term named must be real, else "Did you mean …?". | — | yes |
 | 6 | The engine computes: DuckDB on copies, compiled SQL in the warehouse for Live. | — | yes |
-| 7 | Chart, table, Ordinate's caption and bullets; "Answered from ▾", "Also on ▸". | — | partly |
+| 7 | Chart, table, Ordinate's caption and bullets; "Answered from ▾", "Also on ▸" (`src/ipc/answerSources.ts`: an editor also reads where the rows come from, a viewer the dataset alone; "Also on" finds dashboards by the dataset's id, never a list). | — | yes, a source-table answer's line with phase D |
 | 8 | Keep it: Save as visual, Verify, Add to dashboard, Alert me. Keeping a source-table answer makes its Live dataset. | — | partly |
 
 ### Step 3: what is searched

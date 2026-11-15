@@ -15,7 +15,7 @@
 // 2. BY ID: analysis:open (D: refused like a missing id; E: the published copy,
 //    whatever is asked), versions:list/get/diff/figures (no history),
 //    catalog:get / catalog:sensitivity, subscription:preview, search:query, the
-//    MCP list_dashboards — no canary, and E's published words where they belong.
+//    MCP list_dashboards, "Also on" (answer:alsoOn) — no canary, and E's published words where they belong.
 // 3. NEGATIVE CONTROL: the same calls as a project EDITOR (not an org admin)
 //    find the canaries — the walk can see them, so their absence above is the
 //    guard, not a blind walk.
@@ -119,6 +119,7 @@ void (async () => {
       ['subscription:preview E', 'subscription:preview', { projectId: P, draft: subDraft(E) }],
       ['search:query', 'search:query', { projectId: P, query: 'draftcanary' }], // ⌘K matches word starts (src/app/searchMatch.ts), not mid-word
       ['search:query board', 'search:query', { projectId: P, query: 'board' }],
+      ['answer:alsoOn', 'answer:alsoOn', { projectId: P, datasetId: s.ds }], // reads the records itself (src/ipc/answerSources.ts)
     ];
     const walk = async (who: Identity, rank: number | null) => {
       const as = callAs(who, rank, P);
@@ -147,12 +148,13 @@ void (async () => {
       && openE.analysis.name === 'Shown board' && openE.analysis.sheets[0].cards[0].heading === 'shown heading' && openE.visuals.length === 1 && !('versionKey' in (openE.published || {})), seen.get('open E')?.slice(0, 300));
     ok('viewer: no dashboard history at all — list empty, get null, diff refused', seen.get('versions:list D') === '[]' && seen.get('versions:list E') === '[]' && seen.get('versions:get E') === 'null'
       && JSON.parse(seen.get('versions:diff E')!).ok === false && JSON.parse(seen.get('versions:figures E')!).ok === false);
+    ok('viewer: "Also on" names the published one only, by its published name', JSON.parse(seen.get('answer:alsoOn')!).dashboards?.map((d: { name: string }) => d.name).join() === 'Shown board', seen.get('answer:alsoOn'));
     ok('viewer: MCP list_dashboards names the published one only', JSON.parse(seen.get('mcp list_dashboards')!).map((d: { name: string }) => d.name).join() === 'Shown board', seen.get('mcp list_dashboards'));
 
     // ── 3. NEGATIVE CONTROL: a project editor ────────────────────────────
     const editor = await walk(EDITOR, 2);
     const hits = (k: string) => CANARY.test(editor.get(k) ?? '');
-    const SPARED = ['analysis:gallery', 'home:overview', 'open D', 'versions:get E', 'versions:diff D', 'catalog:get D', 'comment:list', 'trash:list', 'search:query', 'mcp list_dashboards', 'subscription:preview D'];
+    const SPARED = ['analysis:gallery', 'home:overview', 'open D', 'versions:get E', 'versions:diff D', 'catalog:get D', 'comment:list', 'trash:list', 'search:query', 'mcp list_dashboards', 'subscription:preview D', 'answer:alsoOn'];
     ok('NEGATIVE CONTROL: the editor\'s same calls find every canary the viewer was spared', SPARED.every(hits), SPARED.filter((k) => !hits(k)).join(', '));
     ok('NEGATIVE CONTROL: the editor reads the drafts\' history', JSON.parse(editor.get('versions:list D')!).length === dKeys.length && JSON.parse(editor.get('versions:list E')!).length === eKeys.length);
     const edGallery = JSON.parse(editor.get('analysis:gallery')!) as { id: string; status: string; name: string }[];
