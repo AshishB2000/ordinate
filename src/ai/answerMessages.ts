@@ -24,6 +24,23 @@ export function answerNotSaved(): string {
   return t('answerMessages.could_not_save_this_answer_as');
 }
 
+// ── `answer:addToDashboard` (src/ipc/answerDashboard.ts) ──
+
+/** A spec with no chart form: an SQL answer, or one that cannot be read. */
+export function notAChartAnswer(): string {
+  return t('answerMessages.only_a_chart_answer_can_be');
+}
+
+/** The dashboard named is not there for the caller (deleted, or never theirs to edit). */
+export function dashboardGone(): string {
+  return t('answerMessages.that_dashboard_is_no_longer_in');
+}
+
+/** The dashboard store would not take the tile. */
+export function answerNotAdded(): string {
+  return t('answerMessages.could_not_add_this_answer_to');
+}
+
 // ── The chart form's `calc` (./answerCalc): why a table calculation was refused ──
 
 /** A calculation name the form does not know; `kinds`: the ones it does, listed. */

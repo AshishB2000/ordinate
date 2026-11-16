@@ -217,6 +217,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['answer: refresh', 'answer:refresh', { projectId: P, ...kept[d] }],
     // "Save as visual" rebuilds the card it saves — the warehouse's on a Live dataset — with a top-N and a value filter to resolve.
     ['answer: save as visual', 'answer:saveVisual', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ column: 'region', op: '!=', value: 'R1' }], top: 3 } }],
+    // "Add to dashboard" saves the same rebuilt card as a visual, then a tile of it on a new dashboard.
+    ['answer: add to dashboard', 'answer:addToDashboard', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     // A verified question is drawn once before it is kept (semantic part 3 D7): the warehouse's card on a Live dataset.
     ['verified save', 'verified:save', { projectId: P, input: { question: `Sales by region ${++asked}`, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } } }],
     // drivers, segments, scenarios
@@ -246,7 +248,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
-    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: refresh', 'answer: save as visual', 'verified save',
+    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: refresh', 'answer: save as visual', 'answer: add to dashboard', 'verified save',
     'alert test: threshold', 'key check (catalog:checkKey)', 'drill down']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {

@@ -80,6 +80,7 @@ import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { inSourceTable } from './sourceAnswers';
 import { register as registerKeep } from './sourceKeep';
+import { register as registerAddToDashboard } from './answerDashboard';
 import type { AnswerLink } from './answerLink';
 import { keepFirst, tableNote } from '../ai/sourceAnswerMessages';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
@@ -466,6 +467,7 @@ export function register(guard: Guard): void {
   registerSnapshots(computeCard); // `answer:refresh`, through THE answer door
   registerSources(); // `answer:alsoOn`
   registerKeep(); // `answer:keepTable` (./sourceKeep)
+  registerAddToDashboard(); // `answer:addToDashboard` (./answerDashboard)
   // Draw one card from a spec, now: a card no conversation turn keeps (a turn's own
   // comes with its conversation, or from `answer:refresh`). `learn` is its turn's name to remember, and `savedVisualId` the visual it was
   // saved as — handed back only while that visual exists, so a deleted one is

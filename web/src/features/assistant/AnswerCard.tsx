@@ -17,7 +17,7 @@
 // An answer with NO ROWS because a filter value is not in its column is not a
 // dead end: the server's sentence says which value, and "Did you mean" offers
 // the nearest stored ones (`noMatch`) in place of an empty chart. A good answer
-// can be kept: "Save as visual" (./SaveAsVisual), for a member who may edit.
+// can be kept: "Save as visual" (./SaveAsVisual) and "Add to dashboard" (./AddToDashboard), for a member who may edit.
 // An answer run from a "Did you mean" column carries the name that was said
 // (`learn`), and the card offers to remember it (./RememberName).
 //
@@ -57,6 +57,7 @@ import { DidYouMean, type MeantOption } from './DidYouMean';
 import { RememberName, type CardLearn } from './RememberName';
 import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
+import { AddToDashboard } from './AddToDashboard';
 import { AlertFromAnswer } from './AlertFromAnswer';
 import { KeepTable } from './KeepTable';
 import { RequestDashboard, type ChartAnswer } from './RequestDashboard';
@@ -305,6 +306,7 @@ export function AnswerCard({
             ) : (
               <>
                 <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
+                <AddToDashboard projectId={projectId} spec={spec} />
                 {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
                 <AlertFromAnswer projectId={projectId} spec={spec} />
                 <RequestDashboard projectId={projectId} turn={turn} answers={answers} />
