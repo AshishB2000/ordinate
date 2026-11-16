@@ -1,14 +1,17 @@
 // The bell's "Dashboard requests" (docs/team-folders/00-design.md, "Dashboard requests"; src/server/requests): for an
 // editor, a viewer's request they may approve — who, the name they gave it, how many charts, their note — which opens
-// the review page; for the viewer who asked, its outcome — ready (it opens the dashboard) or declined, with the
-// editor's note. Unseen first. The routes are built here from the ids; neither a row nor a push hands the browser a
-// URL. `useRequestNotice` is the toast in the open tabs of whoever a request concerns.
+// the review page; for the viewer who asked, the request while it waits (with Withdraw), then its outcome — ready (it
+// opens the dashboard) or declined, with the editor's note. Unseen first. The routes are built here from the ids;
+// neither a row nor a push hands the browser a URL. `useRequestNotice` is the toast in the open tabs of whoever a
+// request concerns (a withdrawn one only refreshes the approvers' bell).
 
 import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useServerEvent } from '../../api/events';
 import { rpc } from '../../api/client';
 import { ago } from '../../app/when';
+import { Button } from '../../ui/Button';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { ME_KEY } from '../auth/api';
@@ -25,10 +28,38 @@ const charts = (n: number): string => (n === 1 ? '1 chart' : `${n} charts`);
 function lineOf(r: RequestRow): { head: string; sub: string; go: { href: string; name: string } | null } {
   if (r.mine) {
     if (r.state === 'approved' && r.dashboardId) return { head: `Your dashboard ${r.title} is ready`, sub: r.decidedBy ? `Approved by ${r.decidedBy}` : 'Approved', go: { href: dashboardPath(r.projectId, r.dashboardId), name: 'Dashboard' } };
+    if (r.state === 'open') return { head: `Your request for ${r.title} is waiting for review`, sub: charts(r.charts), go: null };
+    if (r.state === 'drafted') return { head: `Your request for ${r.title} is being made`, sub: `Being edited by ${r.decidedBy}`, go: null };
+    if (r.state === 'withdrawn') return { head: `You withdrew your request for ${r.title}`, sub: 'Withdrawn', go: null };
     return { head: `Your request for ${r.title} was declined`, sub: r.decidedBy ? `Declined by ${r.decidedBy}` : 'Declined', go: null };
   }
   const done = r.state === 'approved' ? `Approved by ${r.decidedBy}` : r.state === 'drafted' ? `Being edited by ${r.decidedBy}` : r.state === 'declined' ? `Declined by ${r.decidedBy}` : charts(r.charts);
-  return { head: `${r.by} asked for a dashboard`, sub: done, go: { href: reviewPath(r.projectId, r.id), name: r.state === 'open' ? 'Review' : 'Open' } };
+  return { head: r.onto ? `${r.by} asked for charts on a dashboard` : `${r.by} asked for a dashboard`, sub: done, go: { href: reviewPath(r.projectId, r.id), name: r.state === 'open' ? 'Review' : 'Open' } };
+}
+
+/** The requester's Withdraw on their own waiting request: nothing is made, and the approvers' rows go. */
+function Withdraw({ r }: { r: RequestRow }) {
+  const client = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  async function withdraw(): Promise<void> {
+    setBusy(true);
+    try {
+      const d = (await rpc('request:withdraw', { projectId: r.projectId, id: r.id })) as { ok: boolean; error?: string };
+      if (!d.ok) toast(d.error || 'Could not withdraw the request.');
+      await client.invalidateQueries({ queryKey: MENTIONS_KEY });
+    } catch (e) {
+      toast(e instanceof Error && e.message ? e.message : 'Could not withdraw the request.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className={s.rowAct}>
+      <Button size="sm" variant="ghost" icon="undo" loading={busy} aria-label={`Withdraw your request for ${r.title}`} onClick={() => void withdraw()}>
+        Withdraw
+      </Button>
+    </div>
+  );
 }
 
 export function RequestsForYou({ items, onOpened }: { items: readonly RequestRow[]; onOpened: () => void }) {
@@ -81,6 +112,7 @@ export function RequestsForYou({ items, onOpened }: { items: readonly RequestRow
                   )}
                 </span>
               </button>
+              {r.mine && r.state === 'open' && <Withdraw r={r} />}
             </li>
           );
         })}

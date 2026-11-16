@@ -169,7 +169,9 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'reports:get': 'ITEM',
   'reports:list': 'LIST',
   'reports:open': 'ITEM',
-  'request:create': 'FOLDER', // the caller's own answer turns on datasets they open (`closed` otherwise); tells those with Edit on every one (E9)
+  'request:create': 'FOLDER', // the caller's own answer turns on datasets they open (`closed` otherwise); an existing dashboard they open (else as none) or a folder they open (`closed` otherwise); tells those with Edit on every one (E9)
+  'request:folders': 'FOLDER', // the folders the caller opens, by name: Everyone and the rest of their access (E9)
+  'request:withdraw': 'FOLDER', // the caller's own open request only; someone else's answers as none (E9)
   'scenario:compare': 'OPEN', // scenarios have no reach: every dataset they read must be open
   'scenario:compute': 'OPEN',
   'scenario:get': 'ITEM',
@@ -371,9 +373,9 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'reports:duplicate': 'CREATE',
   'reports:generated': 'EDIT',
   'reports:update': 'EDIT',
-  'request:approve': 'FOLDER', // Edit on every dataset the charts read; the dashboard lands as E6's landsIn says, and is published through Publish (E9)
+  'request:approve': 'FOLDER', // Edit on every dataset the charts read and on the dashboard it names; a new one lands as E6's landsIn says or in a picked folder the caller edits and the requester opens, and is published through Publish (E9)
   'request:decline': 'FOLDER', // Edit on every dataset the charts read (E9)
-  'request:preview': 'FOLDER', // Edit on every dataset the charts read; each chart through THE answer door as the reviewer (E9)
+  'request:preview': 'FOLDER', // Edit on every dataset the charts read and on the dashboard it names; each chart through THE answer door as the reviewer; folder names only of those the reviewer edits and the requester opens (E9)
   'sample:seed': 'PROJECT',
   'scenario:create': 'CREATE',
   'scenario:delete': 'EDIT',

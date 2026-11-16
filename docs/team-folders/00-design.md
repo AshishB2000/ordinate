@@ -917,34 +917,58 @@ the dashboard from Home.
   (`open` → `approved` | `drafted` | `declined`; `drafted` → `approved` at the first Publish), `decided_by` /
   `decided_at`, `answer` (a decline's note) and `dashboard_id`; and `dashboard_request_inbox` — the bell's rows, as
   `mentions` and `editor_asks`: one per approver told (`role` 'approver') and the requester's once it is decided
-  ('requester'), each with its `seen_at`, at most 200 a member. Forced RLS on both. No `withdrawn` state and no
-  `request:withdraw` yet.
-- **Contracts** (`src/api/requests.ts`): `request:create` (`read`, audited, as `editors:ask`), `request:preview`,
-  `request:approve` (`publish`: true is Approve and publish, false is **Edit**) and `request:decline` (a note required),
-  all `write`. There is no `request:list` or `request:get`: the bell's rows ride on `mentions:list` (`requests`), as
+  ('requester'), each with its `seen_at`, at most 200 a member. Forced RLS on both. 0038 adds the state `withdrawn`,
+  `target_id` (an existing dashboard the charts go onto) and `folder_id` (the requester's suggested folder for a new
+  one), and an index of the open ones by requester. The requester's own row is written at send, already seen, so their
+  bell lists the waiting request (with **Withdraw**) and no badge; a decision makes it new.
+- **Contracts** (`src/api/requests.ts`): `request:create` (`read`, audited, as `editors:ask`; an existing
+  `dashboardId` or a suggested `folderId`, not both), `request:withdraw` (`read`, audited: the requester's own, someone
+  else's answers as a missing one) and `request:folders` (`read`: the folders the caller opens, by path, for the
+  dialog); `request:preview`, `request:approve` (`publish`: true is Approve and publish, false is **Edit**; `folderId`,
+  one of the preview's choices) and `request:decline` (a note required), all `write`. There is no `request:list` or `request:get`: the bell's rows ride on `mentions:list` (`requests`), as
   viewers' asks do, and the review page is `request:preview`. Classified `FOLDER` in `scripts/folderReaders.ts`;
-  `request:create` is `META` in `rowPolicyReaders` and `columnAccessReaders` (it returns an id).
+  `request:create`, `request:withdraw` and `request:folders` are `META` in `rowPolicyReaders` and `columnAccessReaders`
+  (an id, a state, folder names).
 - **Create** (`src/server/requests/requests.ts`): the turns are read through `copilot.findTurn`, the caller's own
-  threads only, so someone else's turn answers as a missing one; an answer with no chart form (an SQL answer, a source
-  table's) is refused with a sentence; every dataset must be open to the requester (`mustOpen`: `closed`) and still
-  exist. Anyone who reads the project may send one; the web offers **Request a dashboard** to viewers only.
-- **Approvers**: `openers(…, { kind: 'dataset', id }, 'edit')` per dataset the charts read, intersected, never the
+  threads only, so someone else's turn answers as a missing one; an SQL answer (*An answer written as SQL can't go on a
+  dashboard*) and a source table's (*An editor must keep this table first*) are refused, each with its own sentence; a
+  chart on a Live dataset goes as one on an extract. Every dataset must be open to the requester (`mustOpen`: `closed`)
+  and still exist. A `dashboardId` must be one the requester reads (`getAnalysis` as them: a draft they cannot read, a
+  closed or a missing one answer alike, *not one you can open*), and its name becomes the request's; a `folderId` must
+  be one they open (`closed` otherwise, naming nothing). Anyone who reads the project may send one; the web offers
+  **Request a dashboard** to viewers only.
+- **Approvers**: `openers(…, 'edit')` per dataset the charts read, and on the named dashboard, intersected, never the
   requester — org admins, project admins, and editors whose team has Edit on every one's folder; with no folder, the
-  project's writers. There is no separate "request's folder": the dashboard lands where E6 lands a derived item, so
-  Edit on its datasets is Edit there. With nobody left, the send says so and nothing is written.
+  project's writers. With nobody left, the send says so and nothing is written.
 - **Not twice, not a flood** (shared counters, as asks): the same charts (`stableStringify` of the forms, hashed) from
   the same person in the same project within a day are *already sent*; at most `REQUESTS_PER_DAY` (10) a person a day,
-  across projects. A refused or failed send is given back. The design's "20 open per project" is not built: the day's
-  limit bounds it.
+  across projects; and at most `OPEN_PER_PROJECT` (20) open per person in a project, counted inside the insert's
+  transaction under an advisory lock on them and the project (two sends at once cannot both pass), refused typed
+  (`code: 'too_many_open'`). A refused or failed send is given back. A withdrawal clears its *already sent* key, so the
+  same charts asked again are a new request.
+- **Withdraw** (`withdrawRequest`): the requester's open request, unless an approval holds it (*someone is approving
+  it*), becomes `withdrawn` (`decided_by` the requester) in one statement, and the approvers' bell rows are deleted in
+  the same transaction; a `requests:changed` push (state `withdrawn`, no toast) refreshes their bells. Nothing is made;
+  approving after it is *already decided*; the review page says *Priya withdrew it*.
 - **Review and approve share one function** (`planOf`): every chart through `computeCard` (THE answer door: folders,
   row access rules, hidden columns) as the reviewer, and where it lands — `landsIn(projectId, undefined, datasets)`:
-  the first dataset's folder outside Everyone, else Everyone, refused unless the reviewer edits it. Approving runs it
+  the first dataset's folder outside Everyone, else Everyone, refused unless the reviewer edits it — or the requester's
+  suggested folder, or the one the reviewer picks, when among the **choices** (`./where.ts` `folderChoices`): the
+  folders the reviewer edits that the requester opens (their access resolved in a context of their own, as they are
+  now), so *ready* never names a dashboard its requester cannot open. A pick outside them is refused (*Pick a folder you
+  edit and Priya can open*), even to an org admin, before the claim. The preview carries the choices and the
+  suggestion's name (only when the reviewer opens it). Approving runs it
   again and makes exactly that: each chart through `saveCardAsVisual` (Save as visual's path, a version each), one
   dashboard of them (`arrangeSheet` and `sanitizeCards`, the plan builder's arrangement and whitelist; a version)
   inside `withLanding`, so it is placed before its record is written, then Publish itself (`drafts.publish`, with
-  D16). Every action needs `mustEdit` on every dataset the charts read: an editor who cannot open one is `closed`, one
-  who only views its folder `edit`; a viewer never reaches it (`write`). A chart that cannot be drawn now makes nothing
-  and says which. No `folderId` picker, and no target "an existing dashboard" yet.
+  D16). Every action needs `mustEdit` on every dataset the charts read and on the named dashboard: an editor who cannot
+  open one is `closed`, one who only views its folder `edit`; a viewer never reaches it (`write`). A chart that cannot
+  be drawn now makes nothing and says which.
+- **An existing dashboard**: the charts are saved as visuals and added to its DRAFT as one new sheet, *Requested by
+  Priya* (`updateAnalysis` under its lock, a version), never a new dashboard. Approve and publish then publishes it —
+  unless its draft already had edits nobody published (`statusOf` `edited`, read under the lock): then nothing is
+  published, the request is `drafted`, the reply says why (*Its draft already had edits nobody published …*), and its
+  next Publish approves the request and tells the requester. The preview says which (`creates.onto.publishes`).
 - **Exactly one**: an approval first *claims* the open row (`decided_by` / `decided_at` set, state still open; a claim
   older than ten minutes may be taken again), so two approvers at once make one dashboard; a failure before anything
   is made gives the claim back; a dashboard made but refused at Publish (D16 on a related dataset) is recorded as
@@ -959,12 +983,17 @@ the dashboard from Home.
   request approved and tells the requester then. The badge (`unseenCount`, on `/api/auth/me`) and `mentions:seen`
   count and mark the request rows too.
 - **The web**: *Request a dashboard* on a viewer's answer card (`RequestDashboard.tsx`: the conversation's chart
-  answers to tick, a name, a note); the bell's **Dashboard requests** (`RequestsForYou.tsx`: an approver's row opens the
-  review page, the requester's ready row the dashboard, a declined one shows the note) and its toasts; the review page
-  `/requests/:projectId/:requestId` (`RequestReviewPage.tsx`: the charts, the note, *Approving makes*, **Approve and
-  publish**, **Edit**, **Decline…**, and a decided request's outcome with a link). Editors' own *Add to dashboard* on an
+  answers to tick — its SQL and source-table answers listed but never ticked, each with its sentence — **Put the charts
+  on** a new dashboard (a name, and a **Folder (optional)** among those they open, when there is more than Everyone) or
+  **a dashboard already there** (one they open), a note); the bell's **Dashboard requests** (`RequestsForYou.tsx`: an
+  approver's row opens the review page; the requester's waiting row has **Withdraw**, their ready row opens the
+  dashboard, a declined one shows the note) and its toasts; the review page `/requests/:projectId/:requestId`
+  (`RequestReviewPage.tsx`: the charts, the note, *Approving makes* — a sheet on the named dashboard, or a new one with
+  *Priya suggested Shared* and a **Folder** picker among the choices — **Approve and publish**, **Edit**,
+  **Decline…**, and a decided or withdrawn request's outcome with a link). Editors' own *Add to dashboard* on an
   answer does not exist yet; only the viewer's request was built.
-- **Tested**: `scripts/test-dashboardRequests.ts` (6 checks without a database, 56 with) — the contracts; no db; who
+- **Tested**: `scripts/test-dashboardRequests.ts` (10 checks without a database, 103 with; the rest of E9 in
+  `scripts/dashboardRequestsMore.ts`, run on its bench) — the contracts; no db; who
   is told (NEGATIVE CONTROLS: an Everyone-only editor, an editor viewing Ops, another viewer and the requester are not;
   on Plain both editors are); someone else's turn; 403 without a grant; the canary (no figure of the charts in either
   table; NEGATIVE CONTROL: the viewer's kept turns hold them); the email; the preview's figures `Object.is` the door's
@@ -972,13 +1001,20 @@ the dashboard from Home.
   approval made; refusals (`closed`, `edit`, 403) making nothing (control: the Ops lead may); one dashboard, in Ops,
   published, the requester told and reading its copy; a second approval and two at once make no second; Edit tells no
   one until Publish; decline; dedupe; the limit (control: another person, whose Plain request lands in Everyone); seen
-  and the badge; RLS. Vitest `web/src/features/dashboards/requests/requests.test.tsx`; e2e `web/e2e/requests.e2e.ts`
-  (Postgres): Priya requests from the Assistant, Sam reviews from the toast and approves, Priya opens it from the bell
-  — screens `requests-dialog`, `-review`, `-review-phone`, `-bell`, `-bell-phone`, `-dashboard`, both themes.
-- **Left**: Withdraw; *No longer available*; a target of an existing dashboard (its *Requested by* sheet); a folder
-  picker; requests from source tables and SQL answers (the Live dataset and *Not checked* lines of the preview); *Priya
-  sees fewer rows*; *Older* after 30 days; a project's deletion leaving its request rows (they stop showing to anyone
-  who no longer reads it; an org admin's row reaches a review that finds no dataset).
+  and the badge; RLS. Then withdraw (NEGATIVE CONTROLS: another viewer, an approver, a held claim; another request's
+  rows stand), an existing dashboard (NEGATIVE CONTROL: Everyone-only editors neither told nor allowed; a draft with
+  edits not published), the folders (NEGATIVE CONTROL: the reviewer's Finance is no choice, even for the admin), SQL
+  and source-table answers (control: a chart goes), a Live chart (NEGATIVE CONTROL: the warehouse down makes nothing),
+  the cap (control: another person sends), a project's deletion (control: another project's rows stay). Vitest
+  `web/src/features/dashboards/requests/requests.test.tsx` (17); e2e `web/e2e/requests.e2e.ts` (Postgres): Priya
+  requests from the Assistant, Sam reviews from the toast and approves, Priya opens it from the bell, then asks for a
+  chart on that dashboard and withdraws it — screens `requests-dialog`, `-dialog-onto`, `-review`, `-review-phone`,
+  `-bell`, `-bell-phone`, `-dashboard`, `-withdraw`, `-withdraw-phone`, both themes.
+- **Project deletion** drops its requests (`dropGrants`, beside its team tables), and their bell rows with them
+  (ON DELETE CASCADE).
+- **Left**: *No longer available*; a source table's answer made into a Live dataset at approval and an SQL answer kept
+  as SQL (the Live dataset and *Not checked* lines of the preview) — both refused for now, with their sentences; *Priya
+  sees fewer rows*; *Older* after 30 days.
 
 ## Migrations
 
@@ -995,6 +1031,7 @@ row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids co
 | 0035 `dashboard_reads` (E5, as built) | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, lowercase-checked, PK on all four, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; two triggers on `records` (`projects/%/analyses/%`) for writers without `ordinate.folders`: that dashboard's rows and the project's marker go |
 | 0036 `team_tables` (E8, as built) | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, `hidden` on include table rows only, team → `teams` ON DELETE CASCADE, forced RLS; `assistant_search.audience` CHECK widened to `viewer` (a documented table's labelled row) |
 | 0037 `dashboard_requests` (E9, as built) | `dashboard_requests (org_id, id, project_id, requester, title, note, charts jsonb, state, decided_by, decided_at, answer, dashboard_id, created_at)` with partial indexes for the open ones and the drafted ones by dashboard, and one by requester; `dashboard_request_inbox (org_id, user_email, request_id, project_id, role, created_at, seen_at)` → `dashboard_requests` ON DELETE CASCADE; forced RLS on both (`users.request_email` is 0033's, reused) |
+| 0038 `dashboard_requests_more` (E9, as built) | `dashboard_requests.state` CHECK widened to `withdrawn` (`NOT VALID`, no row changes); `target_id uuid` and `folder_id uuid`, nullable; `dashboard_requests_open_by (org_id, project_id, requester) WHERE state = 'open'` |
 
 `kind` in `folder_items` has no CHECK: the app validates it (`dataset`, `dashboard`), so a later
 placed kind needs no constraint change.
@@ -1030,7 +1067,7 @@ Each PR is one review, with its tests in the same PR, and classifies the contrac
 | — | ~~**Release tag** with E1–E6 (D22)~~: replaced at E7 by `ORDINATE_FOLDERS`, off by default, and the upgrade.md section | |
 | E7 | `src/api/folders.ts`: `folder:tree`, `folder:create`, `folder:rename`, `folder:delete`, `folder:setShareFigures`, `folder:access`, `folder:grant`, `folder:moveImpact`, `folder:move`; the rail, chips, Move dialog, Share → Folders, Admin → Teams → Folders, empty states; *Move everything to Everyone* | `test-folderChannels` (depth, names, delete-empty, admin-only top level, the move hash); safety net 11; `folders.e2e.ts` in both themes |
 | E8 | Connection tables: 0036, `teamTables:*`, the Tables screen, index keys for tables, the viewer answer and Explore path (with or after phase D) | `test-teamTables` (include, exclude, schema, union, hidden columns); safety net: an unticked table's name in no viewer reply or prompt |
-| E9 | Dashboard requests: 0037, `src/api/requests.ts`, Home rows, the review page, pushes and email | `test-dashboardRequests`; `requests.e2e.ts` |
+| E9 | Dashboard requests: 0037 and 0038, `src/api/requests.ts`, Home rows, the review page, pushes and email | `test-dashboardRequests`; `requests.e2e.ts` |
 
 E2 to E6 can land in any order after E1, but each must be in before the release tag. E8 and E9 do
 not depend on E7 and may merge after the tag in either order.

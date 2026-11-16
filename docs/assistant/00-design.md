@@ -557,13 +557,16 @@ answers' chart forms, never a figure; the dashboard and its visuals are made onl
 - **Viewer**: **Request a dashboard** on an answer card (`web/src/features/assistant/RequestDashboard.tsx`, viewers
   only): the conversation's chart answers to tick (this one ticked), a name and a note. `request:create` (`read`,
   audited) takes the caller's own turns only, on datasets they open; the same charts again the same day are *already
-  sent*, and a person may send 10 a day. Charts on a dataset only: a source table's or an SQL answer is refused with a
-  sentence, for now.
+  sent*, a person may send 10 a day and have 20 waiting in a project. Charts on a dataset only (Live or copied): a
+  source table's answer (*an editor must keep this table first*) and an SQL answer are listed but never ticked, for
+  now. The charts go on a new dashboard (with a folder they open to suggest) or on one already there that they open;
+  their bell lists the waiting request, with **Withdraw**.
 - **Told**: editors and admins with Edit on every dataset the charts read (`openers`, intersected), through the path
   Ask an editor uses: a bell row (**Dashboard requests**), a `requests:changed` push with no title or note, and an email
   for those with **Email me about data asks and dashboard requests** on (`users.request_email`).
 - **Review** (`/requests/:projectId/:requestId`, `request:preview`): every chart computed now through the answer door
-  as the reviewer, the note, and exactly what approving makes (a visual per chart, the dashboard, its folder).
+  as the reviewer, the note, and exactly what approving makes (a visual per chart, the dashboard — or a sheet on the
+  one named — and its folder, which the reviewer may change among those they edit and the requester opens).
   **Approve and publish** makes them (Save as visual's path, then a dashboard placed where E6 lands it, then Publish);
   **Edit** makes the dashboard as a draft and opens the editor, and the viewer is told at its first Publish; **Decline**
   needs a note. Exactly one dashboard per request, however many approve at once.

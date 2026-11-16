@@ -16,6 +16,7 @@ import { AnswerSql } from './AnswerSql';
 import type { ActivityStep, Provenance, Turn } from './api';
 import { DidYouMean, type Learn } from './DidYouMean';
 import { LinkCard } from './LinkCard';
+import type { ChartAnswer } from './RequestDashboard';
 import s from './Dock.module.css';
 
 /** "kind: name · dataset: x · columns: a, b… · stats app-computed" — a footnote, not pills. */
@@ -98,8 +99,13 @@ export function Transcript({
   /** Ask a question again in this conversation: a checked link, once added, answers the question it was found for. */
   onAsk?: (question: string) => void;
 }) {
-  // The conversation's charts on a dataset: what a viewer's "Request a dashboard" may put on it (./RequestDashboard).
-  const answers = turns.flatMap((t) => (t.role === 'assistant' && t.answer && typeof t.answer.table !== 'string' ? [{ turnId: t.id, title: t.answer.title || 'Answer' }] : []));
+  // The conversation's answers a viewer's "Request a dashboard" offers (./RequestDashboard): its charts, and — shown
+  // but not offered — its source tables' answers and SQL answers.
+  const answers: ChartAnswer[] = turns.flatMap((t): ChartAnswer[] => {
+    if (t.role !== 'assistant') return [];
+    if (t.answer) return [{ turnId: t.id, title: t.answer.title || 'Answer', ...(typeof t.answer.table === 'string' ? { kind: 'table' as const } : {}) }];
+    return t.sql ? [{ turnId: t.id, title: t.sql.title || 'SQL answer', kind: 'sql' }] : [];
+  });
   return (
     <>
       {turns.map((t, i) => (

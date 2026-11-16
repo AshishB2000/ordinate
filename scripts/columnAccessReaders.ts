@@ -167,6 +167,8 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'reports:list': 'META',
   'reports:open': 'META',
   'request:create': 'META', // the caller's own answers' chart forms to the editors; returns an id, no cell, label or figure
+  'request:folders': 'META', // folder names the caller opens; no cell, label or figure
+  'request:withdraw': 'META', // the caller's own request's state; no cell, label or figure
   'scenario:compare': 'NET',
   'scenario:compute': 'NET',
   'scenario:get': 'META',

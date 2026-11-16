@@ -207,7 +207,8 @@
   background: var(--ok-soft);
   color: var(--ok-text);
 }
-.declined {
+.declined,
+.withdrawn {
   background: var(--surface-2);
   color: var(--muted);
 }

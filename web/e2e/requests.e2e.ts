@@ -4,9 +4,10 @@
 // "Request a dashboard" on one, ticks the other, names it and sends it. Sam (a project editor) sits on Home: his open
 // tab shows "Priya asked for a dashboard in Pipeline" with Review, which opens the review page — the charts with
 // today's figures, computed as Sam, and what approving makes. Approve and publish opens the new dashboard. Priya's tab
-// shows the notice; her bell's row opens the dashboard, with both charts. Every page holds the RPC budget (≤ 25 per
-// load) and fails on any console error or CSP violation. Screens in both themes, desktop and phone width, go to
-// web/e2e/__screens__/requests-*.png.
+// shows the notice; her bell's row opens the dashboard, with both charts. Then she asks for a chart onto that
+// dashboard ("A dashboard already there"), sees the request waiting in her bell, and withdraws it. Every page holds the
+// RPC budget (≤ 25 per load) and fails on any console error or CSP violation. Screens in both themes, desktop and
+// phone width, go to web/e2e/__screens__/requests-*.png.
 //
 // Needs Postgres: without DATABASE_URL this spec prints one skip line.
 
@@ -137,6 +138,29 @@ if (!adminUrl) {
       await p.page.getByText('Pipeline by region').first().waitFor();
       await screens(p.page, 'requests-dashboard');
       console.log(`rpc: Priya's dashboard ${p.rpc.loads.at(-1)?.rpcs ?? 0}`);
+
+      // A chart onto the dashboard she now opens; then, from her bell, she takes it back.
+      await p.page.goto(`/assistant?thread=${thread}`);
+      await settled(p.page);
+      const stage = p.page.getByTestId('answer-card').filter({ hasText: 'Pipeline by stage' });
+      await stage.getByRole('button', { name: 'Request a dashboard' }).click();
+      const onto = p.page.getByRole('dialog', { name: 'Request a dashboard' });
+      await onto.getByRole('radio', { name: 'A dashboard already there' }).check();
+      await onto.getByRole('combobox', { name: 'Dashboard' }).click();
+      await p.page.getByRole('option', { name: 'Pipeline review' }).click();
+      await screensInPlace(p.page, 'requests-dialog-onto');
+      await onto.getByRole('button', { name: 'Send request' }).click();
+      await stage.getByTestId('request-sent').waitFor();
+      await p.page.getByRole('button', { name: /^Notifications/ }).click();
+      const mine = p.page.getByRole('dialog', { name: 'Notifications' });
+      await mine.getByRole('button', { name: /^Your request for Pipeline review is waiting for review/ }).waitFor();
+      await screensInPlace(p.page, 'requests-withdraw');
+      await p.page.setViewportSize(PHONE);
+      await screensInPlace(p.page, 'requests-withdraw-phone');
+      await p.page.setViewportSize(DESK);
+      await mine.getByRole('button', { name: 'Withdraw your request for Pipeline review' }).click();
+      await mine.getByText('You withdrew your request for Pipeline review').waitFor();
+      assert.equal(await mine.getByRole('button', { name: /^Withdraw your request/ }).count(), 0);
       const problems = p.problems();
       assert.deepEqual(problems, [], `Priya's page: ${problems.join('\n')}`);
     } finally {

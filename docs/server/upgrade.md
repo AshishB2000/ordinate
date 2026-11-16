@@ -959,6 +959,15 @@ them go. Below it, once any project has a folder: first, with `ORDINATE_FOLDERS`
 Move everything to Everyone** in each such project (a project admin), so no item is in a folder; the rollback then
 widens nothing.
 
+### Withdraw, an existing dashboard, a folder (`0038_dashboard_requests_more`)
+
+The requester can withdraw a waiting request, ask for charts on a dashboard they already open, or suggest a folder for
+a new one; the reviewer may pick another folder among those they edit and the requester opens. A person has at most
+20 requests waiting in a project, and deleting a project now deletes its requests. The migration widens the state's
+CHECK by one value (`withdrawn`) and adds two nullable columns (`target_id`, `folder_id`) and an index; it rewrites no
+row. **Rolling out or back:** an older pod reads a withdrawn request as decided, and approves a request for an
+existing dashboard as a new dashboard of its own.
+
 ## Compose
 
 From a checkout:

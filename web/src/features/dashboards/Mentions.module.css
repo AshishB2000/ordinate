@@ -130,6 +130,13 @@
 .rowNew {
   box-shadow: inset 2px 0 var(--accent);
 }
+/* An action under a row (Withdraw on the requester's waiting request, RequestsForYou.tsx): its own button, never inside the row's. */
+.rowAct {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--sp-8) var(--sp-4);
+  margin-top: -2px;
+}
 .rowTop {
   display: flex;
   align-items: center;
