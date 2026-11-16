@@ -33,6 +33,7 @@ import type { AlertEvent, AlertRule } from './alerts';
 import * as datasets from '../data/datasets';
 import { levelsOf } from '../server/authz/folderGate';
 import { wholeProject } from '../server/authz/folders';
+import { hidesWrite, levelOfAll, refuseBelowEdit, type Anchor } from '../server/authz/folderWrites';
 import { connectionDatasetIds } from '../data/sourceNames';
 import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
@@ -181,6 +182,19 @@ export async function liveRuleRefusal(projectId: string, raw: any): Promise<stri
   return byRows && typeof raw.datasetId === 'string' && isLive(await datasets.getDatasetMeta(projectId, raw.datasetId)) ? alerts.liveRuleByRows() : null;
 }
 
+/** What a rule follows (docs/team-folders, "What lives where"): its dashboard when it was made from one, else its dataset. */
+const anchorOf = (r: Pick<AlertRule, 'createdFrom' | 'datasetId'>): Anchor[] => [r.createdFrom?.analysisId ? { kind: 'dashboard', id: r.createdFrom.analysisId } : { kind: 'dataset', id: r.datasetId }];
+
+/** D18, checked before the lock (whose failure is a quiet fallback): a stored rule closed to the caller is null, as missing; below Edit refuses. */
+async function editable(projectId: string, ruleId: string): Promise<AlertRule | null> {
+  const stored = (await loadStored(projectId)).rules.find((r) => r.id === ruleId);
+  if (!stored) return null;
+  const level = await levelOfAll(projectId, anchorOf(stored));
+  if (hidesWrite(level)) return null;
+  refuseBelowEdit(level);
+  return stored;
+}
+
 /** Create or replace one rule. Returns the STORED rule (sanitized), or null. */
 export async function saveRule(projectId: string, raw: any): Promise<AlertRule | null> {
   const withId = { ...(raw || {}), id: UUID_RE.test(String(raw?.id || '')) ? raw.id : randomUUID() };
@@ -192,6 +206,10 @@ export async function saveRule(projectId: string, raw: any): Promise<AlertRule |
   }
   const clean = alerts.sanitizeRule(withId);
   if (!clean) return null;
+  // Shared folders (D18): Edit where the rule lands, and on the one it replaces — never over a closed rule's id.
+  const stored = (await loadStored(projectId)).rules.find((r) => r.id === clean.id);
+  if (stored) refuseBelowEdit(await levelOfAll(projectId, anchorOf(stored)));
+  refuseBelowEdit(await levelOfAll(projectId, anchorOf(clean)));
   return withAlerts(projectId, null, async (file) => {
     const i = file.rules.findIndex((r) => r.id === clean.id);
     // An EDIT keeps the edge state (armed / anomalyKeys / history): changing a
@@ -227,6 +245,7 @@ export async function saveRule(projectId: string, raw: any): Promise<AlertRule |
 
 /** Apply a small patch (enabled, quiet hours, snooze) without a round trip through the dialog. */
 export async function patchRule(projectId: string, ruleId: string, patch: any): Promise<AlertRule | null> {
+  if (!(await editable(projectId, ruleId))) return null; // closed: "No such rule.", as for a missing one
   return withAlerts(projectId, null, async (file) => {
     const i = file.rules.findIndex((r) => r.id === ruleId);
     if (i < 0) return null;
@@ -247,6 +266,9 @@ export async function patchRule(projectId: string, ruleId: string, patch: any): 
 // ponytail: the trashed rule as stored; saveRule's sanitizer already shaped it once
 export async function restoreRule(projectId: string, raw: any): Promise<boolean> {
   if (!raw || typeof raw.id !== 'string') return false;
+  const level = await levelOfAll(projectId, anchorOf(raw)); // its Trash copy's anchor (D18): closed is as missing
+  if (hidesWrite(level)) return false;
+  refuseBelowEdit(level);
   return withAlerts(projectId, false, async (file) => {
     if (file.rules.some((r) => r.id === raw.id)) return false;
     const { events, ...rule } = raw;
@@ -269,6 +291,7 @@ export async function restoreRule(projectId: string, raw: any): Promise<boolean>
 export async function deleteRule(projectId: string, ruleId: string): Promise<boolean> {
   const seen = (await load(projectId)).rules.find((r) => r.id === ruleId);
   if (!seen) return false;
+  refuseBelowEdit(await levelOfAll(projectId, anchorOf(seen))); // D18: open, so at least view — Edit to delete
   if (seen.fromWatch) {
     try { await datasets.setAutoRefresh(projectId, seen.datasetId, { watch: false }); } catch (_) { /* best effort */ }
   }

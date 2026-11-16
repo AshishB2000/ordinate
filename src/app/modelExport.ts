@@ -19,6 +19,7 @@ import * as projects from './projects';
 import * as recordFs from './recordFs';
 import { listFullTerms } from '../analysis/terms';
 import { listRelationships } from '../analysis/relationships';
+import { openOnly } from '../server/authz/folderGate';
 import { loadStrict, type CatalogFile, type ColumnDoc } from './catalog';
 import type { Relationship } from '../analysis/relationships';
 import { getCalendar } from '../analysis/dateIntel';
@@ -90,7 +91,9 @@ export async function exportModel(projectId: string): Promise<ModelExport> {
   // A catalog that cannot be read fails the export: it must not pass for "nothing documented".
   const [project, list, catalog, summaries, terms, rels] = await Promise.all([
     projects.getProject(projectId), datasets.listDatasets(projectId), loadStrict(projectId),
-    metrics.listMetrics(projectId), listFullTerms(projectId), listRelationships(projectId),
+    metrics.listMetrics(projectId), listFullTerms(projectId), listRelationships(projectId).then(async (all) =>
+      // Shared folders: a link to or from a dataset the caller cannot open is not theirs to carry (its columns name it).
+      openOnly(projectId, 'dataset', await openOnly(projectId, 'dataset', all, (r) => r.from.datasetId), (r) => r.to.datasetId)),
   ]);
   const stored = (await Promise.all(summaries.map((m) => metrics.getMetric(projectId, m.id)))).filter((m): m is metrics.Metric => !!m);
   // A metric another tool's layer defines stays with its layer (part 7 D13): never in the files, only listed.

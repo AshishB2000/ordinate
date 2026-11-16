@@ -70,6 +70,8 @@ export interface World {
   as<T>(who: Person, fn: () => Promise<T>): Promise<T>;
   /** Writes the folder rows: until then P has no folder besides Everyone. */
   plantFolders(): Promise<void>;
+  /** A throwaway set (section 8's writes): a dataset and a dimension placed in `where`, and what follows them, made by boss. */
+  fresh(where: 'hr' | 'ops', word: string): Promise<Items & { ds2: string }>;
   close(): Promise<void>;
 }
 
@@ -233,8 +235,16 @@ export async function world(label: string): Promise<World | null> {
     await place('dashboard', ops.board, folders.ops);
     await place('dashboard', reach.finBoard, folders.fin);
   };
+  const fresh = async (where: 'hr' | 'ops', word: string): Promise<Items & { ds2: string }> => {
+    const ds = await save(`${word} data`, 'x_bonus', word);
+    const ds2 = await as('boss', async () => must('dim', (await datasets.saveDataset(P, { name: `${word} dim`, sourceKind: 'csv', columns: [{ name: 'dept', type: 'text' }, { name: 'label', type: 'text' }], rows: [0, 1, 2].map((i) => [`d${i}`, `${word}_label_${i}`]) }))?.id));
+    for (const id of [ds, ds2]) await pool.query('INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, $3, $4, $5, $6)', ['acme', P, 'dataset', id.toLowerCase(), folders[where], 'boss@acme.test']);
+    const it = await itemsOn(ds, word);
+    await pool.query('INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, $3, $4, $5, $6)', ['acme', P, 'dashboard', it.board.toLowerCase(), folders[where], 'boss@acme.test']);
+    return { ...it, ds2 };
+  };
   return {
-    P, folders, hr, ops, plain, opsBoard: ops.board, hrDim, labelled, topic, versions, reach, teams: T, uid: uid as Record<Person, string>, pool, call, mcp, as, plantFolders,
+    P, folders, hr, ops, plain, opsBoard: ops.board, hrDim, labelled, topic, versions, reach, teams: T, uid: uid as Record<Person, string>, pool, call, mcp, as, plantFolders, fresh,
     async close() {
       await app.close();
       await pool.end();

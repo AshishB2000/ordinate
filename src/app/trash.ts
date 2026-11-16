@@ -35,6 +35,10 @@ import { listBoth, lockedKeys } from '../analysis/verifiedQuestions';
 import { keyClash } from '../analysis/verifiedRules';
 import { verifiedRestoreTaken } from '../analysis/verifiedMessages';
 import { wholeProject } from '../server/authz/folders';
+import { forgetPlacements } from '../server/authz/folderWrites';
+// Shared folders (D18): a delete or restore needs Edit on what the record follows — its live record, else its Trash
+// copy (a dataset or dashboard keeps its placement there). Closed to the caller: as missing; below Edit: refused.
+import { mayChangeRecord as mayChange, mayChangeStored } from './recordOpen';
 
 export const RETENTION_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -120,6 +124,7 @@ export async function trashRecord(
     if (ok) changed(projectId);
     return { ok };
   }
+  if (!(await mayChangeStored(projectId, type, liveFile(projectId, type, id)))) return { ok: false }; // closed: as missing
   // The visuals first: if the dataset move fails they are still reachable
   // from its entry — restoring nothing would be worse than restoring both.
   let cascaded = 0;
@@ -177,7 +182,7 @@ export async function restore(
 async function restoreNow(projectId: string, type: RecordType, id: string): Promise<{ ok: boolean; error?: string; restored: Restored[] }> {
   const restored: Restored[] = [];
   const rec = await store.readEntry(projectId, type, id);
-  if (!rec) return { ok: false, error: 'That item is no longer in the trash.', restored };
+  if (!rec || !(await mayChange(projectId, type, rec))) return { ok: false, error: 'That item is no longer in the trash.', restored }; // closed: as missing
   if (type === 'verified') {
     const both = await wholeProject(() => listBoth(projectId)); // a chart's question or an SQL one, in every folder (team-folders)
     const taken = keyClash([...both.spec, ...both.sql].map((t) => t.rec), [rec.question, ...(Array.isArray(rec.phrasings) ? rec.phrasings : [])]);
@@ -213,6 +218,7 @@ export async function purge(projectId: string, type: RecordType, id: string): Pr
   if (!isRecordType(type) || !store.entryPath(projectId, type, id)) return false;
   await store.removeEntry(projectId, type, id);
   if (type !== 'alert') await versions.forget(projectId, type, id);
+  await forgetPlacements(projectId, [{ kind: type, id }]); // a dataset's or dashboard's, gone for good
   changed(projectId);
   return true;
 }
@@ -223,6 +229,7 @@ export async function empty(projectId: string): Promise<number> {
     await store.removeEntry(projectId, e.type, e.id);
     if (e.type !== 'alert') await versions.forget(projectId, e.type, e.id);
   }
+  await forgetPlacements(projectId, all.map((e) => ({ kind: e.type, id: e.id })));
   if (all.length) changed(projectId);
   return all.length;
 }
@@ -246,12 +253,15 @@ export async function purgeExpired(now = Date.now()): Promise<number> {
   let n = 0;
   for (const pid of ids) {
     let here = 0;
+    const gone: Array<{ kind: string; id: string }> = [];
     for (const e of await store.listEntries(pid)) {
       if (daysLeft(e.deletedAt, now) > 0) continue;
       await store.removeEntry(pid, e.type, e.id);
       if (e.type !== 'alert') await versions.forget(pid, e.type, e.id);
+      gone.push({ kind: e.type, id: e.id });
       here++;
     }
+    await forgetPlacements(pid, gone);
     if (here) changed(pid);
     n += here;
   }

@@ -287,8 +287,8 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'dataset:composeSave': 'CREATE',
   'dataset:copyLive': 'CREATE',
   'dataset:delete': 'EDIT',
-  'dataset:parsePaste': 'CREATE',
-  'dataset:pickAndParse': 'CREATE',
+  'dataset:parsePaste': 'OWN', // stages a parsed table for the caller (no project): dataset:composeSave lands it (E6)
+  'dataset:pickAndParse': 'OWN', // stages a parsed upload for the caller: dataset:composeSave lands it (E6)
   'dataset:refresh': 'EDIT',
   'dataset:removeStep': 'EDIT',
   'dataset:reorderSteps': 'EDIT',
@@ -331,11 +331,11 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'model:exportOssie': 'EXPORT',
   'model:importApply': 'CREATE',
   'model:importPlan': 'CREATE', // what model:importApply would write
-  'pipelines:run': 'PROJECT', // editing a pipeline that names a closed dataset is refused (E6)
-  'pipelines:setNodeSchedule': 'PROJECT',
-  'pipelines:setPaused': 'PROJECT',
-  'pipelines:setPolicy': 'PROJECT',
-  'pipelines:setSchedule': 'PROJECT',
+  'pipelines:run': 'EDIT', // the project's pipeline, run as the system: Edit on every dataset it names (E6)
+  'pipelines:setNodeSchedule': 'EDIT', // the project's pipeline: Edit on every dataset it names (E6)
+  'pipelines:setPaused': 'EDIT', // the project's pipeline: Edit on every dataset it names (E6)
+  'pipelines:setPolicy': 'EDIT', // the project's pipeline: Edit on every dataset it names (E6)
+  'pipelines:setSchedule': 'EDIT', // the project's pipeline: Edit on every dataset it names (E6)
   'plan:fix': 'CREATE', // a plan's steps make items: Edit on the target folder
   'plan:next': 'CREATE',
   'plan:skip': 'CREATE',
@@ -373,7 +373,7 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'scorecard:delete': 'EDIT',
   'scorecard:duplicate': 'CREATE',
   'scorecard:update': 'EDIT',
-  'segments:rfmSave': 'EDIT',
+  'segments:rfmSave': 'CREATE', // a new RFM dataset: lands with the one it reads (D18)
   'segments:saveColumn': 'EDIT',
   'snapshots:restore': 'EDIT',
   'snapshots:setKeep': 'EDIT',
@@ -384,7 +384,7 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'sourceTable:list': 'PROJECT',
   'sourceTable:read': 'PROJECT',
   'sourceTable:save': 'PROJECT',
-  'sql:prepareSave': 'CREATE', // a SQL dataset: lands in its first parent's folder (D18)
+  'sql:prepareSave': 'OPEN', // runs the SQL (the net refuses a closed dataset) and stages the result: composeSave's `sql` origin lands it with the datasets it reads (E6)
   'stats:addToDashboard': 'EDIT',
   'stats:saveFormula': 'EDIT',
   'story:build': 'CREATE',

@@ -84,11 +84,20 @@ export async function lockedUpdate<T>(
   const saved = await recordFs.locked(at.file, async () => {
     const cur = await read();
     if (!cur) return null;
+    // Shared folders (D18): a record closed to the caller is gone, as a missing one — before the tag is compared, so a
+    // stale base never answers with a closed record's tag; below Edit on what it follows refuses, before and after — a
+    // refusal after `apply` rolls its write back (the lock's transaction). A dashboard's added cards need their datasets
+    // open. Lazy: those stores reach this module.
+    const open = require('./recordOpen') as typeof import('./recordOpen');
+    if (!(await open.mayChangeRecord(at.projectId, kind, cur.rec))) return null;
     if (base !== undefined && base !== null && base !== cur.tag) {
       throw Object.assign(new Error(recordChanged(kind)), { code: 'ERECORDCHANGED', tag: cur.tag });
     }
     before = cur.tag;
-    return apply(cur.rec);
+    const next = await apply(cur.rec);
+    await open.mustEditRecord(at.projectId, kind, next);
+    if (kind === 'dashboard') await open.mustOpenAdded(at.projectId, cur.rec, next);
+    return next;
   });
   if (saved) {
     const tag = contentTag(kind, saved);

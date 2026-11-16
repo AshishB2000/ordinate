@@ -23,7 +23,7 @@ import { describeAnswer } from '../ai/answerFacts';
 import { describeFilter } from '../analysis/metricFormat';
 import { describePeriod, getCalendar } from '../analysis/dateIntel';
 import { keyClash, questionKey, sanitizeVerified, type VerifiedQuestion } from '../analysis/verifiedRules';
-import { listBoth, lockedKeys, readVerified, writeVerified } from '../analysis/verifiedQuestions';
+import { getVerified, listBoth, lockedKeys, writeVerified } from '../analysis/verifiedQuestions';
 import * as msg from '../analysis/verifiedMessages';
 import { listTerms } from '../analysis/terms';
 import * as datasets from '../data/datasets';
@@ -102,7 +102,7 @@ export async function saveVerifiedQuestion(projectId: string, input: SpecInput, 
   if (!spec) return { ok: false, error: msg.verifiedNotRead(), field: 'spec' };
   if (spec.table) return { ok: false, error: keepFirst(), field: 'spec' }; // a verified question names a dataset: keep the table as one first
   if (!questionKey(input.question)) return { ok: false, error: msg.verifiedNoWords(), field: 'question' };
-  if (at && !(await readVerified(projectId, at.id))) return { ok: false, error: msg.verifiedGone() };
+  if (at && !(await getVerified(projectId, at.id))) return { ok: false, error: msg.verifiedGone() }; // one in a folder the caller cannot open: as gone
   const now = new Date().toISOString();
   const draft = sanitizeVerified({
     id: at ? at.id : randomUUID(), projectId, question: input.question, phrasings: input.phrasings ?? [], note: input.note, spec,

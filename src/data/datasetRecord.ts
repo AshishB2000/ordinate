@@ -27,6 +27,7 @@ import type { IncrementalSettings } from './incremental';
 import { cadenceAllowed, needsIncremental, sanitizeRunMs } from './refreshCadence';
 import * as recordFs from '../app/recordFs';
 import { entryPath } from '../app/trashStore';
+import { placeFirst } from '../server/authz/folderWrites';
 
 
 function getProjectsBase(): string {
@@ -321,6 +322,8 @@ export async function writeRecordKeepingPolicy(file: string, obj: object): Promi
     for (const k of KEPT_RECORD_KEYS) delete next[k];
     // A copy of a dataset with rules is born with them: no moment without.
     Object.assign(next, stored && typeof stored === 'object' ? keptOf(stored) : keptOf(first?.rules));
+    // …and a new dataset is placed where its request lands it (shared folders D18) before it exists: never in Everyone.
+    if (stored === null) await placeFirst(String(next.projectId ?? ''), 'dataset', String(next.id ?? ''));
     await writeJsonAtomic(file, next);
   });
 }

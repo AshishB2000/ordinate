@@ -5,6 +5,7 @@ import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import { isLive } from '../data/liveDataset';
 import { sanitizeEncoding } from '../analysis/visuals';
+import { editsOnly } from '../server/authz/folderWrites';
 
 // Privacy IPC — sensitivity proposals, the Share policy, and the policy applied
 // to a chart the renderer already holds (Copy data, a pivot's CSV).
@@ -58,7 +59,8 @@ export function register(): void {
   ipcMain.handle('privacy:scan', async (_e, { projectId, datasetIds }: { projectId?: unknown; datasetIds?: unknown } = {}) => {
     const pid = str(projectId);
     // A Live dataset holds no stored values to scan; its columns are read at the warehouse.
-    const ids = Array.isArray(datasetIds) ? datasetIds.map(str).filter(Boolean) : (await datasets.listDatasets(pid)).filter((d) => !isLive(d)).map((d) => d.id);
+    // None named: every dataset the caller may change (shared folders D18 — one they only view is not scanned).
+    const ids = Array.isArray(datasetIds) ? datasetIds.map(str).filter(Boolean) : await editsOnly(pid, (await datasets.listDatasets(pid)).filter((d) => !isLive(d)).map((d) => d.id));
     let found = 0;
     for (const id of ids) found += (await store.scanDataset(pid, await datasets.getDataset(pid, id))).length;
     return { ok: true, found, scanned: ids.length };

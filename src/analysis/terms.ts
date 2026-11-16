@@ -26,6 +26,7 @@ import { logger } from '../app/logger';
 import * as msg from '../data/termMessages';
 import { nameClash } from './termNames';
 import { describeFilter, describeFilterHidden } from './metricFormat';
+import { mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export const MAX_TERM_FILTERS = 50;
 const MAX_DESCRIPTION = 500;
@@ -218,6 +219,7 @@ export async function saveTerm(projectId: string, input: TermInput): Promise<Ter
   const id = randomUUID();
   const now = new Date().toISOString();
   const term = normalize({ ...input, id, createdAt: now, updatedAt: now }, projectId);
+  await mustEditRecord(projectId, 'term', term);
   await fs.promises.mkdir(termsDir(projectId), { recursive: true });
   await writeJsonAtomic(termFile(projectId, id), term);
   return term;

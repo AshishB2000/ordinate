@@ -73,6 +73,8 @@ import { baseName, periodMetricValue } from './periodMetric';
 import { periodSeries } from './periodChart';
 import { funnelMetricValue } from './funnelMetric';
 import { saveMetricChecked, updateMetricChecked } from './metricSave';
+import { levelOfItem, levelsOf } from '../server/authz/folderGate';
+import { atLeast, wholeProject } from '../server/authz/folders';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -453,10 +455,13 @@ async function sparkColumn(projectId: string, m: Metric): Promise<string | null>
 async function ensureDefaults(projectId: string, datasetId?: string): Promise<metrics.MetricSummary[]> {
   const existing = await metrics.listMetrics(projectId);
   if (existing.length) return existing;
+  // Shared folders (D18): "none yet" is the project's — metrics in folders the caller cannot open still count — and
+  // the defaults are proposed only on a dataset the caller edits (one they view gets none, quietly).
+  if ((await levelsOf(projectId, 'dataset')) && (await wholeProject(() => metrics.listMetrics(projectId))).length) return existing;
 
   const list = await datasets.listDatasets(projectId);
   const target = datasetId ? list.find((d) => d.id === datasetId) : list[0];
-  if (!target) return existing;
+  if (!target || !atLeast(await levelOfItem(projectId, 'dataset', target.id), 'edit')) return existing;
   const meta = await datasets.getDatasetMeta(projectId, target.id);
   if (!meta || meta.live?.semantic || meta.live?.semanticUnreadable) return existing; // a layer's dataset: sums over its dimensions would not be its metrics
 

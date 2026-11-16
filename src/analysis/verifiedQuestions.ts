@@ -16,6 +16,7 @@ import * as recordFs from '../app/recordFs';
 import { contentTag, lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeVerified, sanitizeVerifiedSql, type VerifiedQuestion, type VerifiedSqlQuestion } from './verifiedRules';
 import { levelsOf, opens } from '../server/authz/folderGate'; // shared folders: it follows its dataset (docs/team-folders D3, D12)
+import { mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 const dirOf = (projectId: string): string => path.join(projectDir(projectId), RECORD_DIR.verified);
 const fileOf = (projectId: string, id: string): string => path.join(dirOf(projectId), id + '.json');
@@ -143,6 +144,7 @@ export async function writeVerifiedSql(projectId: string, q: VerifiedSqlQuestion
   const file = fileOf(projectId, next.id);
   const held = await readManyBoth(projectId, [next.id]);
   if (held.spec.length || held.sql.length) return null; // a new question only: an SQL one is never edited in place
+  await mustEditRecord(projectId, 'verified', next); // Edit on EVERY dataset its SQL reads (recordOpen.questionDatasets)
   await fs.promises.mkdir(dirOf(projectId), { recursive: true });
   await writeJsonAtomic(file, next);
   return next;
@@ -158,6 +160,7 @@ export async function writeVerified(projectId: string, q: VerifiedQuestion, base
   if (!isValidId(projectId) || !next) return null;
   const file = fileOf(projectId, next.id);
   if (!(await readVerified(projectId, next.id))) {
+    await mustEditRecord(projectId, 'verified', next); // its datasets (recordOpen.questionDatasets)
     await fs.promises.mkdir(dirOf(projectId), { recursive: true });
     await writeJsonAtomic(file, next);
     return next;

@@ -11,7 +11,7 @@ export const semantic = {
   // "Add as dataset": describes the model, saves the record and queues its first sync (which writes the mirror metrics).
   'connection:addSemanticDataset': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, connId: Uuid, model: z.string().min(1).max(512), name: z.string().max(200).optional(), maxCacheAgeSec: z.number().int().optional() }),
+    input: z.strictObject({ projectId: Uuid, connId: Uuid, model: z.string().min(1).max(512), name: z.string().max(200).optional(), maxCacheAgeSec: z.number().int().optional(), folderId: Uuid.optional() }), // folderId: where it lands (shared folders D18)
     project: byProjectId,
   }),
 } as const;

@@ -89,6 +89,7 @@ export const analyses = {
       // "Save mine as a copy" brings the editor's style; absent, the workspace default.
       style: z.looseObject({}).optional(),
       parameters: Parameters.optional(),
+      folderId: Uuid.optional(), // shared folders (docs/team-folders D18): where it lands, else Everyone
     }),
     project: byProjectId,
   }),
@@ -165,7 +166,7 @@ export const analyses = {
   // (dashboards.ts DASHBOARD_STYLE_PRESETS); without one, the workspace default.
   'analysis:buildPlan': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, plan: Plan, style: z.enum(['auto', 'clean', 'executive', 'dense', 'dark']).optional() }),
+    input: z.strictObject({ projectId: Uuid, plan: Plan, style: z.enum(['auto', 'clean', 'executive', 'dense', 'dark']).optional(), folderId: Uuid.optional() }), // folderId: where it lands (shared folders D18)
     project: byProjectId,
   }),
   // The starter layouts (starterPlan.ts StarterKind): builds VISUAL records from

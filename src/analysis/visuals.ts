@@ -43,6 +43,7 @@ import { sanitizeCompare } from './dateIntel';
 import type { CompareMode } from './dateIntel';
 import { logger } from '../app/logger';
 import { AGGREGATIONS, type Aggregation } from '../data/aggregations';
+import { mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export type VizAggregation = Aggregation | 'none';
 
@@ -618,6 +619,7 @@ export async function saveVisual(
     updatedAt: now,
     schemaVersion: 2,
   };
+  await mustEditRecord(projectId, 'visual', visual);
   await fs.promises.mkdir(visualsDir(projectId), { recursive: true });
   await writeJsonAtomic(visualFilePath(projectId, id), visual);
   return visual;
@@ -693,6 +695,7 @@ export async function duplicateVisual(projectId: string, id: string): Promise<Vi
     updatedAt: now,
     schemaVersion: 2,
   };
+  await mustEditRecord(projectId, 'visual', copy);
   await fs.promises.mkdir(visualsDir(projectId), { recursive: true });
   await writeJsonAtomic(visualFilePath(projectId, newId), copy);
   return copy;

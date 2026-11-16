@@ -29,7 +29,7 @@ const Table = z.strictObject({ projectId: Uuid, id: Uuid });
 
 export const inputTables = {
   // New dataset → Input table: a name and the column definitions.
-  'input:create': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, name: z.string().max(120), columns: Columns }), project: byProjectId }),
+  'input:create': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, name: z.string().max(120), columns: Columns, folderId: Uuid.optional() }), project: byProjectId }), // folderId: where it lands (shared folders D18)
   // The table as the grid shows it, and what is wrong with it.
   'input:load': rpc({ access: 'read', input: Table, project: byProjectId }),
   // The batches made since the last save; the reply is the stored table and its check.

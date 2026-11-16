@@ -49,6 +49,8 @@ import { levelOfItem, levelsOf } from '../server/authz/folderGate';
 import { asPublished, audienceCopy, copyOf, copyReadsOf, sanitizePublished, statusOf, type DashboardStatus, type PublishedCopy } from './publishedCopy';
 import { useDashboardReadsDescriber } from '../server/dashboardReads';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { hidesWrite, placeFirst, refuseBelowEdit } from '../server/authz/folderWrites'; // shared folders' writes (docs/team-folders D18)
+import { mustOpenAdded } from '../app/recordOpen';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -240,16 +242,25 @@ async function migrateReady(projectId: string, id: string, data: any): Promise<a
       }
       delete stored.ready;
       return true;
-    }) ?? data;
+    }, true) ?? data;
   } catch (err: any) { // any: a write that could not happen
     logger.warn('[analysis] could not move a Ready dashboard to a published copy:', id, err?.message);
     return data;
   }
 }
 
-/** The stored JSON of one record, read, patched in place by `fn` (true = write it back) and written, under its lock. Null when missing. */
-export async function patchStored(projectId: string, id: string, fn: (stored: any) => Promise<boolean>): Promise<any> { // any: the stored record
+/**
+ * The stored JSON of one record, read, patched in place by `fn` (true = write it back) and written, under its lock. Null
+ * when missing — or closed to the caller (shared folders D18, as missing); below Edit on its folder refuses. `upkeep`: a
+ * format migration any reader may cause (migrateReady), not an edit.
+ */
+export async function patchStored(projectId: string, id: string, fn: (stored: any) => Promise<boolean>, upkeep = false): Promise<any> { // any: the stored record
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  if (!upkeep) {
+    const level = await levelOfItem(projectId, 'dashboard', id);
+    if (hidesWrite(level)) return null;
+    refuseBelowEdit(level);
+  }
   const file = analysisFilePath(projectId, id);
   return recordFs.locked(file, async () => {
     let data: any; // any: the stored record, patched as parsed
@@ -409,6 +420,8 @@ export async function saveAnalysis(
     updatedAt: now,
     schemaVersion: 1,
   };
+  await mustOpenAdded(projectId, null, analysis); // shared folders (D18): a card needs its dataset open
+  await placeFirst(projectId, 'dashboard', id); // …and the dashboard lands where the request says, before it exists
   await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
   await writeJsonAtomic(analysisFilePath(projectId, id), analysis);
   return analysis;

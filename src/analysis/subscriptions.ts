@@ -19,6 +19,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import { isValidId } from '../app/ids';
 import * as recordFs from '../app/recordFs';
+import { hidesWrite, levelOfAll, refuseBelowEdit } from '../server/authz/folderWrites';
 import { sanitizeSubSchedule, sanitizeTimeZone, type SubSchedule } from './subscriptionSchedule';
 import { untitledSubscription, type RunCode, type RunDetail } from './subscriptionText';
 
@@ -233,8 +234,20 @@ export async function listSubscriptions(projectId: string): Promise<Subscription
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/**
+ * Shared folders (D18): a subscription follows its dashboard. One closed to the caller is as missing (false); below
+ * Edit on its folder refuses. No read when nothing restricts the caller.
+ */
+async function editsBoard(projectId: string, analysisId: string): Promise<boolean> {
+  const level = await levelOfAll(projectId, [{ kind: 'dashboard', id: analysisId }]);
+  if (hidesWrite(level)) return false;
+  refuseBelowEdit(level);
+  return true;
+}
+
 export async function createSubscription(projectId: string, input: SubscriptionInput, owner: string, now = new Date()): Promise<Subscription | null> {
   if (!isValidId(projectId)) return null;
+  if (!(await editsBoard(projectId, String(input.analysisId ?? '')))) return null;
   const at = now.toISOString();
   const s = normalize({ ...input, id: randomUUID(), owner, since: at, createdAt: at, updatedAt: at }, projectId);
   await write(s);
@@ -251,7 +264,8 @@ export async function updateSubscription(projectId: string, id: string, input: S
   if (!isValidId(projectId) || !isValidId(id)) return null;
   return recordFs.locked(file(projectId, id), async () => {
     const cur = await getSubscription(projectId, id);
-    if (!cur) return null; // gone meanwhile: never written back
+    if (!cur || !(await editsBoard(projectId, cur.analysisId))) return null; // gone meanwhile (or closed to the caller): never written back
+    if (input.analysisId !== undefined && !(await editsBoard(projectId, String(input.analysisId)))) return null;
     const at = (opts.now ?? new Date()).toISOString();
     const { viewId: _was, ...kept } = cur; // a cleared view must not survive the merge
     const next: Subscription = { ...kept, ...definitionOf({ ...cur, ...input }), updatedAt: at };
@@ -280,6 +294,8 @@ export async function stampRun(projectId: string, id: string, change: (run: RunS
 
 export async function deleteSubscription(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
+  const cur = await getSubscription(projectId, id);
+  if (cur && !(await editsBoard(projectId, cur.analysisId))) return true; // closed to the caller: as a missing one (gone is success)
   return recordFs.locked(file(projectId, id), async () => {
     await recordFs.rm(file(projectId, id), { force: true });
     return true;

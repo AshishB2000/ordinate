@@ -21,6 +21,7 @@ import { detectSensitive } from '../data/sensitivity';
 import { scanDataset } from '../app/privacyStore';
 import type { Cell, TableData } from '../data/transforms';
 import { logger } from '../app/logger';
+import { landsIn, withLanding } from '../server/authz/folderWrites';
 
 const MAX_ROWS = 1_000_000;
 
@@ -197,7 +198,7 @@ async function resolveCaptureLink(
  * and stays exactly as fast as it was before the composer existed.
  */
 export async function composeSave(
-  { projectId, name, base, joins, steps, sourceKind, origin, retype }: any = {},
+  { projectId, name, base, joins, steps, sourceKind, origin, retype, folderId }: any = {},
   ctx: { progress?: (fraction: number, note?: string) => void; checkCancelled?: () => void } = {},
 ) {
   try {
@@ -225,86 +226,92 @@ export async function composeSave(
       if ('error' in d) return { ok: false, error: d.error };
       keptOrigin = { ...keptOrigin, deps: d.deps };
     }
+    // Shared folders (D18): it lands in the folder the request names, else with its first parent outside Everyone — a
+    // saved base, a joined dataset, the datasets its SQL reads — so no restricted parent's rows land in Everyone.
+    const parents = [...r.parts.map((p: { id?: unknown }) => p.id), ...(keptOrigin && keptOrigin.kind === 'sql' ? keptOrigin.deps : [])];
+    const folder = await landsIn(projectId, folderId, parents);
+    return await withLanding(projectId, folder, async () => {
 
-    // No joins: an ordinary save. Same rows, same origin, same speed as before.
-    if (!list.length) {
-      const save = () => datasets.saveDataset(projectId, {
+      // No joins: an ordinary save. Same rows, same origin, same speed as before.
+      if (!list.length) {
+        const save = () => datasets.saveDataset(projectId, {
+          name: finalName,
+          sourceKind: sourceKind || (r.baseRes.id ? 'combined' : 'csv'),
+          columns: r.baseRes.table.columns,
+          rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
+          origin: keptOrigin,
+          capture: captureLink ?? undefined,
+        }, writing);
+        // A saved dataset copied as is (no joins, so no `composed` origin to name it): born with its row access rules.
+        const saved = r.baseRes.id ? await savedFrom(projectId, r.baseRes.id, save) : await save();
+        if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+        await importStage.drop(base && base.inline && base.inline.stagedId);
+        progress(0.88, 'Applying the column mapping');
+        const withSteps = await applyInitialSteps(projectId, saved.id, steps);
+        const retyped = await applyRetype(projectId, saved.id, retype);
+        if (captureLink && captureLink.entryId) {
+          await history.setDatasetId(captureLink.entryId, saved.id)
+            .catch((e: any) => logger.error('[history] setDatasetId failed:', e.message));
+        }
+        progress(0.95, 'Checking data quality');
+        await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
+        await scanDataset(projectId, retyped || withSteps || saved); // sensitivity proposals; never throws
+        return { ok: true, dataset: slim(retyped || withSteps || saved), warnings: [] };
+      }
+
+      // The chain's base must be a saved dataset for `composed` to be able to name it.
+      let baseId = r.baseRes.id;
+      let alsoSaved: string | null = null;
+      if (!baseId) {
+        const savedBase = await datasets.saveDataset(projectId, {
+          name: r.baseRes.name,
+          sourceKind: sourceKind || 'csv',
+          columns: r.baseRes.table.columns,
+          rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
+          origin: keptOrigin,
+        });
+        if (!savedBase) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+        await importStage.drop(base && base.inline && base.inline.stagedId);
+        baseId = savedBase.id;
+        alsoSaved = savedBase.name;
+      }
+
+      const res = combine.composeTables(r.baseRes.table, r.chain, MAX_ROWS);
+      if (!res.columns.length) return { ok: false, error: 'That combination produced no columns.' };
+
+      const warnings = res.warnings.slice();
+      let rows = res.rows;
+      if (rows.length > MAX_ROWS) {
+        warnings.push(`Kept the first ${MAX_ROWS.toLocaleString()} rows.`);
+        rows = rows.slice(0, MAX_ROWS);
+      }
+
+      const saved = await datasets.saveDataset(projectId, {
         name: finalName,
-        sourceKind: sourceKind || (r.baseRes.id ? 'combined' : 'csv'),
-        columns: r.baseRes.table.columns,
-        rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
-        origin: keptOrigin,
-        capture: captureLink ?? undefined,
+        sourceKind: 'combined',
+        columns: res.columns,
+        rows,
+        // Ids come from main's own loaded records, never from the payload.
+        origin: {
+          kind: 'composed',
+          baseId,
+          joins: r.chain.map((c, i) => ({
+            datasetId: r.parts[i + 1].id,
+            mode: combine.normalizeCombineMode(c.mode),
+            on: c.on,
+          })),
+        },
       }, writing);
-      // A saved dataset copied as is (no joins, so no `composed` origin to name it): born with its row access rules.
-      const saved = r.baseRes.id ? await savedFrom(projectId, r.baseRes.id, save) : await save();
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-      await importStage.drop(base && base.inline && base.inline.stagedId);
+      if (alsoSaved) warnings.push(`"${alsoSaved}" was saved too, so this dataset can be refreshed.`);
       progress(0.88, 'Applying the column mapping');
       const withSteps = await applyInitialSteps(projectId, saved.id, steps);
       const retyped = await applyRetype(projectId, saved.id, retype);
-      if (captureLink && captureLink.entryId) {
-        await history.setDatasetId(captureLink.entryId, saved.id)
-          .catch((e: any) => logger.error('[history] setDatasetId failed:', e.message));
-      }
       progress(0.95, 'Checking data quality');
       await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
       await scanDataset(projectId, retyped || withSteps || saved); // sensitivity proposals; never throws
-      return { ok: true, dataset: slim(retyped || withSteps || saved), warnings: [] };
-    }
-
-    // The chain's base must be a saved dataset for `composed` to be able to name it.
-    let baseId = r.baseRes.id;
-    let alsoSaved: string | null = null;
-    if (!baseId) {
-      const savedBase = await datasets.saveDataset(projectId, {
-        name: r.baseRes.name,
-        sourceKind: sourceKind || 'csv',
-        columns: r.baseRes.table.columns,
-        rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
-        origin: keptOrigin,
-      });
-      if (!savedBase) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-      await importStage.drop(base && base.inline && base.inline.stagedId);
-      baseId = savedBase.id;
-      alsoSaved = savedBase.name;
-    }
-
-    const res = combine.composeTables(r.baseRes.table, r.chain, MAX_ROWS);
-    if (!res.columns.length) return { ok: false, error: 'That combination produced no columns.' };
-
-    const warnings = res.warnings.slice();
-    let rows = res.rows;
-    if (rows.length > MAX_ROWS) {
-      warnings.push(`Kept the first ${MAX_ROWS.toLocaleString()} rows.`);
-      rows = rows.slice(0, MAX_ROWS);
-    }
-
-    const saved = await datasets.saveDataset(projectId, {
-      name: finalName,
-      sourceKind: 'combined',
-      columns: res.columns,
-      rows,
-      // Ids come from main's own loaded records, never from the payload.
-      origin: {
-        kind: 'composed',
-        baseId,
-        joins: r.chain.map((c, i) => ({
-          datasetId: r.parts[i + 1].id,
-          mode: combine.normalizeCombineMode(c.mode),
-          on: c.on,
-        })),
-      },
-    }, writing);
-    if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-    if (alsoSaved) warnings.push(`"${alsoSaved}" was saved too, so this dataset can be refreshed.`);
-    progress(0.88, 'Applying the column mapping');
-    const withSteps = await applyInitialSteps(projectId, saved.id, steps);
-    const retyped = await applyRetype(projectId, saved.id, retype);
-    progress(0.95, 'Checking data quality');
-    await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws
-    await scanDataset(projectId, retyped || withSteps || saved); // sensitivity proposals; never throws
-    return { ok: true, dataset: slim(retyped || withSteps || saved), warnings };
+      return { ok: true, dataset: slim(retyped || withSteps || saved), warnings };
+    });
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Could not save the dataset' };
   }

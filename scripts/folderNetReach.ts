@@ -126,7 +126,9 @@ export async function reachSection(W: H.World, open: Array<[string, string, unkn
 
   // D16: Publish may not start sharing a dataset the publisher cannot open.
   const card = { id: '4f1f0c3e-7a40-4a3a-9b5e-1d2c3b4a5f60', type: 'metric', layout: { x: 0, y: 0, w: 4, h: 3 }, metric: { datasetId: hr.ds, column: 'salary', aggregation: 'sum', label: 'New total' } };
-  const made = await W.call('ed', 'analysis:create', { projectId: P, name: 'Ed board', sheets: [{ name: 'One', cards: [card] }] });
+  // padmin makes the draft: since E6, ed cannot add a card on a dataset they cannot open (D18) — only publish one there.
+  const made = await W.call('padmin', 'analysis:create', { projectId: P, name: 'Ed board', sheets: [{ name: 'One', cards: [card] }] });
+  ok('E6 (D18): ed may not make that draft themselves — a card needs its dataset open', H.refused(await W.call('ed', 'analysis:create', { projectId: P, name: 'Ed board', sheets: [{ name: 'One', cards: [card] }] })));
   const edBoard = String(made.body?.id ?? made.body?.analysis?.id ?? '');
   const refusedPublish = await W.call('ed', 'analysis:publish', { projectId: P, id: edBoard });
   ok('D16: ed publishing an Everyone board that newly reads HR refuses 409 `folder` / `publish`, naming nothing', H.refused(refusedPublish, 'publish') && !H.CANARY.test(refusedPublish.text), short(refusedPublish));

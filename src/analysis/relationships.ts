@@ -22,6 +22,8 @@ import * as queryCache from '../engine/queryCache';
 import * as recordFs from '../app/recordFs';
 import { logger } from '../app/logger';
 import type { KeyStats } from './joinJs';
+import { datasetsAt, hidesWrite, levelOfAll, refuseBelowEdit } from '../server/authz/folderWrites'; // shared folders (docs/team-folders D18)
+import type { FolderLevel } from '../server/authz/folders';
 
 export type Cardinality = 'many_to_one' | 'one_to_one';
 export const CARDINALITIES: readonly Cardinality[] = ['many_to_one', 'one_to_one'];
@@ -125,6 +127,16 @@ export function labelClash(list: Relationship[], rel: Relationship): string | nu
   return list.find((r) => r.id !== rel.id && !sameEdge(r, rel) && pair(r) === pair(rel) && r.label?.toLowerCase() === name)?.label ?? null;
 }
 
+/**
+ * A relationship's level for its writes (docs/team-folders, "What lives where"): both datasets open, and Edit on one —
+ * `none` when either is closed, `view` when the caller edits neither.
+ */
+async function relLevel(projectId: string, r: Pick<Relationship, 'from' | 'to'>): Promise<FolderLevel> {
+  const [a, b] = [await levelOfAll(projectId, datasetsAt([r.from.datasetId])), await levelOfAll(projectId, datasetsAt([r.to.datasetId]))];
+  if (a === 'none' || b === 'none') return 'none';
+  return a === 'view' && b === 'view' ? 'view' : 'edit';
+}
+
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
 function modelFile(projectId: string): string {
@@ -187,9 +199,11 @@ export async function updateRelationships(projectId: string, fn: (list: Relation
 export async function saveRelationship(projectId: string, raw: unknown): Promise<Relationship | null> {
   const parsed = sanitizeRelationship(raw);
   if (!parsed) return null;
+  refuseBelowEdit(await relLevel(projectId, parsed));
   let saved: Relationship | null = null;
-  const written = await updateRelationships(projectId, (list) => {
+  const written = await updateRelationships(projectId, async (list) => {
     const old = list.find((r) => r.id === parsed.id) ?? list.find((r) => sameEdge(r, parsed));
+    if (old) refuseBelowEdit(await relLevel(projectId, old)); // never over an edge the caller could not change
     // A save without a label (every release-1 save) keeps the same edge's own; a changed edge does not. Never the
     // warning: it is derived, and the release that writes it recomputes it (absent once the edge no longer warns).
     // An empty label that IS sent clears it (Rename to nothing).
@@ -206,10 +220,14 @@ export async function saveRelationship(projectId: string, raw: unknown): Promise
 export async function deleteRelationship(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(id)) return false;
   let found = false;
-  const written = await updateRelationships(projectId, (list) => {
+  const written = await updateRelationships(projectId, async (list) => {
+    const gone = list.find((r) => r.id === id);
+    const level = gone ? await relLevel(projectId, gone) : 'none';
+    if (!gone || hidesWrite(level)) return list; // an edge to or from a closed dataset: as missing
+    refuseBelowEdit(level);
     const next = list.filter((r) => r.id !== id);
-    found = next.length !== list.length;
-    return found ? next : list;
+    found = true;
+    return next;
   });
   return written && found;
 }

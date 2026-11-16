@@ -19,6 +19,7 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
 import { followsAll, openOrNull } from './followsOpen'; // shared folders: a story follows every chart and metric it shows (docs/team-folders D3)
+import { mayChangeStored, mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export interface Story {
   id: string;
@@ -143,6 +144,7 @@ export async function saveStory(projectId: string, input: { name?: unknown; bloc
     updatedAt: now,
     schemaVersion: 1,
   };
+  await mustEditRecord(projectId, 'story', story);
   await fs.promises.mkdir(storiesDir(projectId), { recursive: true });
   await writeJsonAtomic(storyFilePath(projectId, story.id), story);
   return story;
@@ -174,6 +176,7 @@ export async function updateStory(projectId: string, id: string, patch: { name?:
 
 export async function deleteStory(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
+  if (!(await mayChangeStored(projectId, 'story', storyFilePath(projectId, id)))) return true; // closed to the caller: as a missing one (gone is success)
   try {
     await recordFs.rm(storyFilePath(projectId, id), { force: true });
     return true;
