@@ -101,7 +101,8 @@ export type LiveFilter =
   | { kind: 'contains'; column: string; value: string }
   | { kind: 'empty'; column: string; negate: boolean }
   | { kind: 'in'; column: string; values: Cell[]; negate: boolean; binary?: true }
-  | { kind: 'range'; column: string; from?: string; to?: string };
+  /** `partitionTime`: BigQuery's `_PARTITIONTIME` pseudo-column (./liveDateRange), a base filter only, compiled as a TIMESTAMP range. */
+  | { kind: 'range'; column: string; from?: string; to?: string; partitionTime?: true };
 
 /**
  * The whole question. A plain JSON value — the executor's cache key is
@@ -132,7 +133,7 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'calculatedUnreadable' | 'calcDialect' | 'calcTooLarge' | 'distinctByWeekCalendar' | 'semanticPending' | LayerRefusalCode;
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'calculatedUnreadable' | 'calcDialect' | 'calcTooLarge' | 'distinctByWeekCalendar' | 'semanticPending' | 'requiredFilter' | LayerRefusalCode;
 
 /** What a semantic layer cannot answer (part 7, D16): sentences in ./semantic/semanticRefusals.ts, naming the layer. */
 export type LayerRefusalCode =
@@ -197,6 +198,7 @@ const MESSAGES: Record<Exclude<LiveRefusalCode, LayerRefusalCode>, Sentence> = {
   calcTooLarge: { key: 'liveRefusals.the_calculated_fields_this_question', text: () => msg.liveCalcTooLarge() },
   distinctByWeekCalendar: { key: 'liveRefusals.a_distinct_count_can_t_be', text: () => msg.liveDistinctByWeekCalendar() },
   semanticPending: { key: 'liveRefusals.this_dataset_asks_another_tool_s', text: () => msg.liveSemanticPending() },
+  requiredFilter: { key: 'liveRefusals.this_table_needs_a_filter_on', param: 'column', text: (c) => msg.liveRequiredFilter(c) },
 };
 
 export function refuse(code: Exclude<LiveRefusalCode, LayerRefusalCode>, arg = ''): LiveRefusal {

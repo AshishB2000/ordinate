@@ -190,7 +190,9 @@ export async function checkLiveSql(projectId: string, text: string, tables: read
   if (!('ir' in p)) return p;
   try {
     return await underLocks(projectId, p.ir, 0, [], async (locks) => {
-      const printed = printLiveSql(p.ir, inputsOf(p.ir, p.views, locks).inputs, p.views[0].dialect);
+      const given = inputsOf(p.ir, p.views, locks);
+      if ('refusal' in given) return refused(opOf(p.views[0].dialect), given.refusal);
+      const printed = printLiveSql(p.ir, given.inputs, p.views[0].dialect);
       return printed.ok ? null : refused(opOf(p.views[0].dialect), printed.message);
     });
   } catch (err) {
@@ -277,21 +279,26 @@ function agesOf(views: readonly LiveTarget[]): { lookupMs: number; keepMs: numbe
  * requires a filter on that neither the lock, the base filters nor a WHERE of the statement names — a chart question's
  * rule, with its sentence. The range is printed, so it is in the cache key and moves at midnight.
  */
-function inputsOf(ir: LiveSqlIR, views: readonly LiveTarget[], locks: ReadonlyArray<Lock | null>): { inputs: ViewInput[]; notes: string[] } {
+function inputsOf(ir: LiveSqlIR, views: readonly LiveTarget[], locks: ReadonlyArray<Lock | null>): { inputs: ViewInput[]; notes: string[] } | { refusal: string } {
   const named = whereColumns(ir);
   const notes = new Set<string>();
-  const inputs = views.map((v, i): ViewInput => {
+  const inputs: ViewInput[] = [];
+  for (const [i, v] of views.entries()) {
     const lock = locks[i]?.steps ?? [];
-    const r = requiredRange(v.requiredDates, [...(v.env.base ?? []).map((f) => f.column), ...lock.map((s) => s.column), ...named[i]]);
+    // The partition time too (./liveDateRange): a base filter, so on the table scan; a required column with no default refuses.
+    const r = requiredRange(v, [...(v.env.base ?? []).map((f) => f.column), ...lock.map((s) => s.column), ...named[i]]);
+    if (!r.ok) return { refusal: r.message };
     r.notes.forEach((n) => notes.add(n));
-    return { env: r.filters.length ? { ...v.env, base: [...(v.env.base ?? []), ...r.filters] } : v.env, lock };
-  });
+    inputs.push({ env: r.filters.length ? { ...v.env, base: [...(v.env.base ?? []), ...r.filters] } : v.env, lock });
+  }
   return { inputs, notes: [...notes] };
 }
 
 /** The statement under the caller's locks, with the sentence of any required date range it was given. */
 async function ask(projectId: string, ir: LiveSqlIR, views: readonly LiveTarget[], locks: ReadonlyArray<Lock | null>): Promise<LiveSqlReply> {
-  const { inputs, notes } = inputsOf(ir, views, locks);
+  const given = inputsOf(ir, views, locks);
+  if ('refusal' in given) return refused(opOf(views[0].dialect), given.refusal);
+  const { inputs, notes } = given;
   const r = await asked(projectId, ir, views, inputs);
   return r.ok && notes.length ? { ...r, notes } : r;
 }

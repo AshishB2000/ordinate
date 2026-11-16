@@ -524,6 +524,7 @@
   "liveRefusals.this_dataset_s_calculated_fields_can": "This dataset's calculated fields can't be computed by this server, so it answers nothing. Ask your admin to finish upgrading Ordinate.",
   "liveRefusals.this_live_dataset_has_no_table": "This live dataset has no table or query to read from.",
   "liveRefusals.this_question_cannot_be_asked_of": "This question cannot be asked of a live dataset.",
+  "liveRefusals.this_table_needs_a_filter_on": "This table needs a filter on \"{column}\": add one to the question.",
   "liveSqlMessages.a_dataset_answered_by_a_semantic": "A dataset answered by a semantic layer can’t be read with SQL. Ask for a chart of it instead.",
   "liveSqlMessages.a_true_or_false_value_can": "A true-or-false value can only be a condition here. To count it, write CASE WHEN … THEN 1 ELSE 0 END.",
   "liveSqlMessages.aggregates_and_window_functions_can_only": "Aggregates and window functions can only be used in the columns returned or in the sort order, and an aggregate in HAVING too.",

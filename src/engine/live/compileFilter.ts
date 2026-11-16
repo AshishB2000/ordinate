@@ -116,6 +116,7 @@ function cellText(cell: Cell): string {
 
 /** One IR filter as a never-NULL SQL predicate, or a refusal. */
 export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
+  if (f.kind === 'range' && f.partitionTime) return partitionTimeRange(c, f);
   const col = columnOf(c.columns, f.column);
   if (!col) return refuse('unknownColumn', f.column);
 
@@ -212,6 +213,26 @@ function rawRange(c: Ctx, col: LiveColumn, f: { from?: string; to?: string }): s
   const parts = [`${x} IS NOT NULL`];
   if (from !== undefined) parts.push(`${x} >= ${c.b.bind(type, day(from))}`);
   if (to !== undefined) parts.push(`${x} < ${c.b.bind(type, day(to + 1))}`);
+  return `(${parts.join(' AND ')})`;
+}
+
+/**
+ * BigQuery's `_PARTITIONTIME` (an ingestion-time partitioned table, ./liveDateRange) in an inclusive day range,
+ * half-open on the raw pseudo-column against TIMESTAMPs at UTC midnight, as a partition boundary is. A base
+ * filter only, so it is read on the table scan itself. Any other dialect, or a bound that is not an ISO day,
+ * is refused: never a cast that would stop the warehouse pruning, and never a dropped filter.
+ * UNVERIFIED on a real warehouse: the qualified pseudo-column `lv_src._PARTITIONTIME`.
+ */
+function partitionTimeRange(c: Ctx, f: { column: string; from?: string; to?: string }): string | LiveRefusal {
+  if (c.d.id !== 'bigquery' || f.column !== '_PARTITIONTIME') return refuse('badQuery');
+  const from = f.from === undefined ? undefined : daysFromIso(f.from);
+  const to = f.to === undefined ? undefined : daysFromIso(f.to);
+  if (from === null || to === null || (from === undefined && to === undefined)) return refuse('badQuery');
+  const x = `${SRC}._PARTITIONTIME`;
+  const day = (n: number): string => c.b.bind('timestamp', `${isoFromDays(n)}T00:00:00.000Z`);
+  const parts: string[] = [];
+  if (from !== undefined) parts.push(`${x} >= ${day(from)}`);
+  if (to !== undefined) parts.push(`${x} < ${day(to + 1)}`);
   return `(${parts.join(' AND ')})`;
 }
 

@@ -527,6 +527,7 @@
   "liveRefusals.this_dataset_s_calculated_fields_can": "このサーバーはこのデータセットの計算フィールドを計算できないため、何も回答しません。Ordinate のアップグレードを完了するよう管理者に依頼してください。",
   "liveRefusals.this_live_dataset_has_no_table": "このライブデータセットには、読み取るテーブルまたはクエリがありません。",
   "liveRefusals.this_question_cannot_be_asked_of": "この質問はライブデータセットには使用できません。",
+  "liveRefusals.this_table_needs_a_filter_on": "このテーブルには「{column}」のフィルターが必要です。質問に追加してください。",
   "liveSqlMessages.a_dataset_answered_by_a_semantic": "セマンティックレイヤーが回答するデータセットは SQL で読めません。代わりにグラフを依頼してください。",
   "liveSqlMessages.a_true_or_false_value_can": "真偽値はここでは条件としてのみ使えます。数えるには CASE WHEN … THEN 1 ELSE 0 END と書いてください。",
   "liveSqlMessages.aggregates_and_window_functions_can_only": "集計関数とウィンドウ関数は、返す列か並べ替えでのみ使えます。集計関数は HAVING でも使えます。",

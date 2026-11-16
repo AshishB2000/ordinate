@@ -65,6 +65,10 @@ export interface LiveTarget {
   semantic?: { backend: SemanticBackendId; model: string; env: SemanticEnv };
   /** Date columns its source table requires a filter on (./liveDateRange): a question that names none gets one. */
   requiredDates?: string[];
+  /** A BigQuery table partitioned by ingestion time that requires a filter (./liveDateRange): `_PARTITIONTIME` gets the range. */
+  requiredTime?: true;
+  /** Required partition columns that are not dates (an integer range): no default, so a question must filter each. */
+  requiredColumns?: string[];
 }
 
 /** Why there is nothing to ask: no such (Live) dataset, no connection, or a source live cannot name. */
@@ -160,6 +164,9 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
       values: conn.values,
       secrets: () => (secrets ??= loadSecrets(conn.id, def)),
       ...(dates.required.length ? { requiredDates: dates.required } : {}),
+      // The pseudo-column is the table's own: a defining query reads it inside, where its own filter must be.
+      ...(dates.partitionTime && dialect === 'bigquery' && source.kind === 'table' ? { requiredTime: true as const } : {}),
+      ...(dates.unbounded?.length ? { requiredColumns: dates.unbounded } : {}),
     },
   };
 }

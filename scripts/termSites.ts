@@ -123,7 +123,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/data/transforms.ts': { count: 1, how: 'throws' },
   // adaptFilter and specFilterSteps callers: a term refuses, never skips. liveEndsOn (an empty answer's note) reads the row
   // lock's steps only, as the extract's lockedTable rows do — a term is the question's — through adaptFilters, which throws on one.
-  'src/ipc/liveAnswers.ts': { count: 4, how: 'throws' },
+  // The case fix's `requiredSteps` (a required integer-range partition the question filters): specFilterSteps over the spec's
+  // plain filters only (a term reached the door's lock already), then adaptFilter, which throws on a term step.
+  'src/ipc/liveAnswers.ts': { count: 6, how: 'throws' },
   'src/ipc/semanticValues.ts': { count: 2, how: 'throws' }, // a layer's value list: the lock first (withLockSteps), then liveSpec's adaptFilters, which throws on a term step
   'src/ipc/visualsResident.ts': { count: 1, how: 'throws' },
   // prepare: a Prepare list (or a dataset setting). Must NOT take a term; unchanged, an unknown step is dropped.

@@ -277,8 +277,9 @@ async function run(projectId: string, datasetId: string, names: string[], adapt:
   if (layer) return layer;
   const a = adapt(t);
   if (!a.ok) return refused(dialectOf(t), a);
-  const r = dateRange.withRequiredRange(a.ir, t.requiredDates, t.env.base);
-  return { asked: await ask(t, r.ir), warnings: a.warnings, notes: r.notes, t };
+  const r = dateRange.withRequiredRange(a.ir, t);
+  if (!r.ok) return refused(dialectOf(t), r);
+  return { asked: await ask(r.env === t.env ? t : { ...t, env: r.env }, r.ir), warnings: a.warnings, notes: r.notes, t };
 }
 
 // ── The three doors ──────────────────────────────────────────────────────────

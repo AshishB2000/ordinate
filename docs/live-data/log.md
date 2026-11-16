@@ -1448,3 +1448,38 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
   never to a failure. BigQuery defaults to `bigquery-public-data.wikipedia.pageviews_2024.datehour` (hourly
   partitions, filter required), June 2024; Snowflake waits for `SNOWFLAKE_PRUNING_TABLE`/`_COLUMN`.
   **Not measured yet**: no nightly has run this branch.
+
+## 2026-11-16 — Required ranges on lookups, `_PARTITIONTIME`, and integer-range partitions
+
+(docs/assistant/00-design.md, "Live date filters on key columns", its open question "Date-filter pruning".)
+
+- **Lookups take the rule.** `liveDateRange.lookupRequired(target, filters)` is `requiredRange` for a lookup's own
+  filters (a row lock among them): REQUIRED_RANGE on each required date column they and the base filters leave open, and
+  the env to compile under. The answers' case fix (`liveAnswers.liveCaseFix`) and the latest-day probe (`liveEndsOn`)
+  use it. The case fix's spellings are no figure, so it adds no sentence. The probe's day is a figure a person reads: the
+  card carries *Last 12 months: this table needs a date range*, once, and the probe is never widened. A day it found is
+  not said ("ends on") for a period that starts after the range ends, since the probe never saw those days (the fixture
+  ends on 2025-03-01; held to the range, the probe finds 2025-01-06). An empty probe claims nothing.
+- **`_PARTITIONTIME`.** BigQuery's reader stores an ingestion-time table's partition as `_PARTITIONTIME`
+  (`bigqueryFacts.partitionOf`); `dateFactsOf` now reports it (`partitionTime`), and `liveTarget` sets `requiredTime` for
+  a BigQuery TABLE source only (a defining query reads the pseudo-column inside, where its own filter must be). The range
+  is a `range` filter with `partitionTime`, put among the BASE filters (`withRequiredRange` returns the env), so it sits
+  on the table scan, innermost under a calc, and is in the cache key. `compileFilter.partitionTimeRange` writes
+  `lv_src._PARTITIONTIME >= @from AND lv_src._PARTITIONTIME < @to+1`, TIMESTAMPs at UTC midnight (an ingestion
+  partition's boundary); any other dialect or a non-ISO bound is refused, never dropped. UNVERIFIED on a real warehouse:
+  the qualified pseudo-column. SQL on Live gets it the same way (`inputsOf`, a base filter of the view).
+- **Integer-range partitions.** A declared column that is not a date and that a stored `partition.required` names
+  (BigQuery's RANGE partitioning) is `unbounded` in the facts and `requiredColumns` on the target. No default range is
+  guessed: a question, statement or lookup that leaves it unfiltered is refused, `requiredFilter`, *This table needs a
+  filter on "tier": add one to the question.* (a new catalog sentence, in four languages), on every door: `run` (charts,
+  tiles, answers), `liveSql.inputsOf` (SQL and its check), the lookups. The case fix reads the question's own filter on
+  such a column, so a filtered answer passes. An editor's typed "required filters" never names one: those words only
+  ever add a date range.
+- **Tests** (`test-livePartitionFilter`, now 70 checks): the case fix and the probe bind [2024-03-01, 2025-02-28], the
+  card says so, no "ends on" for `this_week`; NEGATIVE CONTROL: no doc, no range, and the card says where the data ends.
+  `tier` required: chart, tile, answer and SQL refuse with the sentence and send nothing; filtered, all four answer and
+  the case fix binds tier. `_PARTITIONTIME`: the BigQuery SQL and its bound TIMESTAMPs, innermost under a calc;
+  NEGATIVE CONTROLS: DuckDB refuses the pseudo-column, and a non-BigQuery target asks for none.
+- **Not covered:** the key check (`tableDocs.runKeyCheck`) and the schema sync's profile and probes still read every
+  row; their results are stored without a sentence, so a range would read as the whole table. BigQuery refuses them on a
+  table that requires a partition filter, as a typed failure.
