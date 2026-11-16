@@ -21,7 +21,7 @@
 //
 // Refused per dialect (each a named pin until its engine is verified in the nightly, F7): on
 // ClickHouse a correlated subquery, and lag/lead/first_value/last_value (`lagInFrame` and friends
-// read the frame and NULL differently).
+// read the frame and NULL differently). Pins CH1 and CH2 in scripts/liveSqlPins.ts.
 
 import type { CompiledQuery } from '../sqlParams';
 import { ParamSink } from '../sqlParams';
@@ -42,7 +42,8 @@ export const LIVE_SQL_ROWS = 500;
 /** The join keywords — a table so a negative control can print LEFT as INNER and watch the differential catch it. */
 export const JOIN_WORDS: Record<string, string> = { inner: 'INNER JOIN', left: 'LEFT JOIN', right: 'RIGHT JOIN', full: 'FULL JOIN' };
 
-const SHIFTS_OFF_CLICKHOUSE = new Set(['lag', 'lead', 'first_value', 'last_value']);
+/** What the printer refuses on ClickHouse (pins CH1, CH2) — a table, so the nightly's lift probe can widen it and run what it holds back. */
+export const OFF_CLICKHOUSE = { correlated: true, shifts: new Set(['lag', 'lead', 'first_value', 'last_value']) };
 
 class Printer {
   private subs = 0;
@@ -99,7 +100,7 @@ class Printer {
   }
 
   private sub(q: Query, corr: boolean): string {
-    if (corr && this.d.id === 'clickhouse') fail('dialect', msg.sqlConstructOn('A subquery that reads its outer query', 'ClickHouse'));
+    if (corr && this.d.id === 'clickhouse' && OFF_CLICKHOUSE.correlated) fail('dialect', msg.sqlConstructOn('A subquery that reads its outer query', 'ClickHouse'));
     return this.query(q, `s${this.subs++}_`, null, false);
   }
 
@@ -127,7 +128,7 @@ class Printer {
         return e.fn === 'sum' || e.fn === 'avg' ? d.toDouble(a) : a;
       }
       case 'win': {
-        if (d.id === 'clickhouse' && SHIFTS_OFF_CLICKHOUSE.has(e.fn)) fail('dialect', msg.sqlConstructOn(`${e.fn}()`, 'ClickHouse'));
+        if (d.id === 'clickhouse' && OFF_CLICKHOUSE.shifts.has(e.fn)) fail('dialect', msg.sqlConstructOn(`${e.fn}()`, 'ClickHouse'));
         const args = e.fn === 'count' && e.x === null ? '*' : [e.x ? x(e.x) : '', e.offset === null ? '' : sqlInt(e.offset)].filter(Boolean).join(', ');
         const over: string[] = [];
         if (e.part.length) over.push(`PARTITION BY ${e.part.map(x).join(', ')}`);

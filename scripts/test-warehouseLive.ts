@@ -37,7 +37,10 @@
 // statements through its runBound against the extract path, over a fixture
 // held in literals — the accounts are never written. With SNOWFLAKE_SEMANTIC_VIEW,
 // Snowflake then runs the semantic parity matrix against that view
-// (warehouseLiveSnowflakeSemantic.ts); without it, that part prints its skip. Last, the pruning
+// (warehouseLiveSnowflakeSemantic.ts); without it, that part prints its skip. Each warehouse then runs
+// SQL on Live datasets (warehouseLiveSqlParity.ts, docs/live-data/01-live-sql.md F7): F2's corpus
+// translated, printed for its dialect and run through its runBound over literal twins, against
+// DuckDB running the model's own text — under the same plans and canary. Last, the pruning
 // measurement (warehousePruning.ts): the same date-filtered count in the cast form and the raw-range
 // form, bytes or partitions from a dry run / EXPLAIN, printed and written as JSON — never failed on
 // its numbers. It reads *_PRUNING_TABLE, *_PRUNING_COLUMN and *_PRUNING_MONTH (see that file).
@@ -160,8 +163,10 @@ async function main(): Promise<void> {
     };
     await context.runInContext(identity, `warehouse-nightly-${nonce}`, async () => {
       const parity = require('./warehouseLiveParity') as typeof import('./warehouseLiveParity');
+      const sqlParity = require('./warehouseLiveSqlParity') as typeof import('./warehouseLiveSqlParity');
       if (sf.run) await runOne('Snowflake', () => (require('./warehouseLiveSnowflake') as typeof import('./warehouseLiveSnowflake')).runSnowflake(sf.config, nonce));
       if (sf.run) await runOne('Snowflake live parity', () => parity.runSnowflakeParity(sf.config));
+      if (sf.run) await runOne('Snowflake live SQL', () => sqlParity.runSnowflakeSql(sf.config));
       if (sf.run && sf.config.semanticView) {
         const semantic = require('./warehouseLiveSnowflakeSemantic') as typeof import('./warehouseLiveSnowflakeSemantic');
         await runOne('Snowflake semantic view', () => semantic.runSnowflakeSemantic(sf.config));
@@ -171,6 +176,7 @@ async function main(): Promise<void> {
       }
       if (bq.run) await runOne('BigQuery', () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).runBigquery(bq.config, nonce));
       if (bq.run) await runOne('BigQuery live parity', () => parity.runBigqueryParity(bq.config));
+      if (bq.run) await runOne('BigQuery live SQL', () => sqlParity.runBigquerySql(bq.config));
       // The pruning measurement (warehousePruning.ts): numbers only, never a failure on them.
       const pruning = require('./warehousePruning') as typeof import('./warehousePruning');
       const measures = [

@@ -175,10 +175,10 @@ export async function problems(kit: Kit, c: SqlCase, sources: Sources, engine: P
   return out;
 }
 
-/** The whole corpus on one engine, locked or not: one check per case. Returns how many agreed. */
-export async function runCorpus(kit: Kit, sources: Sources, engine: ParityEngine, ok: Ok, lock: boolean): Promise<number> {
+/** The corpus (or `cases` of it) on one engine, locked or not: one check per case. Returns how many agreed. */
+export async function runCorpus(kit: Kit, sources: Sources, engine: ParityEngine, ok: Ok, lock: boolean, cases: readonly SqlCase[] = corpus.CASES): Promise<number> {
   let agree = 0;
-  for (const c of corpus.CASES) {
+  for (const c of cases) {
     const p = await problems(kit, c, sources, engine, { lock });
     if (p.length === 0) agree += 1;
     ok(`${engine.name}${lock ? ', locked to East' : ''}: ${c.name}`, p.length === 0, `${p.join(' | ')}\n  ${c.sql}`);
