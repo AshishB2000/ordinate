@@ -387,6 +387,29 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   ok('NEGATIVE CONTROL: a sync no save landed on samples once, and nothing runs after it',
     fake.calls.length === plain && !(await post('dataset:liveSchema', { projectId: P, datasetId: L })).value.syncing, show({ before: plain, after: fake.calls.length }));
 
+  // A sync that lands while the panel is read, just after the view read the record: the reply must still say "syncing",
+  // or the panel stops polling on the profile that sync replaced (the live e2e's CI flake: "180 rows" never came).
+  const { startSchemaSync } = require('../src/engine/live/schemaSyncJob') as typeof import('../src/engine/live/schemaSyncJob');
+  const realMeta = H.datasets.getDatasetMeta;
+  let release = (): void => undefined;
+  const held = new Promise<void>((r) => { release = r; });
+  fake.hook = async () => { await held; return undefined; };
+  const queued = await H.as(ORG_A, () => startSchemaSync(P, L));
+  let landed = false;
+  (H.datasets as { getDatasetMeta: typeof realMeta }).getDatasetMeta = async (...a) => {
+    const fromView = !landed && !!new Error().stack?.includes('schemaView');
+    const m = await realMeta(...a);
+    if (fromView && queued?.status === 'queued') { landed = true; release(); await queued.done; }
+    return m;
+  };
+  const racing = (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value;
+  (H.datasets as { getDatasetMeta: typeof realMeta }).getDatasetMeta = realMeta;
+  fake.hook = null;
+  const next = (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value;
+  ok('a sync that lands as the panel reads it: that reply says "syncing", so the panel reads again',
+    landed && racing.syncing === true, show({ landed, syncing: racing.syncing, sampledAt: racing.sampledAt }));
+  ok('…and the next read has the new sample, done', next.syncing === false && !!next.sampledAt && next.sampledAt !== racing.sampledAt, show({ was: racing.sampledAt, now: next.sampledAt }));
+
   // A base column the warehouse dropped: every question refuses, the sync still syncs the columns.
   await H.as(ORG_A, () => H.fx.loadWarehouse('live_drop', H.fx.COLUMNS, H.fx.fixtureRows()));
   const third = await H.as(ORG_A, () => H.liveOver(P, { table: 'live_drop' }, H.fx.COLUMNS));

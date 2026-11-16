@@ -207,6 +207,9 @@ export interface LiveSchemaView {
 const SKIP_NOTE = { tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused } as const;
 
 async function schemaView(projectId: string, datasetId: string): Promise<LiveSchemaView | { ok: false; error: string; code?: string }> {
+  // Asked BEFORE the record is read: a sync landing between the two would otherwise send its old profile as "not
+  // syncing", and the panel, which polls only while syncing, would keep that profile for good.
+  const syncing = schemaSyncStarting(projectId, datasetId) || !!(await refreshRunning(projectId, datasetId));
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return { ok: false, error: 'Dataset not found' };
   if (!isLive(meta) || !meta.live) return { ok: false, code: 'not_live', error: msg.liveSyncNotLive() };
@@ -219,7 +222,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
   return {
     ok: true,
     schemaSyncedAt: meta.live.schemaSyncedAt,
-    syncing: schemaSyncStarting(projectId, datasetId) || !!(await refreshRunning(projectId, datasetId)),
+    syncing,
     sampledAt: prof?.sampledAt ?? null,
     sampleRows: closed ? null : rows ?? null,
     method: prof?.method ?? null,
