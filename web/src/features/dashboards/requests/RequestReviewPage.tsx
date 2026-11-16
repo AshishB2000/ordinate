@@ -1,8 +1,10 @@
 // A dashboard request's review page (docs/team-folders/00-design.md, "Dashboard requests"; src/server/requests): what a
 // viewer asked for, each chart drawn with today's figures AS THE REVIEWER (`request:preview` computes them through the
 // answer door, under the reviewer's own access — never figures the viewer saw), and exactly what approving makes: a
-// visual per chart, the dashboard, the folder it lands in. Then Approve and publish (the dashboard opens), Edit (made
-// as a draft, opened in the editor; the viewer is told when it is first published) or Decline with a note.
+// visual per chart, and the dashboard — a new one, in a folder the reviewer may pick among the server's choices (the
+// viewer's suggestion shown), or a sheet on the existing one the viewer named. Then Approve and publish (the dashboard
+// opens), Edit (made as a draft, opened in the editor; the viewer is told when it is first published) or Decline with
+// a note. A draft that already had unpublished edits is never published by an approval: the server says why.
 //
 // Only an approver gets here: an editor with Edit on every dataset the charts read. Anyone else is the server's
 // refusal, shown as it is. A request already decided says how, and links to its dashboard. Every figure and word on a
@@ -19,6 +21,8 @@ import type { ChartDataShape } from '../../../charts/types';
 import { Button, buttonClass } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Textarea } from '../../../ui/Field';
+import { Select } from '../../../ui/Select';
+import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { ME_KEY } from '../../auth/api';
@@ -33,19 +37,29 @@ interface RequestView {
   title: string;
   note: string;
   charts: number;
-  state: 'open' | 'drafted' | 'approved' | 'declined';
+  state: 'open' | 'drafted' | 'approved' | 'declined' | 'withdrawn';
   decidedBy: string;
   answer: string;
   dashboardId: string | null;
+  onto?: boolean;
   at: string;
 }
 interface Creates {
   visuals: string[];
   dashboard: string;
   folder: string;
+  folderId?: string;
+  /** An existing dashboard: the sheet the charts go on, and whether Approve and publish publishes it. */
+  onto?: { sheet: string; publishes: boolean };
 }
-type Preview = { ok: true; request: RequestView; cards: CardView[]; creates: Creates | null } | { ok: false; error: string };
-type Decided = { ok: true; dashboardId?: string; published?: boolean } | { ok: false; error: string };
+interface Choice {
+  id: string;
+  name: string;
+}
+type Preview =
+  | { ok: true; request: RequestView; cards: CardView[]; creates: Creates | null; choices?: Choice[]; suggested?: string; problem?: string }
+  | { ok: false; error: string };
+type Decided = { ok: true; dashboardId?: string; published?: boolean; why?: string } | { ok: false; error: string };
 
 const BACK = { to: '/', label: 'Home' };
 const charts = (n: number): string => (n === 1 ? '1 chart' : `${n} charts`);
@@ -78,26 +92,31 @@ export default function RequestReviewPage() {
 }
 
 function Review({ preview, onDecided }: { preview: Extract<Preview, { ok: true }>; onDecided: () => void }) {
-  const { request: r, cards, creates } = preview;
+  const { request: r, cards, creates, choices = [], suggested = '' } = preview;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<'publish' | 'draft' | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [declining, setDeclining] = useState(false);
+  const [folderId, setFolderId] = useState(creates?.folderId ?? '');
   const told = () => {
     void qc.invalidateQueries({ queryKey: MENTIONS_KEY });
     void qc.invalidateQueries({ queryKey: ME_KEY });
   };
-  const blocked = cards.some((c) => !c.ok);
+  const blocked = cards.some((c) => !c.ok) || !!preview.problem;
+  const picking = !!creates && !creates.onto && choices.length > 1;
+  const folder = choices.find((c) => c.id === folderId)?.name ?? creates?.folder ?? '';
 
   async function approve(publish: boolean): Promise<void> {
     setBusy(publish ? 'publish' : 'draft');
     setProblem(null);
     try {
-      const d = (await rpc('request:approve', { projectId: r.projectId, id: r.id, publish })) as Decided;
+      const moved = picking && folderId && folderId !== creates?.folderId ? { folderId } : {}; // only a change: the default is the server's
+      const d = (await rpc('request:approve', { projectId: r.projectId, id: r.id, publish, ...moved })) as Decided;
       if (!d.ok || !d.dashboardId) return setProblem(d.ok ? 'Could not make the dashboard.' : d.error);
       told();
-      void navigate(publish ? `/dashboards/${r.projectId}/${d.dashboardId}` : `/analyses/${r.projectId}/${d.dashboardId}`);
+      if (d.why) toast(d.why);
+      void navigate(d.published ? `/dashboards/${r.projectId}/${d.dashboardId}` : `/analyses/${r.projectId}/${d.dashboardId}`);
     } catch (e) {
       setProblem(e instanceof Error && e.message ? e.message : 'Could not approve the request.');
     } finally {
@@ -130,10 +149,10 @@ function Review({ preview, onDecided }: { preview: Extract<Preview, { ok: true }
       }
       actions={actions || undefined}
     >
-      {problem && (
+      {(problem || preview.problem) && (
         <p className={s.problem} role="alert" data-testid="request-problem">
           <Icon name="alert" size={16} />
-          {problem}
+          {problem || preview.problem}
         </p>
       )}
       <div className={s.layout}>
@@ -167,18 +186,34 @@ function Review({ preview, onDecided }: { preview: Extract<Preview, { ok: true }
                 </li>
                 <li>
                   <Icon name="layout-dashboard" size={16} />
-                  <span>
-                    The dashboard <span className={s.strong}>{creates.dashboard}</span>
-                  </span>
+                  {creates.onto ? (
+                    <span>
+                      A sheet <span className={s.strong}>{creates.onto.sheet}</span> on <span className={s.strong}>{creates.dashboard}</span>
+                    </span>
+                  ) : (
+                    <span>
+                      The dashboard <span className={s.strong}>{creates.dashboard}</span>
+                    </span>
+                  )}
                 </li>
                 <li>
                   <Icon name="folder" size={16} />
                   <span>
-                    In <span className={s.strong}>{creates.folder}</span>
+                    In <span className={s.strong}>{folder}</span>
                   </span>
                 </li>
               </ul>
-              <p className={s.muted}>Approve and publish shares it with {r.by} at once. Edit opens it as a draft; {r.by} is told when you publish it.</p>
+              {suggested && !creates.onto && (
+                <p className={s.muted} data-testid="request-suggested">
+                  {r.by} suggested <span className={s.strong}>{suggested}</span>.
+                </p>
+              )}
+              {picking && <Select label="Folder" hint={`Folders you edit that ${r.by} can open.`} value={folderId} onValueChange={setFolderId} options={choices.map((c) => ({ value: c.id, label: c.name }))} />}
+              <p className={s.muted}>
+                {creates.onto && !creates.onto.publishes
+                  ? `Its draft has edits nobody published: approving adds the charts to the draft and publishes nothing. ${r.by} is told when you publish it.`
+                  : `Approve and publish shares it with ${r.by} at once. Edit opens it as a draft; ${r.by} is told when you publish it.`}
+              </p>
             </section>
           )}
         </aside>
@@ -189,7 +224,7 @@ function Review({ preview, onDecided }: { preview: Extract<Preview, { ok: true }
 }
 
 function StateChip({ state }: { state: RequestView['state'] }) {
-  const word = { open: 'Waiting for review', drafted: 'Being edited', approved: 'Approved', declined: 'Declined' }[state];
+  const word = { open: 'Waiting for review', drafted: 'Being edited', approved: 'Approved', declined: 'Declined', withdrawn: 'Withdrawn' }[state];
   return <span className={`${s.chip} ${s[state]}`}>{word}</span>;
 }
 
@@ -245,6 +280,17 @@ function Undrawn({ reason }: { reason: string }) {
 
 function Outcome({ r }: { r: RequestView }) {
   const by = r.decidedBy || 'An editor';
+  if (r.state === 'withdrawn') {
+    return (
+      <div className={s.outcome}>
+        <Icon name="undo" size={20} />
+        <div>
+          <p className={s.outcomeHead}>{r.by} withdrew it</p>
+          <p className={s.muted}>Nothing was made.</p>
+        </div>
+      </div>
+    );
+  }
   if (r.state === 'declined') {
     return (
       <div className={s.outcome}>

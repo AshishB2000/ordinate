@@ -153,6 +153,8 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'reports:list': 'META',
   'reports:open': 'META',
   'request:create': 'META', // stores the caller's own answers' chart forms for the editors (src/server/requests); returns an id, never a row or figure
+  'request:folders': 'META', // folder ids and names the caller opens; no row, no figure
+  'request:withdraw': 'META', // the caller's own request's state; returns no row or figure
   'scenario:compare': 'NET',
   'scenario:compute': 'NET',
   'scenario:get': 'META',

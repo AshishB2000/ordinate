@@ -7,7 +7,7 @@ import { sanitizeStoredSpec, type AnswerSpec } from '../../ai/answerSpec';
 import { ctx } from '../context';
 import { inOrg } from '../db/inOrg';
 
-export type RequestState = 'open' | 'drafted' | 'approved' | 'declined';
+export type RequestState = 'open' | 'drafted' | 'approved' | 'declined' | 'withdrawn';
 /** Inbox rows kept per member, newest first (as `mentions`). */
 const MAX_ROWS = 200;
 /** An approval under way older than this was cut short (a pod went away): another approver may take it. */
@@ -24,20 +24,24 @@ export interface DashboardRequest {
   decidedBy: string | null;
   answer: string;
   dashboardId: string | null;
+  /** An existing dashboard the charts go onto (0038), else null: a new one. */
+  targetId: string | null;
+  /** The folder the requester suggested for a new dashboard (the project id: Everyone), else null. */
+  folderId: string | null;
   createdAt: string;
 }
 
 interface Row {
   project_id: string; id: string; requester: string; title: string; note: string; charts: unknown; state: RequestState;
-  decided_by: string | null; answer: string; dashboard_id: string | null; created_at: Date;
+  decided_by: string | null; answer: string; dashboard_id: string | null; target_id: string | null; folder_id: string | null; created_at: Date;
 }
-const COLUMNS = 'project_id::text, id::text, requester, title, note, charts, state, decided_by, answer, dashboard_id::text, created_at';
+const COLUMNS = 'project_id::text, id::text, requester, title, note, charts, state, decided_by, answer, dashboard_id::text, target_id::text, folder_id::text, created_at';
 
 function fromRow(r: Row): DashboardRequest {
   return {
     projectId: r.project_id, id: r.id, requester: r.requester, title: r.title, note: r.note, state: r.state, decidedBy: r.decided_by,
     charts: (Array.isArray(r.charts) ? r.charts : []).map(sanitizeStoredSpec).filter((s): s is AnswerSpec => !!s),
-    answer: r.answer, dashboardId: r.dashboard_id, createdAt: r.created_at.toISOString(),
+    answer: r.answer, dashboardId: r.dashboard_id, targetId: r.target_id, folderId: r.folder_id, createdAt: r.created_at.toISOString(),
   };
 }
 
@@ -51,19 +55,58 @@ async function trim(c: PoolClient, org: string, emails: string[]): Promise<void>
   );
 }
 
-/** The request, and a row in each approver's bell, in one transaction. */
-export async function insertRequest(r: Pick<DashboardRequest, 'id' | 'projectId' | 'requester' | 'title' | 'note' | 'charts'>, approvers: string[]): Promise<void> {
-  await inOrg(async (c, org) => {
+/**
+ * The request, a row in each approver's bell, and the requester's own row — already seen, so their bell lists it (to
+ * withdraw) without a badge — in one transaction. False, writing nothing: the requester already has `maxOpen` open
+ * in the project (counted under a lock on them and the project, so two sends at once cannot both pass).
+ */
+export async function insertRequest(
+  r: Pick<DashboardRequest, 'id' | 'projectId' | 'requester' | 'title' | 'note' | 'charts' | 'targetId' | 'folderId'>, approvers: string[], maxOpen: number,
+): Promise<boolean> {
+  return inOrg(async (c, org) => {
+    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('dashboard_requests:' || $1 || ':' || $2 || ':' || $3, 0))", [org, r.projectId, r.requester]);
+    const open = await c.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM dashboard_requests WHERE org_id = $1 AND project_id = $2 AND requester = $3 AND state = 'open'",
+      [org, r.projectId, r.requester],
+    );
+    if ((open.rows[0]?.n ?? 0) >= maxOpen) return false;
     await c.query(
-      'INSERT INTO dashboard_requests (org_id, id, project_id, requester, title, note, charts) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)',
-      [org, r.id, r.projectId, r.requester, r.title, r.note, JSON.stringify(r.charts)],
+      `INSERT INTO dashboard_requests (org_id, id, project_id, requester, title, note, charts, target_id, folder_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::uuid, $9::uuid)`,
+      [org, r.id, r.projectId, r.requester, r.title, r.note, JSON.stringify(r.charts), r.targetId, r.folderId],
     );
     await c.query(
       `INSERT INTO dashboard_request_inbox (org_id, user_email, request_id, project_id, role)
        SELECT $1, u, $2, $3, 'approver' FROM unnest($4::text[]) AS u ON CONFLICT DO NOTHING`,
       [org, r.id, r.projectId, approvers],
     );
-    await trim(c, org, approvers);
+    await c.query(
+      `INSERT INTO dashboard_request_inbox (org_id, user_email, request_id, project_id, role, seen_at) VALUES ($1, $2, $3, $4, 'requester', now())
+       ON CONFLICT DO NOTHING`,
+      [org, r.requester, r.id, r.projectId],
+    );
+    await trim(c, org, [...approvers, r.requester]);
+    return true;
+  });
+}
+
+/**
+ * The requester takes their open request back — unless an approval holds it — and the approvers' bell rows go.
+ * Null: not theirs, not open, or being approved. Else the request and whose rows went.
+ */
+export async function withdraw(projectId: string, id: string): Promise<{ request: DashboardRequest; told: string[] } | null> {
+  const me = ctx().user.email;
+  return inOrg(async (c, org) => {
+    const r = await c.query<Row>(
+      `UPDATE dashboard_requests SET state = 'withdrawn', decided_by = requester, decided_at = now()
+        WHERE org_id = $1 AND project_id = $2 AND id = $3 AND requester = $4 AND state = 'open'
+          AND (decided_at IS NULL OR decided_at < now() - ${CLAIM})
+        RETURNING ${COLUMNS}`,
+      [org, projectId, id, me],
+    );
+    if (!r.rows[0]) return null;
+    const gone = await c.query<{ user_email: string }>("DELETE FROM dashboard_request_inbox WHERE org_id = $1 AND request_id = $2 AND role = 'approver' RETURNING user_email", [org, id]);
+    return { request: fromRow(r.rows[0]), told: gone.rows.map((x) => x.user_email) };
   });
 }
 

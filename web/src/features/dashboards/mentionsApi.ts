@@ -31,7 +31,7 @@ export interface AskRow {
   at: string;
   seen: boolean;
 }
-/** A dashboard request (src/server/requests/requests.ts `RequestRow`): the caller's own once decided, or one they may approve. */
+/** A dashboard request (src/server/requests/requests.ts `RequestRow`): the caller's own (waiting, to withdraw, or decided), or one they may approve. */
 export interface RequestRow {
   projectId: string;
   id: string;
@@ -40,12 +40,14 @@ export interface RequestRow {
   title: string;
   note: string;
   charts: number;
-  state: 'open' | 'drafted' | 'approved' | 'declined';
+  state: 'open' | 'drafted' | 'approved' | 'declined' | 'withdrawn';
   /** Who decided it ('' while open). */
   decidedBy: string;
   /** A decline's note. */
   answer: string;
   dashboardId: string | null;
+  /** It asks for charts on an existing dashboard (its name is the title). */
+  onto?: boolean;
   at: string;
   /** The caller asked for it; else they were asked to approve it. */
   mine: boolean;

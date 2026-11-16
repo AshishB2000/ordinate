@@ -25,6 +25,8 @@
 //              another person still sends, and their Plain request lands in Everyone; the next day it goes
 //   seen       a row by its ids, and the badge counts requests
 //   rls        both tables as an ordinary role
+//   …and the rest of E9 (./dashboardRequestsMore.ts): withdraw, an existing dashboard, the folder picker, SQL and source
+//   table answers, Live charts, the cap on open requests, and a project's deletion
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-dashboardRequests.js
 
@@ -34,6 +36,7 @@ import { finish, ok } from './selfcheck';
 import { CERT, startFake } from './smtpFake';
 import * as B from './subscriptionHarness';
 import { ORG, mailParts, ordinaryRole, refusedAs, seenAs, serverMode, show, withServer, type Bench, type Identity } from './notifyHarness';
+import { more } from './dashboardRequestsMore';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -71,8 +74,13 @@ function contractCases(): void {
     && !c['request:create'].input.safeParse({ ...good, turnIds: [] }).success && !c['request:create'].input.safeParse({ ...good, turnIds: Array.from({ length: 13 }, randomUUID) }).success
     && !c['request:create'].input.safeParse({ ...good, title: '  ' }).success && !c['request:create'].input.safeParse({ ...good, note: 'x'.repeat(2001) }).success
     && !c['request:create'].input.safeParse({ ...good, charts: [{}] }).success);
-  ok('contract: a decline needs a note; an approval says whether it publishes', !c['request:decline'].input.safeParse({ projectId: P, id: P, note: ' ' }).success
-    && c['request:decline'].input.safeParse({ projectId: P, id: P, note: 'Not this quarter' }).success && !c['request:approve'].input.safeParse({ projectId: P, id: P }).success);
+  ok('contract: a decline needs a note; an approval says whether it publishes, and may name a folder', !c['request:decline'].input.safeParse({ projectId: P, id: P, note: ' ' }).success
+    && c['request:decline'].input.safeParse({ projectId: P, id: P, note: 'Not this quarter' }).success && !c['request:approve'].input.safeParse({ projectId: P, id: P }).success
+    && c['request:approve'].input.safeParse({ projectId: P, id: P, publish: true, folderId: P }).success && !c['request:approve'].input.safeParse({ projectId: P, id: P, publish: true, folderId: 'Ops' }).success);
+  ok('contract: withdraw is read (the requester\'s own), audited; the folder list is read', c['request:withdraw'].access === 'read' && c['request:withdraw'].audit === true
+    && c['request:withdraw'].project({ projectId: P, id: P }) === P && c['request:folders'].access === 'read' && c['request:folders'].project({ projectId: P }) === P);
+  ok('contract: a request names an existing dashboard or a folder for a new one — not both', c['request:create'].input.safeParse({ ...good, dashboardId: P }).success
+    && c['request:create'].input.safeParse({ ...good, folderId: P }).success && !c['request:create'].input.safeParse({ ...good, dashboardId: P, folderId: P }).success);
 }
 
 async function noDatabase(): Promise<void> {
@@ -89,6 +97,10 @@ async function noDatabase(): Promise<void> {
     ok('no db: a request says why (no user directory)', r.ok === false && r.error === msg.requestsOff(), show(r));
     const p = await call('request:preview', { projectId: pid, id: randomUUID() });
     ok('no db: a review says why too', p.ok === false && p.error === msg.requestsOff(), show(p));
+    const w = await call('request:withdraw', { projectId: pid, id: randomUUID() });
+    ok('no db: a withdrawal says why too', w.ok === false && w.error === msg.requestsOff(), show(w));
+    const f = await call('request:folders', { projectId: pid });
+    ok('no db: there are no folders to suggest', f.ok === true && Array.isArray(f.folders) && f.folders.length === 0, show(f));
     const list = await call('mentions:list', undefined);
     ok('no db: the bell has no requests', list.ok && Array.isArray(list.requests) && list.requests.length === 0, show(list));
   } finally {
@@ -156,6 +168,8 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     const reqRows = async (): Promise<number> => Number((await b.pool.query<{ n: string }>('SELECT count(*)::text AS n FROM dashboard_requests')).rows[0].n);
     const inbox = async (w: string, id?: string): Promise<number> => Number((await b.pool.query<{ n: string }>(
       'SELECT count(*)::text AS n FROM dashboard_request_inbox WHERE org_id = $1 AND user_email = $2 AND ($3::uuid IS NULL OR request_id = $3::uuid)', [ORG, at(w), id ?? null])).rows[0].n);
+    const unseen = async (w: string, id: string): Promise<number> => Number((await b.pool.query<{ n: string }>(
+      'SELECT count(*)::text AS n FROM dashboard_request_inbox WHERE org_id = $1 AND user_email = $2 AND request_id = $3::uuid AND seen_at IS NULL', [ORG, at(w), id])).rows[0].n);
     const pushesTo = (w: string, state?: string) => pushes.filter((p) => p.channel === 'requests:changed' && p.user === at(w) && (!state || JSON.parse(p.data).state === state)).length;
     const mailsTo = (w: string) => fake.txns.filter((t) => t.rcpts.includes(at(w))).length;
     const bell = async (w: string) => (await b.as(w).call('mentions:list')).body as { ok: boolean; requests: Any[]; unseen: number };
@@ -172,8 +186,9 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     const R1: string = r1.body.id;
     ok('create: the request is one row', r1.status === 200 && r1.body.ok === true && typeof R1 === 'string' && (await reqRows()) === 1, show(r1.body));
     ok('create: a bell row for each approver — Edit on Orders: the org admin and the Ops lead', (await inbox('boss', R1)) === 1 && (await inbox('lead', R1)) === 1);
-    const unTold = await Promise.all(['ed', 'ev', 'vic', 'viv'].map((w) => inbox(w, R1)));
+    const unTold = [...await Promise.all(['ed', 'ev', 'vic'].map((w) => inbox(w, R1))), await unseen('viv', R1)];
     ok('create NEGATIVE CONTROL: an editor of Everyone only, an editor who views Ops, another viewer and the requester are told nothing', unTold.every((n) => n === 0) && ['ed', 'ev', 'vic', 'viv'].every((w) => pushesTo(w) === 0), show(unTold));
+    ok('create: the requester\'s own row is written seen — their bell lists it, to withdraw, with no badge', (await inbox('viv', R1)) === 1);
     const notice = pushes.find((p) => p.channel === 'requests:changed' && p.user === at('lead'));
     ok('create: a push to each approver, naming who and where — never the title, a chart, the note or an address', pushesTo('lead') === 1 && pushesTo('boss') === 1 && !!notice
       && JSON.parse(notice.data).by === 'Viv' && JSON.parse(notice.data).on === 'Sales' && JSON.parse(notice.data).state === 'open' && !/Returns|NOTECANARY|Sales by region|@acme/.test(notice.data), notice?.data);
@@ -213,7 +228,7 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     ok('preview: every chart\'s figures are the door\'s as the reviewer, Object.is', pv.body.cards.length === 2 && pv.body.cards.every((c: Any, i: number) => c.ok && 'card' in door[i] && sameFigures(c, (door[i] as Any).card)), show(pv.body.cards));
     const vivNow = await b.run(me('viv'), async () => answers.computeCard(P, { ...SALES, datasetId: orders } as never));
     ok('preview NEGATIVE CONTROL: the requester\'s own figures, under their row rule, differ — the review is the reviewer\'s access, not theirs', 'card' in vivNow && !sameFigures(pv.body.cards[0], vivNow.card), show('card' in vivNow ? vivNow.card.data : vivNow));
-    ok('preview: what approving makes — a visual per chart, the dashboard, and Ops', JSON.stringify(pv.body.creates) === JSON.stringify({ visuals: ['Sales by region', 'Average order by region'], dashboard: 'Returns Q4', folder: 'Ops' }), show(pv.body.creates));
+    ok('preview: what approving makes — a visual per chart, the dashboard, and Ops', JSON.stringify(pv.body.creates) === JSON.stringify({ visuals: ['Sales by region', 'Average order by region'], dashboard: 'Returns Q4', folder: 'Ops', folderId: OPS }), show(pv.body.creates));
 
     // ── refused ───────────────────────────────────────────────────────────
     const [boards0, visuals0] = [(await boards()).length, await visualsNow()];
@@ -323,6 +338,8 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     await b.as('lead').call('mentions:seen', { projectId: P, id: open!.id });
     const lead1 = await bell('lead');
     ok('seen: one row, by its ids', lead1.requests.find((x) => x.id === open!.id)?.seen === true && lead1.unseen === lead0.unseen - 1, show([lead0.unseen, lead1.unseen]));
+
+    await more({ b, P, OPS, opsTeam, leadsTeam, orders, plain, thread, tP: tP.turnId, DID, pushes, sameFigures });
 
     // ── rls ───────────────────────────────────────────────────────────────
     const role = await ordinaryRole(b, ['dashboard_requests', 'dashboard_request_inbox']);
