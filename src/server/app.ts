@@ -53,6 +53,7 @@ import { externalRaised, isExternalMetricError, tagExternalRefusals } from '../a
 import { seedRank, register as registerCaller } from './authz/caller';
 import { FOLDER_CODE, folderRaised, isFolderError, tagFolderRefusals } from './authz/folders';
 import { gateWrite } from './authz/folderWriteGate';
+import { useFolders } from './authz/folderTree';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
@@ -171,6 +172,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   });
 
   useLogger(app.log); // src/app/logger.ts: every logger.* line in the process goes through pino, redacted
+  useFolders(cfg.folders); // ORDINATE_FOLDERS: making, sharing and moving folders (team-folders D22)
 
   // A route or hook that throws — a Postgres error under /api/auth/*, /p/ or a refresh URL, a settings write
   // the onSend hook awaits — would get Fastify's default reply, which carries the error's message (a database

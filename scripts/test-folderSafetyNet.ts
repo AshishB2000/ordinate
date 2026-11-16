@@ -18,6 +18,9 @@
 // 4's reach (E5, with DATABASE_URL): a dataset read by a dashboard the caller opens answers its figures and nothing
 //    else, the publish refusal, the refresh push — scripts/folderNetReach.ts, each with its negative control.
 //
+// 11 (E7, with DATABASE_URL): the folder channels — no top-level folder by a non-admin, no grant by a viewer, the move
+//    hash refusing a stale warning, and a move's reach change exactly what the warning said (scripts/folderNetMoves.ts).
+//
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-folderSafetyNet.js
 
 export {}; // module scope — sibling test scripts share top-level names

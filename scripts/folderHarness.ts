@@ -79,7 +79,8 @@ const COLUMNS = (extra: string) => [{ name: 'dept', type: 'text' as const }, { n
 const rows = (tag: string): Cell[][] => Array.from({ length: 24 }, (_, i) => [`d${i % 3}`, (i * 37) % 101, `${tag}_${i % 6}`, `2024-0${1 + (i % 6)}-1${i % 9}`, i]);
 
 /** Null (with a skip line) without DATABASE_URL. */
-export async function world(label: string): Promise<World | null> {
+/** `env`: the server's extra settings; folders are on unless a suite says otherwise (ORDINATE_FOLDERS, D22's gate). */
+export async function world(label: string, env: Record<string, string> = { ORDINATE_FOLDERS: 'on' }): Promise<World | null> {
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {
     console.log(`skip ${label}: DATABASE_URL is unset (set it to a Postgres this suite may CREATE DATABASE on)`);
@@ -102,6 +103,7 @@ export async function world(label: string): Promise<World | null> {
     LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), AUTH_MODE: 'header',
     TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test',
     RATE_LIMIT_RPC_PER_MINUTE: '1000000', RATE_LIMIT_RPC_IP_PER_MINUTE: '1000000', // the sweep calls every channel, many times
+    ...env,
   }));
   await app.ready();
   const email = (who: Person): string => `${who.toLowerCase()}@acme.test`;

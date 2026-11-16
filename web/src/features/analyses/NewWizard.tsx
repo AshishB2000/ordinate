@@ -56,7 +56,14 @@ const fmtCount = new Intl.NumberFormat();
  * `initialStep` 2 the wizard opens on "Start from" — only when that dataset is
  * really in the project (anCreateWizard's `{ step: 2 }`).
  */
-export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClose }: { projectId: string; datasetId?: string; initialStep?: 1 | 2; onClose: () => void }) {
+export function NewWizard({ projectId, datasetId: preset, initialStep = 1, folderId, onClose }: {
+  projectId: string;
+  datasetId?: string;
+  initialStep?: 1 | 2;
+  /** Where the new dashboard lands (shared folders D18: the rail's folder); else Everyone. */
+  folderId?: string;
+  onClose: () => void;
+}) {
   const sets = useDatasets(projectId);
   const key = useAiStatus();
   const aiReady = !!key.data?.ready;
@@ -117,7 +124,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
   const createFrom = async (kind: Start) => {
     setBusy(true);
     try {
-      const made = (await rpc('analysis:create', { projectId, name: chosenName })) as Analysis | { ok: false; error: string };
+      const made = (await rpc('analysis:create', { projectId, name: chosenName, ...(folderId ? { folderId } : {}) })) as Analysis | { ok: false; error: string };
       if ('ok' in made && made.ok === false) throw new Error(made.error);
       const a = made as Analysis;
       if (isStarter(kind) && selectedId) {

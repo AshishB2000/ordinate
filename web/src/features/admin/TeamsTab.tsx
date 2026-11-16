@@ -1,5 +1,6 @@
 // Admin → Teams: create, rename, and choose members. A team is what a project
-// is owned by and shared with (Projects tab, and sharing on each project).
+// is owned by and shared with (Projects tab, and sharing on each project), and
+// what a folder inside a project is given to (Folders…, docs/team-folders).
 // A team's Tables (`?team=<id>`, ./TeamTables) are the warehouse tables its viewers may ask about.
 
 import { useState, type FormEvent } from 'react';
@@ -12,6 +13,7 @@ import { Menu } from '../../ui/Menu';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { Badge } from '../../ui/Badge';
+import { TeamFoldersDialog } from '../folders/TeamFolders';
 import { fmtDate, useAdminUsers, useIdpGroups, useTeams, useWrite, type Team } from './api';
 import { TeamTables } from './TeamTables';
 import s from './Admin.module.css';
@@ -101,6 +103,7 @@ export function TeamsTab() {
   const [renaming, setRenaming] = useState<Team | null>(null);
   const [members, setMembers] = useState<string | null>(null);
   const [params, setParams] = useSearchParams();
+  const [folders, setFolders] = useState<Team | null>(null);
   // The dialog follows the refetched team, so a tick shows at once.
   const membersOf = teams.data?.find((t) => t.id === members);
   const tablesOf = teams.data?.find((t) => t.id === params.get('team'));
@@ -167,6 +170,7 @@ export function TeamsTab() {
                     trigger={<IconButton icon="more-horizontal" label={`Actions for ${t.name}`} size="sm" />}
                     items={[
                       ...(linked.has(t.id) ? [] : [{ label: 'Members…', icon: 'user' as const, onSelect: () => setMembers(t.id) }]),
+                      { label: 'Folders…', icon: 'folder', onSelect: () => setFolders(t) },
                       { label: 'Rename…', icon: 'pencil', onSelect: () => setRenaming(t) },
                       { label: 'Tables…', icon: 'table', onSelect: () => setParams({ tab: 'teams', team: t.id }) },
                     ]}
@@ -193,6 +197,7 @@ export function TeamsTab() {
       {creating && <NameDialog open onOpenChange={setCreating} />}
       {renaming && <NameDialog key={renaming.id} team={renaming} open onOpenChange={(o) => !o && setRenaming(null)} />}
       {membersOf && <MembersDialog team={membersOf} onOpenChange={(o) => !o && setMembers(null)} />}
+      {folders && <TeamFoldersDialog team={folders} onClose={() => setFolders(null)} />}
     </section>
   );
 }

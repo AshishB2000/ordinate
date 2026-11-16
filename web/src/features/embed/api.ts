@@ -27,7 +27,8 @@ export interface LockColumn {
   tiles: number;
 }
 
-export type ColumnsReply = { ok: true; tiles: number; columns: LockColumn[] } | { ok: false; error: string; republish?: boolean };
+/** `outside`: project members who can't open the folders of the dashboard or the datasets its tiles read (shared folders). */
+export type ColumnsReply = { ok: true; tiles: number; columns: LockColumn[]; outside?: number } | { ok: false; error: string; republish?: boolean };
 
 export type Lock = { column: string; values: string[] };
 export type Hide = 'title' | 'filters';

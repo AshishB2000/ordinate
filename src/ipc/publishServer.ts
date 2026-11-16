@@ -31,6 +31,7 @@ import { getSite, listSites, publishHosted, removeSite, setAccess, type Access, 
 import { ctx } from '../server/context';
 import { offerDownload } from '../server/files';
 import { orgAllowsLinks } from '../server/published';
+import { outsideCount } from '../server/authz/folderOutside';
 
 type Targets = { projectId: string; dashboardIds?: string[]; storyIds?: string[]; scorecardIds?: string[]; options?: Record<string, unknown>; brands?: unknown };
 
@@ -71,7 +72,9 @@ export function register(pool: () => Pool | null): void {
       // Built as the publish would be (docs/row-policy D10): the dialog says why before anything is written.
       const { value: plan, datasets: read } = await fanOutScope(() => planPublish(clean));
       await assertFanOutAllowed(clean.projectId, read);
-      return { ok: true, plan };
+      // "Shows data from folders N people can't open": the link's audience is its own (team-folders D17), so say so.
+      const items = [...clean.dashboardIds.map((id) => ({ kind: 'dashboard' as const, id })), ...read.map((id) => ({ kind: 'dataset' as const, id }))];
+      return { ok: true, plan, outside: await outsideCount(clean.projectId, items) };
     } catch (err: any) { // any: a builder's throw
       return { ok: false, error: err?.message || 'Could not size the site.' };
     }

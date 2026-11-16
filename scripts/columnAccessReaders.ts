@@ -94,6 +94,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'events:list': 'META',
   'explore:suggest': 'MARK', // fields and suggestions from metadata; `hidden` names the columns hidden from the caller (p4-07's Explore chip). A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'folder:of': 'META', // whether an id is in a folder the caller cannot open: no cell, label or figure
+  'folder:tree': 'META', // folder names, teams and item ids: no cell, label or figure
   'format:colors:get': 'REDACT', // no colours of a column hidden on any dataset (rowAccess.hiddenAnywhere); test-columnRedact
   'formula:check': 'NET',
   'formula:functions': 'META',

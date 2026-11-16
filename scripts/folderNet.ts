@@ -29,7 +29,7 @@
 // topics, Recent, Home, the switcher), on HR's planted records — and since E4 ⌘K and the Assistant's history, whose
 // conversations held while HR was open (section 0) name its items. Section 6 (E4, ./folderNetIndexes): the indexes per
 // person, by words and meaning, against their references, on Finance's canaries. Section 8 (writes) is E6's
-// (./folderNetWrites), 11 E7's.
+// (./folderNetWrites), 11 E7's (./folderNetMoves).
 
 import { randomUUID } from 'crypto';
 import { ok } from './selfcheck';
@@ -40,6 +40,7 @@ import { reachSection } from './folderNetReach';
 import * as cost from './folderNetCost';
 import { indexSections } from './folderNetIndexes';
 import { writeSections } from './folderNetWrites';
+import { moveSection } from './folderNetMoves';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -298,7 +299,8 @@ export async function databaseSections(): Promise<void> {
     await cost.foldered(W, spare); // 9: with folders on P and one more, the switcher reads those two trees only
     await indexSections(W); // 6 (E4): ⌘K, words, meaning, counts, verified, history — after the sends: it makes items of its own
     await cost.folderedSearch(W);
-    await writeSections(W); // 8 (E6): writes — last: its controls change and delete things
+    await writeSections(W); // 8 (E6): writes — its controls change and delete things
+    await moveSection(W); // 11 (E7): the folder channels, and a move's reach change is what its warning said
   } finally {
     await W.close();
   }

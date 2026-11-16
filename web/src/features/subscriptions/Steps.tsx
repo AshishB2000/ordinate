@@ -227,7 +227,15 @@ export function WhereStep({
   pending,
   error,
   onRetry,
-}: Pick<StepProps, 'draft' | 'set'> & { channels: ChannelFrame | undefined; pending: boolean; error: string | null; onRetry: () => void }) {
+  closed,
+}: Pick<StepProps, 'draft' | 'set'> & {
+  channels: ChannelFrame | undefined;
+  pending: boolean;
+  error: string | null;
+  onRetry: () => void;
+  /** Email recipients who can't open the dashboard (shared folders): the server's count. */
+  closed?: number;
+}) {
   if (pending) {
     return (
       <div className={s.cardList} role="status" aria-busy="true" aria-label="Loading channels">
@@ -275,6 +283,14 @@ export function WhereStep({
           ))}
         </div>
       </fieldset>
+      {!!closed && (
+        <p className={s.closed} role="note">
+          <Icon name="lock" size={12} />
+          <span>
+            {closed} {closed === 1 ? 'recipient' : 'recipients'} can’t open this dashboard and won’t get it.
+          </span>
+        </p>
+      )}
       <p className={s.hint}>
         {channels.canManage ? (
           <>

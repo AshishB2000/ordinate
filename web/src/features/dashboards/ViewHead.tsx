@@ -3,7 +3,7 @@
 // was published, and four actions: Compare (with As of and the currency when there is one), Subscribe, Expand and ⋯
 // (Copy link, Comments, Export HTML, Print). An editor on the published copy also gets Edit, and — while the draft
 // holds edits viewers do not see — a line saying so, with the way to it. More than one sheet: underlined sheet tabs
-// under it. Saved views sit in the filter box.
+// under it. Saved views sit in the filter box. With shared folders, a chip says which folder it is in and who opens it.
 
 import { Link } from 'react-router';
 import { buttonClass, IconButton } from '../../ui/Button';
@@ -11,6 +11,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { Menu } from '../../ui/Menu';
 import { toast } from '../../ui/Toast';
 import { useEditor } from '../analyses/editor/context';
+import { FolderChip } from '../folders/FolderChip';
 import { useCanEdit, useOverview } from '../projects/api';
 import { SubscribeButton, ViewControls, exportHtml, useDashFreshness } from './DashboardChrome';
 import { publishedDay, useOpened } from './drafts/state';
@@ -77,6 +78,9 @@ export function ViewHead() {
                 ))}
             </p>
           )}
+          <div className={s.folder}>
+            <FolderChip projectId={ed.projectId} kind="dashboard" id={ed.analysisId} name={ed.doc.name || 'Untitled dashboard'} />
+          </div>
         </div>
         <div className={s.actions}>
           <ViewControls />

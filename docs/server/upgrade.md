@@ -942,6 +942,23 @@ edited*; publishing it again from a new pod tells them).
 **Rolling back.** The older release ignores the tables; requests sent meanwhile stay in them and show again after the
 next upgrade.
 
+## Shared folders can be made (no migration)
+
+The release with the folder channels ([design](../team-folders/00-design.md), E7) lets project admins make folders
+and editors move datasets and dashboards into them ([folders.md](folders.md)), once an operator sets
+`ORDINATE_FOLDERS=on` ([configuration.md](configuration.md#shared-folders)); it is `off` by default. It adds no
+migration: the tables are `0032`'s, and every reader applies them in this release.
+
+**Rolling out.** Upgrade with `ORDINATE_FOLDERS` unset: nothing anyone sees changes, and nobody can make a folder, so a
+pod of an older release beside a new one widens nothing. **Turn it on only after every pod runs this release (or a
+later one)**, in one rollout: a pod older than the readers ignores folders and would show a folder's items to every
+project member. Nothing changes until someone makes a folder: every item is in Everyone in the project.
+
+**Rolling back.** To a release that has the readers: safe, the folders keep applying and only the screens to change
+them go. Below it, once any project has a folder: first, with `ORDINATE_FOLDERS` still on, open **Share → Folders →
+Move everything to Everyone** in each such project (a project admin), so no item is in a folder; the rollback then
+widens nothing.
+
 ## Compose
 
 From a checkout:

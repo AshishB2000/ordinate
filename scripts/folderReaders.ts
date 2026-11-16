@@ -97,6 +97,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'events:list': 'PROJECT',
   'explore:suggest': 'OPEN',
   'folder:of': 'FOLDER', // a bookmark's check: `closed` for an item that exists in a folder the caller cannot open, names nothing
+  'folder:tree': 'FOLDER', // the folders the caller opens and where items in them sit; teams' names on those only (test-folderChannels)
   'format:colors:get': 'PROJECT', // the project's colour map: values any chart dealt, so a closed folder's values are E2's to withhold (as row rules' REDACT)
   'formula:check': 'OPEN',
   'formula:functions': 'PROJECT',
@@ -308,6 +309,11 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'events:save': 'PROJECT',
   'events:setCalendars': 'PROJECT',
   'explore:keepTable': 'CREATE', // Explore's Keep as a dataset: the Live dataset of a source table (phase D), as answer:keepTable
+  'folder:create': 'FOLDER', // a top-level folder by a project admin, a subfolder with Edit on its parent (test-folderChannels)
+  'folder:delete': 'FOLDER', // an empty folder only: `not_empty`; a top-level one by a project admin
+  'folder:move': 'FOLDER', // Edit where each item is and where it goes; the hash refuses a stale warning (safety net 11)
+  'folder:moveImpact': 'FOLDER', // who loses and gains access, as head counts by team: Edit on both ends, as the move
+  'folder:rename': 'FOLDER',
   'format:colors:assign': 'PROJECT',
   'format:colors:palette': 'PROJECT',
   'format:colors:reset': 'PROJECT',
