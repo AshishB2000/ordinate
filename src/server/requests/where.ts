@@ -37,7 +37,7 @@ export async function foldersOpen(projectId: string): Promise<FolderChoice[]> {
 }
 
 /** `fn` as `email` is now — their org role, a context of their own — or null when their account is gone or disabled. */
-async function asMember<T>(email: string, fn: () => Promise<T>): Promise<T | null> {
+export async function asMember<T>(email: string, fn: () => Promise<T>): Promise<T | null> {
   const pool = orgDb();
   if (!pool) return null;
   const { org, requestId } = ctx();

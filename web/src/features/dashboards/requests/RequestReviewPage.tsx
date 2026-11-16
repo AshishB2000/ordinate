@@ -29,7 +29,8 @@ import { ME_KEY } from '../../auth/api';
 import { MENTIONS_KEY } from '../mentionsApi';
 import s from './RequestReview.module.css';
 
-type CardView = { ok: true; title: string; chartType: string; datasetName: string; data: ChartDataShape; headline: { label: string; display: string }[]; caption: string; notes: string[]; filterLabels: string[] } | { ok: false; reason: string };
+/** `fewerRows`: the server's line when a row rule holds the requester to other rows than yours here (never their figures). */
+type CardView = { ok: true; title: string; chartType: string; datasetName: string; data: ChartDataShape; headline: { label: string; display: string }[]; caption: string; notes: string[]; filterLabels: string[]; fewerRows?: string } | { ok: false; reason: string };
 interface RequestView {
   projectId: string;
   id: string;
@@ -257,6 +258,12 @@ function Drawn({ c }: { c: Extract<CardView, { ok: true }> }) {
         <Chart type={c.chartType} data={c.data} label={c.title} />
       </div>
       {c.caption && <p className={s.caption}>{c.caption}</p>}
+      {c.fewerRows && (
+        <p className={s.fewer} role="note" data-testid="request-fewer-rows">
+          <Icon name="lock" size={12} />
+          <span>{c.fewerRows}</span>
+        </p>
+      )}
       {c.notes.map((n) => (
         <p key={n} className={s.muted}>
           {n}

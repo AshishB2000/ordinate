@@ -1,7 +1,8 @@
 // An editor's "Add to dashboard" on an answer card (./AddToDashboard, docs/assistant/00-design.md step 8): offered on a
 // chart answer to a member who may edit, never to a viewer or on a warehouse table's answer; the dialog lists the
 // dashboards the server says they edit (loading, none, a failed list), sends the spec and the dashboard — or a new one's
-// name — and nothing else, shows the server's refusal and keeps the dialog, and once added the card says where, with Open.
+// name — and nothing else, shows the server's refusal and keeps the dialog, and once added the card says where, with Open;
+// a turn already on a dashboard says "On" it from its own card, and a warehouse table's answer is offered too.
 
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +35,7 @@ const CARD: Card = {
   headline: [], bullets: [], chips: [], filterLabels: [], notes: [],
 };
 const BOARDS = { body: [{ id: BOARD, name: 'Sales board' }] };
+const TURN = { threadId: NEW_BOARD, turnId: 't1' };
 
 function mount(ui: React.ReactNode, routes: Record<string, RpcReply> = {}) {
   const calls = serveRpc({ 'stats:dashboards': BOARDS, ...routes });
@@ -52,14 +54,37 @@ describe('on the answer card', () => {
     expect(screen.getByRole('button', { name: 'Add to dashboard' })).toBeTruthy();
   });
 
-  it('a viewer is not, and neither is a warehouse table\'s answer (Keep as a dataset first)', () => {
+  it('a viewer is not', () => {
     canEdit.value = false;
     mount(<AnswerCard projectId={P} spec={SPEC} card={CARD} narrated={false} onFollowUp={async () => {}} />);
     expect(screen.queryByRole('button', { name: 'Add to dashboard' })).toBeNull();
-    cleanup();
-    canEdit.value = true;
-    mount(<AnswerCard projectId={P} spec={{ ...SPEC, table: BOARD }} card={CARD} turn={{ threadId: NEW_BOARD, turnId: 't1' }} narrated={false} onFollowUp={async () => {}} />);
+  });
+
+  it('a warehouse table\'s answer is, beside Keep as a dataset: the dialog says the table is kept, and the turn goes with the spec', async () => {
+    const TABLE_SPEC = { ...SPEC, table: BOARD };
+    const calls = mount(<AnswerCard projectId={P} spec={TABLE_SPEC} card={CARD} turn={TURN} narrated={false} onFollowUp={async () => {}} />, {
+      'answer:addToDashboard': { body: { ok: true, dashboard: { id: BOARD, name: 'Sales board' }, visual: { id: DS, name: 'x' } } },
+    });
+    expect(screen.getByTestId('answer-keep-table')).toBeTruthy();
+    const dialog = await openDialog();
+    expect(within(dialog).getByText(/The warehouse table is kept as a Live dataset/)).toBeTruthy();
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Dashboard' }).textContent).toContain('Sales board'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'answer:addToDashboard')?.payload).toEqual({ projectId: P, spec: TABLE_SPEC, analysisId: BOARD, ...TURN }));
+  });
+
+  it('on load, a turn already on a dashboard says where — "On Sales board" and Open — from the card it has, with no call', () => {
+    const calls = mount(<AnswerCard projectId={P} spec={SPEC} card={{ ...CARD, onDashboard: { id: BOARD, name: 'Sales board' } }} turn={TURN} narrated={false} onFollowUp={async () => {}} />);
+    expect(screen.getByTestId('answer-added').textContent).toBe('On Sales board');
+    expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(`/analyses/${P}/${BOARD}`);
     expect(screen.queryByRole('button', { name: 'Add to dashboard' })).toBeNull();
+    expect(calls.filter((c) => c.channel === 'answer:addToDashboard' || c.channel === 'stats:dashboards')).toHaveLength(0);
+  });
+
+  it('NEGATIVE CONTROL: a card with no dashboard offers the button', () => {
+    mount(<AnswerCard projectId={P} spec={SPEC} card={CARD} turn={TURN} narrated={false} onFollowUp={async () => {}} />);
+    expect(screen.getByRole('button', { name: 'Add to dashboard' })).toBeTruthy();
+    expect(screen.queryByTestId('answer-added')).toBeNull();
   });
 });
 
@@ -127,6 +152,14 @@ describe('the dialog', () => {
     expect((await within(dialog).findByRole('alert')).textContent).toBe('Could not list your dashboards. You can still add it to a new one.');
     expect(within(dialog).getByRole('textbox', { name: 'Name the dashboard' })).toBeTruthy();
     expect((within(dialog).getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('already there: the server\'s `already` reads "On", not "Added to"', async () => {
+    mount(button, { 'answer:addToDashboard': { body: { ok: true, already: true, dashboard: { id: BOARD, name: 'Sales board' }, visual: { id: DS, name: 'x' } } } });
+    const dialog = await openDialog();
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Dashboard' }).textContent).toContain('Sales board'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect((await screen.findByTestId('answer-added')).textContent).toBe('On Sales board');
   });
 
   it('Cancel sends nothing', async () => {

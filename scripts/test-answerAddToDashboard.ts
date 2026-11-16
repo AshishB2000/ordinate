@@ -5,9 +5,15 @@
 //     add       on an existing dashboard: exactly one visual more and one tile more on its DRAFT, and no other dashboard;
 //               the tile's figures through THE tile door (analysis:tiles) are the answer card's, Object.is; the
 //               published copy is byte-identical and the dashboard reads "edited"
+//     twice     the same answer on the same dashboard is the tile already there (`already`: no visual, no tile); NEGATIVE
+//               CONTROL: another dashboard gets a second
+//     turn      named, the turn keeps the dashboard: its card after a reload says where (`onDashboard`), and a visual it
+//               already keeps (Save as visual's) is the one put on; NEGATIVE CONTROL: another turn's card says nothing
+//     table     a source table's answer is kept as a Live dataset in the same call and added on it, its turn re-pointed at
+//               it; a second click makes neither a second dataset nor a second tile
 //     new       no dashboard named: a new one holding just that tile, named as asked (else the card's title)
-//     refused   a viewer (403), an SQL answer and a source table's (nothing written either way); NEGATIVE CONTROL: the
-//               same editor's chart answer goes
+//     refused   a viewer (403) and an SQL answer (nothing written either way); NEGATIVE CONTROL: the same editor's chart
+//               answer goes
 //   db (header sign-in, a folder: Ops holds Orders and the Ops board; team Ops views it, team Ops leads edits it)
 //     picker    stats:dashboards lists only the dashboards the caller edits
 //     folder    an editor who views Ops: 409 `edit` on the Ops board, nothing written; one with nothing on Ops: 409
@@ -35,7 +41,9 @@ const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const datasetsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const msg: typeof import('../src/ai/answerMessages') = require('../src/ai/answerMessages');
-const srcMsg: typeof import('../src/ai/sourceAnswerMessages') = require('../src/ai/sourceAnswerMessages');
+const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+const sourceTables: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
 
 type Any = any; // any: each channel's own reply, read field by field
 type ChartData = import('../src/analysis/vizData').ChartData;
@@ -75,7 +83,14 @@ async function noDatabase(): Promise<void> {
     const projectId = (await projects.createProject('Keep an answer')).id;
     const ds = await datasetsMod.saveDataset(projectId, { name: 'Orders', sourceKind: 'csv', columns: COLUMNS, rows: ROWS });
     if (!ds) throw new Error('fixture not saved');
-    return { projectId, datasetId: ds.id };
+    // A warehouse table (the Live fake) documented on its connection: an answer read straight from it (outcome C).
+    fakeMod.registerLiveFake();
+    await fakeMod.loadWarehouseTable('canary_sales_add', COLUMNS, ROWS as never);
+    const conn = await connections.saveConnection(projectId, { name: 'Warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
+    const doc = conn ? await sourceTables.createSourceDoc(projectId, conn.id, 'canary_sales_add', {}) : null;
+    if (!conn || !doc?.ok) throw new Error('fixture: the warehouse table');
+    await sourceTables.updateSourceDoc(projectId, conn.id, doc.docId, (d) => ({ ...d, facts: { columns: [{ name: 'region', type: 'VARCHAR' }, { name: 'net_sales', type: 'DOUBLE' }], rowEstimate: 5, readAt: new Date().toISOString(), readBy: 'ana@acme.test' } }));
+    return { projectId, datasetId: ds.id, connId: conn.id, docId: doc.docId };
   });
   const P = seed.projectId;
   const SPEC = specOn(seed.datasetId);
@@ -90,8 +105,8 @@ async function noDatabase(): Promise<void> {
   const draft = async (id: string): Promise<Any> => (await post('analysis:open', { projectId: P, id })).value;
   const copy = async (id: string): Promise<string> => JSON.stringify((await post('analysis:open', { projectId: P, id, published: true })).value.analysis);
   try {
-    // A published dashboard with one chart on it already.
-    const first = (await post('visual:save', { projectId: P, datasetId: seed.datasetId, name: 'First', chartType: 'column', encoding: { category: 'region', values: MEASURES } })).value;
+    // A published dashboard with one chart on it already (another chart: the same one would be the answer's tile already).
+    const first = (await post('visual:save', { projectId: P, datasetId: seed.datasetId, name: 'First', chartType: 'line', encoding: { category: 'region', values: MEASURES } })).value;
     const D = (await post('analysis:create', { projectId: P, name: 'Sales board', sheets: [{ name: 'One', cards: [{ id: randomUUID(), type: 'visual', visualId: first.id, layout: { x: 0, y: 0, w: 6, h: 6 } }] }] })).value.id as string;
     const pub = await post('analysis:publish', { projectId: P, id: D });
     ok('setup: the dashboard is published with one tile', pub.value.ok === true && cardsOf((await draft(D)).analysis).length === 1, pub.body);
@@ -114,11 +129,65 @@ async function noDatabase(): Promise<void> {
     ok('differential NEGATIVE CONTROL: another answer\'s card is another chart', !sameFigures(tile.data, (await post('answer:card', { projectId: P, spec: { ...SPEC, measures: [{ column: 'net_sales', aggregation: 'max' }] } })).value.data));
     ok('draft: the published copy is unchanged, and the dashboard reads "edited"', (await copy(D)) === copy0 && after.status === 'edited', after.status);
 
+    // ── twice ─────────────────────────────────────────────────────────────
+    const board = async (name: string): Promise<string> => (await post('analysis:create', { projectId: P, name })).value.id as string;
+    const [v2, b2] = [await visuals(), await boards()];
+    const twice = await post('answer:addToDashboard', { projectId: P, spec: SPEC, analysisId: D });
+    ok('twice: the same answer on the same dashboard is the tile already there — `already`, that visual, no visual and no tile more',
+      twice.value.ok === true && twice.value.already === true && twice.value.visual?.id === a.visual.id && twice.value.dashboard?.id === D
+      && (await visuals()) === v2 && cardsOf((await draft(D)).analysis).length === 2, twice.body);
+    const D2 = await board('Ops board');
+    const other = await post('answer:addToDashboard', { projectId: P, spec: SPEC, analysisId: D2 });
+    ok('twice NEGATIVE CONTROL: another dashboard gets a second tile, of a visual of its own',
+      other.value.ok === true && !other.value.already && cardsOf((await draft(D2)).analysis).length === 1 && (await visuals()) === v2 + 1 && (await boards()) === b2 + 1, other.body);
+
+    // ── turn ──────────────────────────────────────────────────────────────
+    const rerun = async (spec: object): Promise<{ threadId: string; turnId: string }> => {
+      const r = (await post('answer:rerun', { projectId: P, spec })).value;
+      if (!r?.ok) throw new Error(`rerun: ${show(r)}`);
+      return { threadId: r.threadId, turnId: r.turns.at(-1).id };
+    };
+    const cardOf = async (t: { threadId: string; turnId: string }): Promise<Any> => {
+      const kept = ((await post('copilot:history', { projectId: P, threadId: t.threadId })).value.turns as Any[]).find((x) => x.id === t.turnId);
+      return kept?.card ?? (await post('answer:refresh', { projectId: P, ...t })).value;
+    };
+    const T = await rerun(SPEC);
+    const keptVisual = (await post('answer:saveVisual', { projectId: P, spec: SPEC, ...T })).value;
+    const D3 = await board('Turn board');
+    const v3 = await visuals();
+    const onTurn = await post('answer:addToDashboard', { projectId: P, spec: SPEC, analysisId: D3, ...T });
+    ok('turn: the visual its turn keeps (Save as visual\'s) is the one put on — no second visual',
+      onTurn.value.ok === true && onTurn.value.visual?.id === keptVisual.visual?.id && (await visuals()) === v3 && cardsOf((await draft(D3)).analysis)[0]?.visualId === keptVisual.visual.id, onTurn.body);
+    const reloaded = await cardOf(T);
+    ok('turn: after a reload its card says where it went, from the reply it already gets', reloaded?.ok === true && reloaded.onDashboard?.id === D3 && reloaded.onDashboard.name === 'Turn board', show(reloaded?.onDashboard));
+    const T2 = await rerun({ ...SPEC, chartType: 'bar' });
+    ok('turn NEGATIVE CONTROL: a turn never added says nothing', (await cardOf(T2))?.ok === true && !('onDashboard' in (await cardOf(T2))));
+
+    // ── table ─────────────────────────────────────────────────────────────
+    const TSPEC = { ...specOn(seed.docId), table: seed.connId, title: 'Warehouse sales by region' };
+    const datasetsNow = async (): Promise<Any[]> => (await post('dataset:list', { projectId: P })).value as Any[];
+    const [d0, v4] = [(await datasetsNow()).length, await visuals()];
+    const TT = await rerun(TSPEC);
+    const D4 = await board('Warehouse board');
+    const fromTable = await post('answer:addToDashboard', { projectId: P, spec: TSPEC, analysisId: D4, ...TT });
+    const keptDs = (await datasetsNow()).filter((x) => x.mode === 'live');
+    const tVisual = fromTable.value.ok ? (await post('visual:get', { projectId: P, id: fromTable.value.visual.id })).value : null;
+    ok('table: a source table\'s answer goes on in one call — one Live dataset made, one visual on it, one tile',
+      fromTable.value.ok === true && !fromTable.value.already && (await datasetsNow()).length === d0 + 1 && keptDs.length === 1 && tVisual?.datasetId === keptDs[0].id
+      && (await visuals()) === v4 + 1 && cardsOf((await draft(D4)).analysis).length === 1, show([fromTable.value, keptDs]));
+    const tTurn = ((await post('copilot:history', { projectId: P, threadId: TT.threadId })).value.turns as Any[]).find((x) => x.id === TT.turnId);
+    ok('table: its turn is re-pointed at the kept dataset, as Keep as a dataset leaves it', tTurn?.answer?.datasetId === keptDs[0]?.id && !tTurn.answer.table, show(tTurn?.answer));
+    const tAgain = await post('answer:addToDashboard', { projectId: P, spec: TSPEC, analysisId: D4 });
+    ok('table: a second click makes neither a second dataset nor a second tile', tAgain.value.ok === true && tAgain.value.already === true
+      && (await datasetsNow()).length === d0 + 1 && (await visuals()) === v4 + 1 && cardsOf((await draft(D4)).analysis).length === 1, tAgain.body);
+    ok('table: after a reload the card says where it went', (await cardOf(TT))?.onDashboard?.id === D4, show((await cardOf(TT))?.onDashboard));
+
     // ── new ───────────────────────────────────────────────────────────────
+    const b5 = await boards();
     const named = await post('answer:addToDashboard', { projectId: P, spec: SPEC, name: ' Sales review ' });
     const made = named.value.ok ? await draft(named.value.dashboard.id) : null;
     ok('new: a new dashboard named as asked, holding just the tile', named.value.ok === true && named.value.dashboard.id !== D && made?.analysis?.name === 'Sales review'
-      && cardsOf(made.analysis).length === 1 && cardsOf(made.analysis)[0].visualId === named.value.visual.id && made.status === 'draft' && (await boards()) === b0 + 1, named.body);
+      && cardsOf(made.analysis).length === 1 && cardsOf(made.analysis)[0].visualId === named.value.visual.id && made.status === 'draft' && (await boards()) === b5 + 1, named.body);
     const untitled = await post('answer:addToDashboard', { projectId: P, spec: SPEC });
     ok('new: no name — the card\'s title', untitled.value.ok === true && untitled.value.dashboard.name === 'Sales by region', untitled.body);
 
@@ -131,12 +200,12 @@ async function noDatabase(): Promise<void> {
     const sql = await post('answer:addToDashboard', { projectId: P, spec: { datasetId: seed.datasetId, sql: 'SELECT region, sum(net_sales) FROM "Orders" GROUP BY 1' }, analysisId: D });
     ok('refused: an SQL answer, in the catalog\'s words', sql.value.ok === false && sql.value.reason === msg.notAChartAnswer(), sql.body);
     const table = await post('answer:addToDashboard', { projectId: P, spec: { ...SPEC, table: randomUUID() }, analysisId: D });
-    ok('refused: a source table\'s answer is Keep as a dataset first', table.value.ok === false && table.value.reason === srcMsg.keepFirst(), table.body);
+    ok('refused: a source table that is not there keeps nothing', table.value.ok === false && typeof table.value.reason === 'string', table.body);
     const gone = await post('answer:addToDashboard', { projectId: P, spec: SPEC, analysisId: randomUUID() });
     ok('refused: a dashboard that is not there', gone.value.ok === false && gone.value.reason === msg.dashboardGone(), gone.body);
     ok('refused: none of them wrote a visual, a dashboard or a tile', (await visuals()) === v1 && (await boards()) === b1 && cardsOf((await draft(D)).analysis).length === 2);
-    const control = await post('answer:addToDashboard', { projectId: P, spec: SPEC, analysisId: D });
-    ok('refused NEGATIVE CONTROL: the same chart answer from the editor goes', control.value.ok === true && cardsOf((await draft(D)).analysis).length === 3, control.body);
+    const control = await post('answer:addToDashboard', { projectId: P, spec: { ...SPEC, measures: [{ column: 'net_sales', aggregation: 'max' }] }, analysisId: D });
+    ok('refused NEGATIVE CONTROL: a chart answer from the editor goes', control.value.ok === true && !control.value.already && cardsOf((await draft(D)).analysis).length === 3, control.body);
   } finally {
     await admin.close();
     fs.rmSync(DATA, { recursive: true, force: true });

@@ -563,7 +563,10 @@ index to the reference, now per caller.
   warning's people, and finViewer's reach goes as warned; NEGATIVE CONTROL: moving back reopens it to the same people.
   Vitest `folders.test.tsx` (with the off line in the rail, Share → Folders and Admin → Teams → Folders), the Publish,
   Embed and Subscribe dialogs' lines and their absence; e2e `folders.e2e.ts` (Postgres, `ORDINATE_FOLDERS=on`, both
-  themes, phone width).
+  themes, phone width; the Publish, Embed and Subscribe dialogs' *N … can't open* lines, screens `folders-publish`,
+  `-embed`, `-subscribe`) and `folders-off.e2e.ts` (the setting unset: Share → Folders' empty state, the rail, Share →
+  Folders with a folder made while on, and Admin → Teams → Folders, each with its one off line and no New folder, Move
+  to… or level control; screens `folders-off-share-empty`, `-data`, `-share`, `-team`).
 - **Left for later**: naming the folders in the Publish and Embed line (it counts people, it names none); folder search
   in the rail; moving folders themselves (only items move).
 
@@ -1036,8 +1039,15 @@ the dashboard from Home.
 - **Project deletion** drops its requests (`dropGrants`, beside its team tables), and their bell rows with them
   (ON DELETE CASCADE).
 - **Left**: *No longer available*; a source table's answer made into a Live dataset at approval and an SQL answer kept
-  as SQL (the Live dataset and *Not checked* lines of the preview) — both refused for now, with their sentences; *Priya
-  sees fewer rows*; *Older* after 30 days.
+  as SQL (the Live dataset and *Not checked* lines of the preview) — both refused for now, with their sentences; *Older*
+  after 30 days.
+- ***Priya sees fewer rows*** (built after E9): `request:preview` compares, per dataset the charts read, the row half of
+  `accessPrint` (`lockPrint`: the row lock's values, or why it is refused) worked out as the reviewer and as the
+  requester (`asMember`, a context of their own). Where the requester holds a lock that differs, each chart on it
+  carries `fewerRows`, *Priya sees fewer rows here (row access rules)*, one line under it on the review page. Only the
+  comparison crosses: never a figure or row of hers. `test-dashboardRequests`: the line under a row rule (NEGATIVE
+  CONTROL: on Plain, the same rows, none), and none of her own figures in the reply (canary); Vitest the line under
+  that chart alone.
 
 ## Migrations
 

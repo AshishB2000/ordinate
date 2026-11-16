@@ -34,8 +34,9 @@
 // turn's (`onNotThis`, a verified match), not the line's: it stays, alone, where the question was deleted since or the
 // card cannot be drawn.
 //
-// An answer read straight from a warehouse table (`spec.table`, outcome C) says so beside its name, and offers only
-// "Keep as a dataset" (./KeepTable): Save as visual and Verify need the dataset that click makes.
+// An answer read straight from a warehouse table (`spec.table`, outcome C) says so beside its name, and offers
+// "Keep as a dataset" (./KeepTable) and "Add to dashboard", which keeps it in the same click: Save as visual and Verify
+// need the dataset either makes.
 //
 // A viewer, who may keep nothing, gets "Request a dashboard" instead (./RequestDashboard): this answer and the
 // conversation's other charts (`answers`), sent to the editors who can approve it.
@@ -103,6 +104,8 @@ export interface Card {
   learn?: CardLearn;
   /** The visual its turn records, handed back only while it exists. */
   savedVisualId?: string;
+  /** The dashboard Add to dashboard put that visual on, while it still holds it. */
+  onDashboard?: { id: string; name: string };
   /** Its spec is a working verified question's (semantic part 3 D9): worked out by the server at every draw. `by`: the
    * verifier's name ('' when none was recorded); `kind`: its turn matched it word for word, or drew it from an example. */
   verified?: { id: string; question: string; by: string; at: string; kind?: 'matched' | 'based_on' };
@@ -302,11 +305,14 @@ export function AnswerCard({
               {table ? 'Hide table' : 'Show table'}
             </Button>
             {fromTable ? (
-              <KeepTable projectId={projectId} turn={turn} />
+              <>
+                <KeepTable projectId={projectId} turn={turn} />
+                <AddToDashboard projectId={projectId} spec={spec} turn={turn} on={card.onDashboard} />
+              </>
             ) : (
               <>
                 <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
-                <AddToDashboard projectId={projectId} spec={spec} />
+                <AddToDashboard projectId={projectId} spec={spec} turn={turn} on={card.onDashboard} />
                 {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
                 <AlertFromAnswer projectId={projectId} spec={spec} />
                 <RequestDashboard projectId={projectId} turn={turn} answers={answers} />

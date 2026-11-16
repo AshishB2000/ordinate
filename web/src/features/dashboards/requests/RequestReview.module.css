@@ -175,6 +175,16 @@
   margin-top: 1px;
   color: var(--muted);
 }
+/* A row rule holds the requester to other rows here: one quiet line under the chart. */
+.fewer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
 .muted {
   margin: 0;
   color: var(--muted);

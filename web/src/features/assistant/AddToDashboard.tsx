@@ -5,6 +5,11 @@
 // the house one (`stats:dashboards`), which lists only the dashboards the caller edits. Then the card says where the
 // answer went, with a link to open it.
 //
+// Not twice: the answer's turn keeps the dashboard, and its card says where (`on`, the server's `onDashboard`) after a
+// reload, with no call of its own; a dashboard that already holds it answers `already`, and the card says "On" it.
+// A warehouse table's answer is kept as a Live dataset in the same click (the dialog says so), and its turn then names
+// that dataset, as Keep as a dataset leaves it.
+//
 // A viewer has Request a dashboard instead (./RequestDashboard); false until the roles are known, so it never flashes.
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,21 +27,30 @@ import s from './AskEditor.module.css';
 const NEW = '__new__';
 const FAILED = 'Could not add this answer to that dashboard.';
 type Board = { id: string; name: string };
-type Reply = { ok: true; dashboard: Board } | { ok: false; reason?: string; error?: string };
+type Reply = { ok: true; dashboard: Board; already?: true } | { ok: false; reason?: string; error?: string };
+type Turn = { threadId: string; turnId: string };
 
-export function AddToDashboard({ projectId, spec }: { projectId: string; spec: { datasetId: string; title?: unknown } & Record<string, unknown> }) {
+export function AddToDashboard({ projectId, spec, turn, on }: {
+  projectId: string;
+  spec: { datasetId: string; title?: unknown } & Record<string, unknown>;
+  /** The answer turn the card draws: the server keeps the dashboard on it. */
+  turn?: Turn;
+  /** The dashboard the turn's answer is on, as the card's reply says. */
+  on?: Board;
+}) {
   const canEdit = useCanEdit(projectId);
   const [open, setOpen] = useState(false);
-  const [added, setAdded] = useState<Board | null>(null);
+  const [added, setAdded] = useState<(Board & { already?: true }) | null>(null);
   if (!canEdit) return null;
-  if (added) {
+  const shown = added ?? on;
+  if (shown) {
     return (
       <>
         <span className={s.sent} role="status" data-testid="answer-added">
           <Icon name="circle-check" size={16} />
-          Added to {added.name}
+          {added && !added.already ? 'Added to' : 'On'} {shown.name || 'Untitled dashboard'}
         </span>
-        <Link className={buttonClass('ghost', 'sm')} to={`/analyses/${projectId}/${added.id}`}>
+        <Link className={buttonClass('ghost', 'sm')} to={`/analyses/${projectId}/${shown.id}`}>
           <Icon name="external-link" />
           <span>Open</span>
         </Link>
@@ -48,16 +62,17 @@ export function AddToDashboard({ projectId, spec }: { projectId: string; spec: {
       <Button size="sm" variant="ghost" icon="layout-dashboard" onClick={() => setOpen(true)}>
         Add to dashboard
       </Button>
-      {open && <Picker projectId={projectId} spec={spec} onClose={() => setOpen(false)} onAdded={setAdded} />}
+      {open && <Picker projectId={projectId} spec={spec} turn={turn} onClose={() => setOpen(false)} onAdded={setAdded} />}
     </>
   );
 }
 
-function Picker({ projectId, spec, onClose, onAdded }: {
+function Picker({ projectId, spec, turn, onClose, onAdded }: {
   projectId: string;
   spec: Record<string, unknown>;
+  turn?: Turn;
   onClose: () => void;
-  onAdded: (b: Board) => void;
+  onAdded: (b: Board & { already?: true }) => void;
 }) {
   const qc = useQueryClient();
   const boards = useQuery({
@@ -71,15 +86,25 @@ function Picker({ projectId, spec, onClose, onAdded }: {
   const list = boards.data ?? [];
   const picked = choice ?? (list[0]?.id || NEW);
   const title = typeof spec.title === 'string' && spec.title ? spec.title : 'Untitled dashboard';
+  const fromTable = typeof spec.table === 'string';
 
   async function add(): Promise<void> {
     setBusy(true);
     setProblem(null);
     try {
-      const r = (await rpc('answer:addToDashboard', { projectId, spec: spec as { datasetId: string }, ...(picked === NEW ? (name.trim() ? { name: name.trim() } : {}) : { analysisId: picked }) })) as Reply;
+      const r = (await rpc('answer:addToDashboard', {
+        projectId,
+        spec: spec as { datasetId: string },
+        ...(picked === NEW ? (name.trim() ? { name: name.trim() } : {}) : { analysisId: picked }),
+        ...(turn ?? {}),
+      })) as Reply;
       if (!r.ok) return setProblem(r.reason || r.error || FAILED);
-      for (const key of ['stats:dashboards', 'analysis:gallery', 'visual:list']) void qc.invalidateQueries({ queryKey: [key, projectId] });
-      onAdded(r.dashboard);
+      for (const key of ['stats:dashboards', 'analysis:gallery', 'visual:list', ...(fromTable ? ['dataset:list'] : [])]) void qc.invalidateQueries({ queryKey: [key, projectId] });
+      if (turn) {
+        if (fromTable) qc.removeQueries({ queryKey: ['answer:refresh', projectId, turn.threadId, turn.turnId] }); // a card drawn from the table is not the dataset's
+        void qc.invalidateQueries({ queryKey: ['copilot:history', projectId] }); // the turn keeps it now
+      }
+      onAdded(r.already ? { ...r.dashboard, already: true } : r.dashboard);
       onClose();
     } catch (e) {
       setProblem(e instanceof Error && e.message ? e.message : FAILED);
@@ -94,7 +119,7 @@ function Picker({ projectId, spec, onClose, onAdded }: {
       onOpenChange={(o) => !o && onClose()}
       size="sm"
       title="Add to dashboard"
-      description="The answer is saved as a visual and added to the dashboard’s draft. Viewers see it once the dashboard is published."
+      description={`${fromTable ? 'The warehouse table is kept as a Live dataset, and the' : 'The'} answer is saved as a visual and added to the dashboard’s draft. Viewers see it once the dashboard is published.`}
       footer={
         <>
           <DialogClose asChild>

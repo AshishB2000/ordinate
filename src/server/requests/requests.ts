@@ -52,7 +52,8 @@ import * as say from '../requestMessages';
 import * as store from './store';
 import type { DashboardRequest } from './store';
 import { background, tellApprovers, tellRequester, tellWithdrawn } from './tell';
-import { folderChoices, folderName, foldersOpen, type FolderChoice } from './where';
+import { asMember, folderChoices, folderName, foldersOpen, type FolderChoice } from './where';
+import { lockPrint } from '../../ipc/answerSnapshots';
 
 export { requestsSettled, type RequestNotice } from './tell';
 
@@ -181,9 +182,13 @@ export async function requestFolders(projectId: string): Promise<{ ok: true; fol
   return { ok: true, folders: orgDb() ? await foldersOpen(projectId) : [] };
 }
 
-/** A chart as the review page draws it: the engine's figures, formatted by the server; or why it cannot be drawn. */
+/**
+ * A chart as the review page draws it: the engine's figures, formatted by the server; or why it cannot be drawn.
+ * `fewerRows`: the line saying the requester's figures would differ — a row rule holds them to other rows than the
+ * reviewer's on its dataset (their row lock prints differ). Only the comparison: never a figure or row of theirs.
+ */
 export type CardView =
-  | { ok: true; title: string; chartType: string; datasetName: string; data: Built['card']['data']; headline: Built['card']['headline']; caption: string; notes: string[]; filterLabels: string[] }
+  | { ok: true; title: string; chartType: string; datasetName: string; data: Built['card']['data']; headline: Built['card']['headline']; caption: string; notes: string[]; filterLabels: string[]; fewerRows?: string }
   | { ok: false; reason: string };
 
 /** What approving makes, as the review page lists it. */
@@ -230,10 +235,26 @@ async function planOf(r: DashboardRequest, pick?: string): Promise<Plan> {
   return { built, folderId, choices, creates: { visuals, dashboard: r.title, folder: await folderName(r.projectId, folderId), folderId } };
 }
 
-function cardView(b: Built | Failure): CardView {
+function cardView(b: Built | Failure, fewerRows?: string): CardView {
   if (!('card' in b)) return { ok: false, reason: b.reason };
   const c = b.card;
-  return { ok: true, title: c.title, chartType: c.chartType, datasetName: c.datasetName, data: c.data, headline: c.headline, caption: c.caption, notes: c.notes, filterLabels: c.filterLabels };
+  return { ok: true, title: c.title, chartType: c.chartType, datasetName: c.datasetName, data: c.data, headline: c.headline, caption: c.caption, notes: c.notes, filterLabels: c.filterLabels, ...(fewerRows ? { fewerRows } : {}) };
+}
+
+/**
+ * The datasets of `charts` on which a row rule holds the requester to other rows than the caller (the reviewer): their
+ * row lock prints, each worked out in a context of its own, differ, and the requester's is a lock (none: they see more).
+ * Records only, never a row; an account gone or disabled names none.
+ */
+async function fewerRowsOn(r: DashboardRequest): Promise<Set<string>> {
+  const ids = datasetIdsOf(r.charts);
+  const theirs = await asMember(r.requester, () => Promise.all(ids.map((id) => lockPrint(r.projectId, id))));
+  const out = new Set<string>();
+  for (const [i, id] of ids.entries()) {
+    const them = theirs?.[i];
+    if (them !== undefined && them !== null && stableStringify(them) !== stableStringify(await lockPrint(r.projectId, id))) out.add(id);
+  }
+  return out;
 }
 
 /** The request as its page shows it: names, never an address. */
@@ -280,7 +301,10 @@ export async function previewRequest(projectId: string, id: string): Promise<Pre
   const plan = await planOf(r);
   // The requester's suggestion by name, when the reviewer opens it (a closed folder's name is never shown).
   const suggested = r.folderId ? ((await foldersOpen(projectId)).find((f) => f.id === r.folderId)?.name ?? '') : '';
-  return { ok: true, request: viewOf(r), cards: plan.built.map(cardView), creates: plan.creates, choices: plan.choices, suggested, ...(plan.problem ? { problem: plan.problem } : {}) };
+  const fewer = await fewerRowsOn(r);
+  const line = say.seesFewerRows(personName(r.requester));
+  const cards = plan.built.map((b, i) => cardView(b, fewer.has(r.charts[i].datasetId.toLowerCase()) ? line : undefined));
+  return { ok: true, request: viewOf(r), cards, creates: plan.creates, choices: plan.choices, suggested, ...(plan.problem ? { problem: plan.problem } : {}) };
 }
 
 export type ApproveReply = { ok: true; dashboardId: string; published: boolean; creates: Creates; why?: string } | { ok: false; error: string };

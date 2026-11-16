@@ -267,9 +267,10 @@ export async function renameThread(projectId: string, threadId: string, title: s
   return row ? summaryOf(open === null ? row : { ...row, turns: row.shown ?? 0 }) : null;
 }
 
-export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
+export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string, dashboardId?: string): Promise<boolean> {
   return changeTurn(projectId, threadId, turnId, spec, (turn) => {
     turn.savedVisualId = visualId;
+    if (dashboardId && copilot.isValidId(dashboardId)) turn.dashboardId = dashboardId;
   });
 }
 

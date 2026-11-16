@@ -79,6 +79,8 @@ export interface CopilotTurn {
   learn?: AnswerLearn;
   /** The Visual this answer was saved as ("Save as visual", `markSaved`), so a reload links to it instead of saving again. Only beside `answer`. */
   savedVisualId?: string;
+  /** The dashboard "Add to dashboard" put `savedVisualId` on, so a reload says where instead of adding it twice. Only beside `answer`. */
+  dashboardId?: string;
   /** How this answer was guided (./turnGuidance): ids and counts, kept for a later release. Assistant turns only. */
   guidance?: TurnGuidance;
   /** An Assistant agent's out-of-scope reply (src/ipc/agentAsk.ts): the dataset the Project assistant can answer from. */
@@ -283,6 +285,7 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     const learn = answer ? sanitizeLearn(t.learn, answer) : undefined;
     if (learn) turn.learn = learn;
     if (answer && isValidId(t.savedVisualId)) turn.savedVisualId = t.savedVisualId;
+    if (answer && isValidId(t.dashboardId)) turn.dashboardId = t.dashboardId;
     const snapshot = answer || sql ? sanitizeSnapshot(t.snapshot) : undefined; // a corrupt one is dropped: the card computes again
     if (snapshot) turn.snapshot = snapshot;
     const guidance = role === 'assistant' ? sanitizeGuidance(t.guidance) : undefined;
@@ -662,13 +665,15 @@ export async function renameThread(projectId: string, threadId: string, title: s
 // "Save as visual", kept on the answer turn it was saved from: a reload then links to the visual
 // instead of offering to save the same answer twice. Only on one of the CALLER's threads, on an
 // assistant turn whose stored answer draws the very chart that was saved. False: nothing marked.
-export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
+// `dashboardId`: Add to dashboard's, the dashboard it put that visual on.
+export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string, dashboardId?: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(visualId)) return false;
-  if (rows.on()) return rows.markSaved(projectId, threadId, turnId, spec, visualId);
+  if (rows.on()) return rows.markSaved(projectId, threadId, turnId, spec, visualId, dashboardId);
   return changeThreads(projectId, async (threads) => {
     const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
     if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
     turn.savedVisualId = visualId;
+    if (dashboardId && isValidId(dashboardId)) turn.dashboardId = dashboardId;
     await writeThreads(projectId, threads);
     return true;
   });

@@ -218,6 +218,14 @@ describe('the review page', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/dashboards/${P}/${D}`));
   });
 
+  it('a chart the requester sees fewer rows of says so, in the server\'s words, under that chart alone', async () => {
+    const line = 'Priya Shah sees fewer rows here (row access rules)';
+    review({ 'request:preview': { body: { ...preview(), cards: [{ ...CARD, fewerRows: line }, { ...CARD, title: 'Units by kind' }] } } });
+    const cards = await screen.findAllByTestId('request-card');
+    expect(within(cards[0]).getByTestId('request-fewer-rows').textContent).toBe(line);
+    expect(within(cards[1]).queryByTestId('request-fewer-rows')).toBeNull(); // NEGATIVE CONTROL: the same rows, no line
+  });
+
   it('Edit makes it as a draft and opens the editor', async () => {
     const { calls, router } = review({ 'request:preview': { body: preview() }, 'request:approve': { body: { ok: true, dashboardId: D, published: false } } });
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));

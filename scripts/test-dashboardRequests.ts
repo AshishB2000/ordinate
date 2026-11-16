@@ -12,7 +12,9 @@
 //   canary     the stored rows hold no figure of the charts (NEGATIVE CONTROL: the viewer's own kept turn does)
 //   email      only to an approver who turned it on, with the title, the charts, the note and the review link
 //   preview    the reviewer's figures are THE door's, Object.is, under the reviewer's access (NEGATIVE CONTROL: a row
-//              rule makes the requester's own figures differ); what approving makes, by name
+//              rule makes the requester's own figures differ); what approving makes, by name; a row rule on the
+//              requester puts "Viv sees fewer rows here" under each chart it holds (NEGATIVE CONTROL: on Plain, the same
+//              rows, none), and none of her own figures is in the reply (canary)
 //   refused    an editor who cannot open Orders: 409 closed, told nothing, nothing made; one who only views Ops: 409
 //              edit; a viewer: 403 (control: an Ops lead may)
 //   approve    exactly one dashboard and its visuals, as the preview listed them, in Ops, published; the requester told
@@ -228,6 +230,13 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     ok('preview: every chart\'s figures are the door\'s as the reviewer, Object.is', pv.body.cards.length === 2 && pv.body.cards.every((c: Any, i: number) => c.ok && 'card' in door[i] && sameFigures(c, (door[i] as Any).card)), show(pv.body.cards));
     const vivNow = await b.run(me('viv'), async () => answers.computeCard(P, { ...SALES, datasetId: orders } as never));
     ok('preview NEGATIVE CONTROL: the requester\'s own figures, under their row rule, differ — the review is the reviewer\'s access, not theirs', 'card' in vivNow && !sameFigures(pv.body.cards[0], vivNow.card), show('card' in vivNow ? vivNow.card.data : vivNow));
+    ok('preview: under each chart on Orders, one line — the requester sees fewer rows there (their row lock is not the reviewer\'s)',
+      pv.body.cards.every((c: Any) => c.fewerRows === msg.seesFewerRows('Viv')) && msg.seesFewerRows('Viv').startsWith('Viv '), show(pv.body.cards.map((c: Any) => c.fewerRows)));
+    const vivRuled = await b.run(me('viv'), async () => Promise.all([SALES, AVG].map((s) => answers.computeCard(P, { ...s, datasetId: orders } as never))));
+    const reviewerFigures = new Set(door.flatMap((c) => ('card' in c ? figuresOf(c.card) : [])));
+    const theirsOnly = vivRuled.flatMap((c) => ('card' in c ? figuresOf(c.card) : [])).filter((f) => !reviewerFigures.has(f));
+    ok(`preview canary: none of the requester's own ${theirsOnly.length} figures reaches the reviewer — the line is a comparison, never their figures`,
+      theirsOnly.length > 0 && theirsOnly.every((f) => !JSON.stringify(pv.body).includes(f)), show(theirsOnly));
     ok('preview: what approving makes — a visual per chart, the dashboard, and Ops', JSON.stringify(pv.body.creates) === JSON.stringify({ visuals: ['Sales by region', 'Average order by region'], dashboard: 'Returns Q4', folder: 'Ops', folderId: OPS }), show(pv.body.creates));
 
     // ── refused ───────────────────────────────────────────────────────────
@@ -297,6 +306,9 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     const r2 = await ask('viv', [tP.turnId], { title: 'Units' });
     await settle();
     ok('create: on Plain, in Everyone, both editors are told (the control for "an editor of Everyone only is not told")', (await inbox('ed', r2.body.id)) === 1 && (await inbox('ev', r2.body.id)) === 1);
+    const pv2 = await b.as('ed').call('request:preview', { projectId: P, id: r2.body.id });
+    ok('preview NEGATIVE CONTROL: on Plain, where no row rule holds the requester (the same rows as the reviewer), no line',
+      pv2.body.ok === true && pv2.body.cards.length === 1 && pv2.body.cards[0].ok === true && !('fewerRows' in pv2.body.cards[0]), show(pv2.body.cards));
     const [boards2, visuals2] = [(await boards()).length, await visualsNow()];
     ok('decline: a note is required (400)', (await b.as('ed').call('request:decline', { projectId: P, id: r2.body.id, note: '' })).status === 400);
     const no = await b.as('ed').call('request:decline', { projectId: P, id: r2.body.id, note: 'We have this on the Units board already' });
