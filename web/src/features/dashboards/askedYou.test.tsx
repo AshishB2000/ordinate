@@ -2,7 +2,7 @@
 // bell's "Asked for data" — their name, the question, the reason in the server's words and their
 // note, unseen first — a click that marks it seen and opens where it is fixed (Connections, or the
 // Data model's Relationships for a link), Mark all seen over it; the toast an `asks:new` push shows
-// with Open; and Settings → You → "Email me when a viewer asks for data".
+// with Open; and Settings → You → "Email me about data asks and dashboard requests".
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -136,7 +136,7 @@ describe('the ask notice', () => {
   }, 30_000);
 });
 
-describe('Settings → You → "Email me when a viewer asks for data"', () => {
+describe('Settings → You → "Email me about data asks and dashboard requests"', () => {
   const mount = (prefs: object) => {
     const calls = serveRpc({ 'mentions:prefs': { body: { ok: true, ...prefs } }, 'mentions:setPrefs': { body: { ok: true } } });
     render(
@@ -149,7 +149,7 @@ describe('Settings → You → "Email me when a viewer asks for data"', () => {
 
   it('reads off by default and saves its own switch, never the mention one', async () => {
     const calls = mount({ available: true, mail: true, emailMe: true, requestEmail: false });
-    const sw = (await screen.findByRole('switch', { name: 'Email me when a viewer asks for data' })) as HTMLInputElement;
+    const sw = (await screen.findByRole('switch', { name: 'Email me about data asks and dashboard requests' })) as HTMLInputElement;
     expect(sw.checked).toBe(false);
     fireEvent.click(sw);
     await waitFor(() => expect(calls.find((c) => c.channel === 'mentions:setPrefs')?.payload).toEqual({ requestEmail: true }));
@@ -158,8 +158,8 @@ describe('Settings → You → "Email me when a viewer asks for data"', () => {
 
   it('a server that sends no email: off and disabled, saying the bell still has it', async () => {
     mount({ available: true, mail: false, emailMe: true, requestEmail: true });
-    const sw = (await screen.findByRole('switch', { name: 'Email me when a viewer asks for data' })) as HTMLInputElement;
+    const sw = (await screen.findByRole('switch', { name: 'Email me about data asks and dashboard requests' })) as HTMLInputElement;
     expect(sw.disabled && !sw.checked).toBe(true);
-    expect(screen.getByText(/a viewer’s ask still reaches you in the bell/)).toBeTruthy();
+    expect(screen.getByText(/asks and dashboard requests still reach you in the bell/)).toBeTruthy();
   });
 });

@@ -824,6 +824,76 @@ approval created; a declined or withdrawn request creates nothing; the limits; a
 someone else's turn. E2E `requests.e2e.ts`: a viewer requests, an editor approves, the viewer opens
 the dashboard from Home.
 
+### Dashboard requests, as built (E9)
+
+- **The rows** (0037): `dashboard_requests` — the requester, a title (1–120), a note (≤ 2,000), `charts` (1–12 chart
+  forms: each answer turn's stored spec, sanitized; never its words or its kept card, which carry figures), `state`
+  (`open` → `approved` | `drafted` | `declined`; `drafted` → `approved` at the first Publish), `decided_by` /
+  `decided_at`, `answer` (a decline's note) and `dashboard_id`; and `dashboard_request_inbox` — the bell's rows, as
+  `mentions` and `editor_asks`: one per approver told (`role` 'approver') and the requester's once it is decided
+  ('requester'), each with its `seen_at`, at most 200 a member. Forced RLS on both. No `withdrawn` state and no
+  `request:withdraw` yet.
+- **Contracts** (`src/api/requests.ts`): `request:create` (`read`, audited, as `editors:ask`), `request:preview`,
+  `request:approve` (`publish`: true is Approve and publish, false is **Edit**) and `request:decline` (a note required),
+  all `write`. There is no `request:list` or `request:get`: the bell's rows ride on `mentions:list` (`requests`), as
+  viewers' asks do, and the review page is `request:preview`. Classified `FOLDER` in `scripts/folderReaders.ts`;
+  `request:create` is `META` in `rowPolicyReaders` and `columnAccessReaders` (it returns an id).
+- **Create** (`src/server/requests/requests.ts`): the turns are read through `copilot.findTurn`, the caller's own
+  threads only, so someone else's turn answers as a missing one; an answer with no chart form (an SQL answer, a source
+  table's) is refused with a sentence; every dataset must be open to the requester (`mustOpen`: `closed`) and still
+  exist. Anyone who reads the project may send one; the web offers **Request a dashboard** to viewers only.
+- **Approvers**: `openers(…, { kind: 'dataset', id }, 'edit')` per dataset the charts read, intersected, never the
+  requester — org admins, project admins, and editors whose team has Edit on every one's folder; with no folder, the
+  project's writers. There is no separate "request's folder": the dashboard lands where E6 lands a derived item, so
+  Edit on its datasets is Edit there. With nobody left, the send says so and nothing is written.
+- **Not twice, not a flood** (shared counters, as asks): the same charts (`stableStringify` of the forms, hashed) from
+  the same person in the same project within a day are *already sent*; at most `REQUESTS_PER_DAY` (10) a person a day,
+  across projects. A refused or failed send is given back. The design's "20 open per project" is not built: the day's
+  limit bounds it.
+- **Review and approve share one function** (`planOf`): every chart through `computeCard` (THE answer door: folders,
+  row access rules, hidden columns) as the reviewer, and where it lands — `landsIn(projectId, undefined, datasets)`:
+  the first dataset's folder outside Everyone, else Everyone, refused unless the reviewer edits it. Approving runs it
+  again and makes exactly that: each chart through `saveCardAsVisual` (Save as visual's path, a version each), one
+  dashboard of them (`arrangeSheet` and `sanitizeCards`, the plan builder's arrangement and whitelist; a version)
+  inside `withLanding`, so it is placed before its record is written, then Publish itself (`drafts.publish`, with
+  D16). Every action needs `mustEdit` on every dataset the charts read: an editor who cannot open one is `closed`, one
+  who only views its folder `edit`; a viewer never reaches it (`write`). A chart that cannot be drawn now makes nothing
+  and says which. No `folderId` picker, and no target "an existing dashboard" yet.
+- **Exactly one**: an approval first *claims* the open row (`decided_by` / `decided_at` set, state still open; a claim
+  older than ten minutes may be taken again), so two approvers at once make one dashboard; a failure before anything
+  is made gives the claim back; a dashboard made but refused at Publish (D16 on a related dataset) is recorded as
+  `drafted`, never made twice. Decline takes an unclaimed row in one statement.
+- **Told** (the mention path, never in the reply's way): on create, a bell row and a `requests:changed` push (ids,
+  names and the state, never the title, a chart or the note) to each approver, and an email (title, the charts' titles,
+  the note, the review link) to those with `users.request_email` on — the same switch as Ask an editor, now labelled
+  **Email me about data asks and dashboard requests** — under the mention email budget. On approval or decline, the
+  requester's row (new again), push (with the dashboard id when approved) and email (*Your dashboard … is ready* with
+  its link, or *… was declined* with the note); the approvers' rows are marked seen. **Edit** tells nobody: Publish's
+  hook (`dashboardPublished`, one UPDATE, in `publishDashboard.publish`, so MCP's publish counts too) marks the
+  request approved and tells the requester then. The badge (`unseenCount`, on `/api/auth/me`) and `mentions:seen`
+  count and mark the request rows too.
+- **The web**: *Request a dashboard* on a viewer's answer card (`RequestDashboard.tsx`: the conversation's chart
+  answers to tick, a name, a note); the bell's **Dashboard requests** (`RequestsForYou.tsx`: an approver's row opens the
+  review page, the requester's ready row the dashboard, a declined one shows the note) and its toasts; the review page
+  `/requests/:projectId/:requestId` (`RequestReviewPage.tsx`: the charts, the note, *Approving makes*, **Approve and
+  publish**, **Edit**, **Decline…**, and a decided request's outcome with a link). Editors' own *Add to dashboard* on an
+  answer does not exist yet; only the viewer's request was built.
+- **Tested**: `scripts/test-dashboardRequests.ts` (6 checks without a database, 56 with) — the contracts; no db; who
+  is told (NEGATIVE CONTROLS: an Everyone-only editor, an editor viewing Ops, another viewer and the requester are not;
+  on Plain both editors are); someone else's turn; 403 without a grant; the canary (no figure of the charts in either
+  table; NEGATIVE CONTROL: the viewer's kept turns hold them); the email; the preview's figures `Object.is` the door's
+  as the reviewer (NEGATIVE CONTROL: the requester's own, under a row rule, differ) and its list equal to what
+  approval made; refusals (`closed`, `edit`, 403) making nothing (control: the Ops lead may); one dashboard, in Ops,
+  published, the requester told and reading its copy; a second approval and two at once make no second; Edit tells no
+  one until Publish; decline; dedupe; the limit (control: another person, whose Plain request lands in Everyone); seen
+  and the badge; RLS. Vitest `web/src/features/dashboards/requests/requests.test.tsx`; e2e `web/e2e/requests.e2e.ts`
+  (Postgres): Priya requests from the Assistant, Sam reviews from the toast and approves, Priya opens it from the bell
+  — screens `requests-dialog`, `-review`, `-review-phone`, `-bell`, `-bell-phone`, `-dashboard`, both themes.
+- **Left**: Withdraw; *No longer available*; a target of an existing dashboard (its *Requested by* sheet); a folder
+  picker; requests from source tables and SQL answers (the Live dataset and *Not checked* lines of the preview); *Priya
+  sees fewer rows*; *Older* after 30 days; a project's deletion leaving its request rows (they stop showing to anyone
+  who no longer reads it; an org admin's row reaches a review that finds no dataset).
+
 ## Migrations
 
 Numbers are the next free ones when each PR lands: 0029 was the last on `develop` and 0030–0031 went to
@@ -838,7 +908,7 @@ row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids co
 | 0034 `search_anchors` (E4, as built) | `ordinate_turn_datasets(body)` (an Assistant turn's chart, "Did you mean" and SQL answer datasets, `{}` for a body that is no JSON: the conversation list's count of shown turns); `search_entries.anchor_kind`, `anchor_id` (nullable, no table rewrite, `COLLATE "C"`); `verified_keys.reads` (every dataset a verified question reads: an SQL question's all); `search_anchors_stale()` and the trigger `records_search_anchors_written` (INSERT or UPDATE on `records`): a write whose transaction does not set `ordinate.search_anchors` = 'on' drops that ⌘K source's marker, or the project's verified one, 0030's pattern. No DELETE trigger: an older pod's delete removes its rows as this release would |
 | 0035 `dashboard_reads` (E5, as built) | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, lowercase-checked, PK on all four, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; two triggers on `records` (`projects/%/analyses/%`) for writers without `ordinate.folders`: that dashboard's rows and the project's marker go |
 | 0036 `team_tables` (E8, as built) | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, `hidden` on include table rows only, team → `teams` ON DELETE CASCADE, forced RLS; `assistant_search.audience` CHECK widened to `viewer` (a documented table's labelled row) |
-| 0037 `dashboard_requests` | the table above with indexes for an approver's open list and a requester's own (`users.request_email`, off by default, is already there: Ask an editor's 0033 made it, and requests use the same switch) |
+| 0037 `dashboard_requests` (E9, as built) | `dashboard_requests (org_id, id, project_id, requester, title, note, charts jsonb, state, decided_by, decided_at, answer, dashboard_id, created_at)` with partial indexes for the open ones and the drafted ones by dashboard, and one by requester; `dashboard_request_inbox (org_id, user_email, request_id, project_id, role, created_at, seen_at)` → `dashboard_requests` ON DELETE CASCADE; forced RLS on both (`users.request_email` is 0033's, reused) |
 
 `kind` in `folder_items` has no CHECK: the app validates it (`dataset`, `dashboard`), so a later
 placed kind needs no constraint change.

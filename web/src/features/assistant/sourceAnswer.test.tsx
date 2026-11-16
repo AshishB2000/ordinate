@@ -14,7 +14,7 @@ import type { AnswerLink } from './api';
 
 const canEdit = vi.hoisted(() => ({ value: true }));
 vi.mock('../../charts/Chart', () => ({ Chart: ({ label }: { label?: string }) => <div role="img" aria-label={label ?? 'Chart'} /> }));
-vi.mock('../projects/api', () => ({ useCanEdit: () => canEdit.value }));
+vi.mock('../projects/api', () => ({ useCanEdit: () => canEdit.value, useRoles: () => ({ data: undefined }) }));
 
 afterEach(() => {
   cleanup();

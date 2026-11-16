@@ -5,6 +5,7 @@
 import type { PoolClient } from 'pg';
 import { ctx } from '../context';
 import { inOrg, orgDb } from '../db/inOrg';
+import { INBOX_SHOWN } from '../requests/store';
 
 /** Rows kept per member, newest first. */
 export const MAX_ROWS = 200;
@@ -108,7 +109,7 @@ export async function markGone(rows: Array<{ projectId: string; pieceId: string 
   );
 }
 
-/** How many of the caller's rows are unseen, on projects they may read now (as `listMine` filters them), and their asks (./asks `listAsks`). */
+/** How many of the caller's rows are unseen, on projects they may read now (as `listMine` filters them), their asks (./asks `listAsks`) and dashboard requests (../requests `listRequests`). */
 export async function unseenCount(): Promise<number> {
   const { user } = ctx();
   const r = await inOrg((c, org) =>
@@ -116,19 +117,21 @@ export async function unseenCount(): Promise<number> {
       `SELECT ((SELECT count(*) FROM mentions m
                  WHERE m.org_id = $1 AND m.user_email = $2 AND m.seen_at IS NULL AND (${READABLE}))
              + (SELECT count(*) FROM editor_asks a
-                 WHERE a.org_id = $1 AND a.user_email = $2 AND a.seen_at IS NULL AND (${WRITABLE})))::int AS n`,
+                 WHERE a.org_id = $1 AND a.user_email = $2 AND a.seen_at IS NULL AND (${WRITABLE}))
+             + (SELECT count(*) FROM dashboard_request_inbox i
+                 WHERE i.org_id = $1 AND i.user_email = $2 AND i.seen_at IS NULL AND (${INBOX_SHOWN})))::int AS n`,
       [org, user.email, user.role === 'admin'],
     ),
   );
   return r.rows[0]?.n ?? 0;
 }
 
-/** Mark the caller's row of one piece (or ask) seen — or all of theirs made up to `through` (the newest the bell showed them), asks too. */
+/** Mark the caller's row of one piece (or ask, or request) seen — or all of theirs made up to `through` (the newest the bell showed them), asks and requests too. */
 export async function markSeen(which: { projectId: string; pieceId: string } | { through: string }): Promise<void> {
   const one = 'pieceId' in which ? [which.projectId, which.pieceId, null] : [null, null, Number.isFinite(Date.parse(which.through)) ? new Date(which.through).toISOString() : null];
   if (one.every((x) => x === null)) return; // an unreadable time marks nothing
   await inOrg(async (c, org) => {
-    for (const [table, id] of [['mentions', 'piece_id'], ['editor_asks', 'id']]) {
+    for (const [table, id] of [['mentions', 'piece_id'], ['editor_asks', 'id'], ['dashboard_request_inbox', 'request_id']]) {
       await c.query(
         `UPDATE ${table} SET seen_at = now()
           WHERE org_id = $1 AND user_email = $2 AND seen_at IS NULL

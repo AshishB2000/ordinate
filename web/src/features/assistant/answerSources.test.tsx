@@ -10,7 +10,7 @@ import { MemoryRouter } from 'react-router';
 import { AnswerCard, type Card } from './AnswerCard';
 
 vi.mock('../../charts/Chart', () => ({ Chart: ({ label }: { label?: string }) => <div role="img" aria-label={label ?? 'Chart'} /> }));
-vi.mock('../projects/api', () => ({ useCanEdit: () => false }));
+vi.mock('../projects/api', () => ({ useCanEdit: () => false, useRoles: () => ({ data: undefined }) }));
 
 afterEach(() => {
   cleanup();

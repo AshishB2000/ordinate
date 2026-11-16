@@ -15,6 +15,7 @@ import { currentReaders, labelFor, mentionsOn, peopleIn } from './people';
 import { targetReaders } from './targetReaders';
 import { emailMe, listMine, markGone, markSeen, setEmailMe, unseenCount } from './store';
 import { askEditors, listAsks, requestEmail, setRequestEmail, type AskReason } from './asks';
+import { listRequests } from '../requests/requests';
 
 /** People the picker offers. */
 export const PICKER_MAX = 8;
@@ -108,8 +109,11 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
 
 export function register(): void {
   registry.handle('comment:mentionable', async (_e, { projectId, q, target }: { projectId: string; q: string; target?: Comment['target'] }) => ({ ok: true as const, ...(await mentionable(projectId, q, target)) }));
-  // The bell's two lists of the caller's own: comments that name them, and viewers' asks of a project they edit (./asks).
-  registry.handle('mentions:list', async () => ({ ok: true as const, ...(await homeMentions()), asks: mentionsOn() ? await listAsks(HOME_MAX) : [] }));
+  // The bell's lists of the caller's own: comments that name them, viewers' asks of a project they edit (./asks), and
+  // dashboard requests — theirs once decided, and those they may approve (../requests).
+  registry.handle('mentions:list', async () => ({
+    ok: true as const, ...(await homeMentions()), asks: mentionsOn() ? await listAsks(HOME_MAX) : [], requests: mentionsOn() ? await listRequests(HOME_MAX) : [],
+  }));
   registry.handle('mentions:seen', async (_e, input: { projectId: string; id: string } | { through: string }) => {
     if (!mentionsOn()) return { ok: true as const };
     await markSeen('through' in input ? { through: input.through } : { projectId: input.projectId, pieceId: input.id });

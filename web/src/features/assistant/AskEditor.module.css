@@ -95,3 +95,18 @@
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+
+/* Request a dashboard (RequestDashboard.tsx): the answers it will hold, one checkbox each. */
+.charts {
+  display: grid;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.charts > legend {
+  margin-bottom: var(--sp-4);
+  padding: 0;
+  font-size: var(--t-13);
+}

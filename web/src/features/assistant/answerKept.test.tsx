@@ -12,7 +12,7 @@ import type { Turn } from './api';
 
 vi.mock('../../charts/Chart', () => ({ Chart: ({ label }: { label?: string }) => <div role="img" aria-label={label ?? 'Chart'} /> }));
 // The card's own buttons, not who may save: an editor's roles are not what is under test.
-vi.mock('../projects/api', () => ({ useCanEdit: () => false }));
+vi.mock('../projects/api', () => ({ useCanEdit: () => false, useRoles: () => ({ data: undefined }) }));
 
 afterEach(() => {
   cleanup();

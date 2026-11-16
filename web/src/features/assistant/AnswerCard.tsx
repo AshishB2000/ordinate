@@ -36,6 +36,9 @@
 //
 // An answer read straight from a warehouse table (`spec.table`, outcome C) says so beside its name, and offers only
 // "Keep as a dataset" (./KeepTable): Save as visual and Verify need the dataset that click makes.
+//
+// A viewer, who may keep nothing, gets "Request a dashboard" instead (./RequestDashboard): this answer and the
+// conversation's other charts (`answers`), sent to the editors who can approve it.
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -56,6 +59,7 @@ import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
 import { AlertFromAnswer } from './AlertFromAnswer';
 import { KeepTable } from './KeepTable';
+import { RequestDashboard, type ChartAnswer } from './RequestDashboard';
 import { keepInConversation, refreshAnswer } from './api';
 import { ACCESS_CHANGED, KeptAsOf, periodText } from './AnswerKept';
 import { AlsoOn, AnsweredFrom } from './AnswerSources';
@@ -122,6 +126,7 @@ export function AnswerCard({
   onFollowUp,
   onNotThis,
   asking = false,
+  answers = [],
 }: {
   projectId: string;
   spec: { datasetId: string; title?: string } & Record<string, unknown>;
@@ -140,6 +145,8 @@ export function AnswerCard({
   onNotThis?: () => void;
   /** An ask is under way: Not what I asked waits. */
   asking?: boolean;
+  /** The conversation's chart answers: what a viewer's "Request a dashboard" offers. */
+  answers?: readonly ChartAnswer[];
 }) {
   const qc = useQueryClient();
   const q = useQuery({
@@ -300,6 +307,7 @@ export function AnswerCard({
                 <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
                 {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
                 <AlertFromAnswer projectId={projectId} spec={spec} />
+                <RequestDashboard projectId={projectId} turn={turn} answers={answers} />
               </>
             )}
             {card.learn && (
