@@ -119,6 +119,8 @@ export const WRITE_GATE: Readonly<Record<string, Gate>> = {
   'answer:keepTable': lands,
   'explore:keepTable': lands, // the same, from Explore
   'analysis:create': lands,
+  // An answer on a dashboard: Edit on the one named, its DRAFT changed; else a new one lands with the answer's dataset.
+  'answer:addToDashboard': (i) => (i.analysisId ? board(i.analysisId) : { land: { parents: [i.spec?.datasetId] } }),
   'analysis:buildPlan': lands,
 };
 

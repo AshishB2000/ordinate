@@ -149,6 +149,7 @@ function callsOn(P: string, t: Set): Array<[string, string, unknown]> {
     ['analysis:view', 'analysis:view', { projectId: P, id: t.board, op: { op: 'create', name: n('view'), state: {} } }],
     ['fx:dashboard', 'fx:dashboard', { projectId: P, dashboardId: t.board, code: 'EUR' }],
     ['stats:addToDashboard', 'stats:addToDashboard', { projectId: P, spec: { kind: 'distribution', datasetId: t.ds, columns: ['salary'] }, view: 'table', analysisId: t.board }],
+    ['answer:addToDashboard', 'answer:addToDashboard', { projectId: P, spec: spec(t.ds), analysisId: t.board }],
     ['story:create', 'story:create', { projectId: P, name: n('story'), blocks: [{ kind: 'visual', visualId: t.visual }] }],
     ['story:build', 'story:build', { projectId: P, plan: { name: n('built story'), sheets: [{ name: 'One', visuals: [{ visual: t.visual }], metrics: [] }] } }],
     ['story:update', 'story:update', { projectId: P, id: t.story, name: n('updated story') }],

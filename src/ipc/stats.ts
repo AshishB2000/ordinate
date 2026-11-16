@@ -22,7 +22,8 @@ import { statsFacts } from '../ai/statsFacts';
 import type { StatsFactItem } from '../ai/statsFacts';
 import type { CopilotFacts } from '../ai/copilot';
 import { commitSteps } from './datasets';
-import { inReach } from '../server/authz/folderGate';
+import { inReach, levelsOf } from '../server/authz/folderGate';
+import { atLeast } from '../server/authz/folders';
 import { randomUUID } from 'crypto';
 import * as analysis from '../analysis/analysis';
 import * as config from '../app/config';
@@ -294,9 +295,12 @@ export function register(): void {
   }));
 
   // Server only (web): the dashboards "Add to dashboard" can put a card on —
-  // ids and names, nothing else of the records.
-  ipcMain.handle('stats:dashboards', async (_e, { projectId }: any = {}) =>
-    (await analysis.listAnalyses(projectId)).map((a) => ({ id: a.id, name: a.name })));
+  // ids and names, nothing else of the records. Only those the caller edits (D18):
+  // one in a folder they only view is theirs to read, not to add to.
+  ipcMain.handle('stats:dashboards', async (_e, { projectId }: any = {}) => {
+    const level = await levelsOf(projectId, 'dashboard'); // null: nothing restricts the caller here
+    return (await analysis.listAnalyses(projectId)).filter((a) => !level || atLeast(level(a.id), 'edit')).map((a) => ({ id: a.id, name: a.name }));
+  });
 
   // "Add to dashboard", server side (web): the spec becomes a "stats" card at
   // the foot of the dashboard's last sheet — an existing one, or a new one

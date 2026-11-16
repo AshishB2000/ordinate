@@ -100,6 +100,15 @@ export const assistant = {
     input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, threadId: Uuid.optional(), turnId: z.string().min(1).max(100).optional() }),
     project: byProjectId,
   }),
+  // "Add to dashboard" on an answer card (src/ipc/answerDashboard.ts): the card rebuilt from the spec on the server, saved
+  // as a visual (Save as visual's path), and a tile of it on the DRAFT of an existing dashboard (`analysisId`), never its
+  // published copy, or on a new one (`name`, else the card's title). An existing dashboard needs Edit on its folder; a new
+  // one lands with its dataset (src/server/authz/folderWriteGate.ts).
+  'answer:addToDashboard': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, analysisId: Uuid.optional(), name: z.string().trim().min(1).max(200).optional() }),
+    project: byProjectId,
+  }),
   // Refresh an answer of the caller's own conversation (src/ipc/answerSnapshots.ts): its card computed now, under their
   // access, kept in place of the one the turn had. `read`, as asking is: what it writes is the asker's own turn.
   'answer:refresh': rpc({

@@ -50,7 +50,7 @@ Agreed on the flow page (Nov 2026). Related: [Explore](../explore/00-design.md),
 | 5 | Every dataset, column, metric and term named must be real, else "Did you mean …?". | — | yes |
 | 6 | The engine computes: DuckDB on copies, compiled SQL in the warehouse for Live. | — | yes |
 | 7 | Chart, table, Ordinate's caption and bullets; "Answered from ▾", "Also on ▸" (`src/ipc/answerSources.ts`: an editor also reads where the rows come from, a viewer the dataset alone; "Also on" finds dashboards by the dataset's id, never a list). | — | yes, a source-table answer's line with phase D |
-| 8 | Keep it: Save as visual, Verify, Add to dashboard, Alert me. Keeping a source-table answer makes its Live dataset. | — | partly |
+| 8 | Keep it: Save as visual, Verify, Add to dashboard, Alert me. Keeping a source-table answer makes its Live dataset. | — | yes ([Add to dashboard](#add-to-dashboard-as-built)) |
 
 ### Step 3: what is searched
 
@@ -571,7 +571,40 @@ answers' chart forms, never a figure; the dashboard and its visuals are made onl
   **Edit** makes the dashboard as a draft and opens the editor, and the viewer is told at its first Publish; **Decline**
   needs a note. Exactly one dashboard per request, however many approve at once.
 - **Viewer told**: a bell row that opens the dashboard (or shows the note), a toast in their open tabs, and an email if
-  they turned the switch on. An editor's own *Add to dashboard* on an answer is not built yet.
+  they turned the switch on. An editor's own *Add to dashboard* on an answer: [as built](#add-to-dashboard-as-built).
+
+### Add to dashboard, as built
+
+An editor's **Add to dashboard** on a chart answer card (`web/src/features/assistant/AddToDashboard.tsx`), beside Save as
+visual. A dialog picks a dashboard or **New dashboard…** with a name (the card's title when left blank). The picker is
+the house one, `stats:dashboards`, which now lists only the dashboards the caller edits: one in a folder they only view
+is left out (D18), for the Statistics and Metric tree pickers too. Then the card says *Added to Sales board* with
+**Open**, the dashboard's editor.
+
+- **`answer:addToDashboard`** (`write`, project-scoped; `src/ipc/answerDashboard.ts`): the stored spec and either
+  `analysisId` or `name`, nothing else. The card is rebuilt on the server through the answer door (`computeCard`) and
+  saved as a visual through Save as visual's path (`saveCardAsVisual`). A visual tile of it (half the grid, six rows)
+  goes at the foot of the dashboard's last sheet, under the dashboard's hold. That writes the DRAFT (`updateAnalysis`):
+  the published copy is untouched, the dashboard reads *edited*, and viewers see the tile at its next Publish. A new
+  dashboard holds just the tile, unpublished.
+- **Folders** (`folderWriteGate`, before the handler, so a refusal saves no visual): an existing dashboard needs Edit on
+  its folder (`edit` for Can view, `closed` for none). A new one lands with the answer's dataset (E6's `landsIn`), and
+  is refused below Edit there. The visual still needs Edit on its dataset (the visual store's own check). `CREATE` in
+  `scripts/folderReaders.ts`. It is a `write`, so it is not in the row or column readers' lists, which hold `read`
+  contracts. It joins `test-liveSafetyNet` (routed: a Live dataset's card is the warehouse's).
+- **Not offered:** to a viewer (Request a dashboard is theirs; the server refuses one 403); on a source table's answer,
+  which is Keep as a dataset first (`keepFirst`); on an SQL answer, which has no chart form (*Only a chart answer can be
+  added to a dashboard.*). The "What you will see" line where Add to dashboard also makes the Live dataset is not built:
+  Keep first, then add.
+- The turn does not record it: after a reload the button is offered again, and a second click adds a second tile.
+
+Tested in `test-answerAddToDashboard`, both modes: one visual and one draft tile more, no other dashboard. The tile's
+figures through `analysis:tiles` are the card's (`Object.is`; NEGATIVE CONTROL: another answer's card differs). The
+published copy is byte-identical. A new dashboard is named as asked, else by the card. A viewer, an SQL answer, a
+source table's and a missing dashboard are refused, writing nothing (NEGATIVE CONTROL: the editor's chart answer goes).
+With Postgres: the picker per person, `edit` and `closed` on the Ops board (NEGATIVE CONTROLS: the Ops lead adds to it,
+and the view-only editor adds to a board in Everyone), and a new dashboard landing in Ops. Also in the folder safety
+net's section 8, and in the dock e2e (a new dashboard from the Explain card, both themes).
 
 ## Ask an editor and Alert me, as built (phase G)
 

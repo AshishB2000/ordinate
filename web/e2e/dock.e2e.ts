@@ -25,7 +25,7 @@
 // header names that visual from the page's own `visual:get` and a question
 // carries `{ kind: 'visual', id }` (the half CI runs: it has no database);
 // there too, with no model, an Explain card is saved as a visual (the button,
-// then the link to the visual's own page, at the dock's 340px) and an answer
+// then the link to the visual's own page, at the dock's 340px), added to a new dashboard's draft, and an answer
 // with no rows offers the stored values its filter may have meant ("Did you
 // mean"), one of which runs as the app's own chart;
 // beside the open dashboard a question carries `{ kind: 'analysis', id }`, and
@@ -222,6 +222,30 @@ if (!dbUrl) {
     await card.getByText('✓ Verified · Dev', { exact: true }).waitFor(); // the verifier by name, never the address
     await shots('dock-verified');
     await call('verified:delete', { projectId: pid, id: vq.question?.id }); // the sample as it was, for the rest of the file
+    // Add to dashboard (step 8): a new dashboard holding the answer's tile, on its draft; the card says where, with Open.
+    await card.getByRole('button', { name: 'Add to dashboard' }).click();
+    const adding = page.getByRole('dialog', { name: 'Add to dashboard' });
+    await adding.getByRole('combobox', { name: 'Dashboard' }).click();
+    await page.getByRole('option', { name: 'New dashboard…' }).click();
+    await adding.getByRole('textbox', { name: 'Name the dashboard' }).fill('From the dock');
+    for (const theme of ['light', 'dark'] as const) { // modal: the dock behind it is hidden, so no scroll to the card
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: path.join(SCREENS, `dock-add-to-dashboard-${theme}.png`), fullPage: true });
+    }
+    const adds = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/answer:addToDashboard');
+    await adding.getByRole('button', { name: 'Add', exact: true }).click();
+    assert.deepEqual(Object.keys(((await adds).postDataJSON() as { args: [Record<string, unknown>] }).args[0]), ['projectId', 'spec', 'name'], 'the spec and the new name — nothing else');
+    await card.getByTestId('answer-added').getByText('Added to From the dock').waitFor();
+    const boardHref = (await card.getByRole('link', { name: 'Open', exact: true }).getAttribute('href')) ?? '';
+    assert.match(boardHref, new RegExp(`^/analyses/${pid}/[0-9a-f-]{36}$`));
+    await shots('dock-added-to-dashboard');
+    const boardId = boardHref.split('/').pop();
+    const made = (await call('analysis:open', { projectId: pid, id: boardId })) as { status: string; analysis: { name: string; sheets: Array<{ cards: Array<{ type: string; visualId?: string }> }> } };
+    const tiles = made.analysis.sheets.flatMap((sh) => sh.cards);
+    assert.deepEqual([made.analysis.name, made.status, tiles.length, tiles[0]?.type], ['From the dock', 'draft', 1, 'visual'], 'one tile on a draft, never published');
+    await call('analysis:delete', { projectId: pid, id: boardId }); // the sample as it was: the dashboard and its chart go
+    await call('visual:delete', { projectId: pid, id: tiles[0].visualId });
     await open.click();
     await page.waitForURL(`**${href}`);
     await page.waitForFunction(() => document.querySelector('[data-chart-type] canvas')); // its own page draws it
