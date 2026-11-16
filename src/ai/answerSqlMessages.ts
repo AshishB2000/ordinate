@@ -58,8 +58,3 @@ export function verifiedSqlNotOnMcp(): string {
 export function verifiedSqlDescribe(): string {
   return 'SQL';
 }
-
-/** Verify on an SQL answer that reads a Live dataset: not yet (docs/live-data/01-live-sql.md, F4). */
-export function verifiedSqlOnLive(): string {
-  return t('answerSqlMessages.verifying_an_sql_answer_that_reads');
-}

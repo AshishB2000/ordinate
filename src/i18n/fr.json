@@ -81,7 +81,6 @@
   "answerSqlMessages.the_sql_reads_which_this_answer": "Le SQL lit « {name} », que cette réponse n’a pas choisi.",
   "answerSqlMessages.this_verified_question_is_answered_with": "Cette question vérifiée est traitée en SQL, que MCP n’exécute pas. Posez-la dans l’Assistant.",
   "answerSqlMessages.this_verified_sql_no_longer_runs": "Ce SQL vérifié ne s’exécute plus : {reason}",
-  "answerSqlMessages.verifying_an_sql_answer_that_reads": "La vérification d’une réponse SQL qui lit un jeu de données en direct n’est pas encore disponible : celle-ci reste non vérifiée.",
   "assistantCheckMessages.a_check_is_already_running_for": "Une vérification est déjà en cours pour ce projet.",
   "assistantCheckMessages.checking_the_assistant": "Vérification de l'Assistant",
   "assistantCheckMessages.connect_a_model_to_check_the": "Connectez un modèle pour vérifier l'Assistant.",

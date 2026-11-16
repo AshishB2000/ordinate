@@ -301,8 +301,9 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   ok('Live → SQL over datasets (sql:run) refuses, typed', isRefusal(sqlRun), `${sqlRun.status} ${sqlRun.body.slice(0, 240)}`);
   // The Assistant's SQL lane (src/ipc/answerSql.ts). An SQL answer's Refresh over a Live dataset is ROUTED (phase F, F3:
   // src/engine/live/liveSql.ts): the warehouse's table, dated live, and the record never hydrated — getDataset is never
-  // called (CONTROL: one planted in the lane's path fails the check). Verifying SQL over Live still refuses, typed (F4).
-  // On the extract both answer (the negative control).
+  // called (CONTROL: one planted in the lane's path fails the check). Verifying SQL over Live is routed too (F4): it runs
+  // once through the executor and keeps the datasets the translator resolved, and the Verified page's check of it sends
+  // nothing to the warehouse. On the extract both answer (the negative control).
   const sqlOver = (name: string) => `SELECT region, sum(sales) AS s FROM "${name}" GROUP BY region`;
   const sqlTurn = (d: string, name: string) => context.runInContext(ADMIN, `sql-turn-${d}`, async () => {
     const t = (await copilot.createThread(P))!;
@@ -333,10 +334,29 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     (datasets as { getDataset: unknown }).getDataset = realGet;
   }
   for (const [d, name, isLive] of [[seed.live, 'Orders live', true], [seed.extract, 'Orders copy', false]] as const) {
-    const saved = await post('verified:save', { projectId: P, input: { question: `Sales by region in SQL ${++asked}`, sql: sqlOver(name) } });
+    hydrated = 0;
+    (datasets as { getDataset: unknown }).getDataset = (...a: Parameters<typeof realGet>) => { hydrated++; return realGet(...a); };
+    let saved: Awaited<ReturnType<typeof post>>;
+    try {
+      saved = await post('verified:save', { projectId: P, input: { question: `Sales by region in SQL ${++asked}`, sql: sqlOver(name) } });
+    } finally {
+      (datasets as { getDataset: unknown }).getDataset = realGet;
+    }
     bodies.push(saved.body);
-    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → verifying SQL over it ${isLive ? 'refuses, typed (F4)' : 'saves'}`, isLive ? isRefusal(saved) : saved.value?.ok === true, `${saved.status} ${saved.body.slice(0, 240)}`);
-    if (isLive) continue;
+    const kept = (saved.value?.question as { datasetId?: string; runs?: boolean } | undefined);
+    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → verifying SQL over it saves${isLive ? ', ROUTED (F4): the datasets the translator resolved, getDataset never called' : ''}`,
+      saved.value?.ok === true && kept?.datasetId === d && kept.runs === true && (!isLive || hydrated === 0), `${hydrated} ${saved.status} ${saved.body.slice(0, 240)}`);
+    if (isLive) {
+      const sent = fakeMod.fake.calls.length;
+      const listed = await post('verified:list', { projectId: P });
+      bodies.push(listed.body);
+      const row = (listed.value?.questions as Array<{ datasetId: string; sql?: boolean; runs: boolean }> | undefined)?.find((r) => r.sql && r.datasetId === d);
+      ok('Live → the Verified page checks the SQL question without asking the warehouse (F4: translated only)', row?.runs === true && fakeMod.fake.calls.length === sent, `${fakeMod.fake.calls.length - sent} ${listed.body.slice(0, 240)}`);
+      const gone = await post('verified:save', { projectId: P, input: { question: `Sales by region in SQL ${++asked}`, sql: sqlOver('Orders gone') } });
+      bodies.push(gone.body);
+      ok('Live, connection gone → verifying SQL over it refuses, no table', gone.value?.ok === false && !gone.body.includes('rows'), `${gone.status} ${gone.body.slice(0, 240)}`);
+      continue;
+    }
     const refreshed = await post('answer:refresh', { projectId: P, ...(await sqlTurn(d, name)) });
     bodies.push(refreshed.body);
     ok('NEGATIVE CONTROL: the extract → an SQL answer\'s refresh answers, from the copy', refreshed.value?.ok === true && !refreshed.value.asOf, `${refreshed.status} ${refreshed.body.slice(0, 240)}`);

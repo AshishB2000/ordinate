@@ -78,7 +78,6 @@
   "answerSqlMessages.the_sql_reads_which_this_answer": "The SQL reads \"{name}\", which this answer did not pick.",
   "answerSqlMessages.this_verified_question_is_answered_with": "This verified question is answered with SQL, which MCP does not run. Ask it in the Assistant.",
   "answerSqlMessages.this_verified_sql_no_longer_runs": "This verified SQL no longer runs: {reason}",
-  "answerSqlMessages.verifying_an_sql_answer_that_reads": "Verifying an SQL answer that reads a Live dataset isn’t available yet, so this one stays Not checked.",
   "assistantCheckMessages.a_check_is_already_running_for": "A check is already running for this project.",
   "assistantCheckMessages.checking_the_assistant": "Checking the Assistant",
   "assistantCheckMessages.connect_a_model_to_check_the": "Connect a model to check the Assistant.",

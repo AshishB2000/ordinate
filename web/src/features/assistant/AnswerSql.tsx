@@ -178,8 +178,7 @@ export function AnswerSql({ projectId, turn, sql, card: kept, question }: {
               {table ? 'Hide table' : 'Show table'}
             </Button>
           )}
-          {/* Verifying SQL that a warehouse answered comes with phase F's F4: until then the server only refuses it. */}
-          {!card.verified && card.asOf?.mode !== 'live' && <SaveAsVerified projectId={projectId} sql={card.sql} question={question ?? ''} label="Verify" />}
+          {!card.verified && <SaveAsVerified projectId={projectId} sql={card.sql} question={question ?? ''} label="Verify" />}
           <span className={q.notChart}>{NOT_A_CHART}</span>
         </div>
       </div>

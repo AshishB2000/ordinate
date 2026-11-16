@@ -81,7 +81,6 @@
   "answerSqlMessages.the_sql_reads_which_this_answer": "El SQL lee «{name}», que esta respuesta no eligió.",
   "answerSqlMessages.this_verified_question_is_answered_with": "Esta pregunta verificada se responde con SQL, que MCP no ejecuta. Pregúntala en el Asistente.",
   "answerSqlMessages.this_verified_sql_no_longer_runs": "Este SQL verificado ya no se ejecuta: {reason}",
-  "answerSqlMessages.verifying_an_sql_answer_that_reads": "Todavía no se puede verificar una respuesta SQL que lee un conjunto de datos en vivo, así que esta sigue sin comprobar.",
   "assistantCheckMessages.a_check_is_already_running_for": "Ya hay una comprobación en curso en este proyecto.",
   "assistantCheckMessages.checking_the_assistant": "Comprobando el Asistente",
   "assistantCheckMessages.connect_a_model_to_check_the": "Conecta un modelo para comprobar el Asistente.",

@@ -3,6 +3,9 @@
 // only the SQL and the datasets it reads. Here: whether one still runs (`sqlProblem`), the save, the Verified page's
 // rows, and step 2's answer when it is asked word for word (`verifiedSqlAsk`), which runs the SQL again
 // through the Query tab's gate for whoever asks, under their access: a viewer under row rules gets the gate's refusal.
+// Over Live datasets (docs/live-data/01-live-sql.md, F4) it is phase F's path instead (./answerSql `runAnswerSql`):
+// translated again for the asker and printed under THEIR lock, so two entitlements are two statements, each cached
+// under its own key, and the Verified page's check translates without a warehouse call (`liveSqlProblem`).
 
 import { randomUUID } from 'crypto';
 import * as copilot from '../ai/copilot';
@@ -10,7 +13,7 @@ import * as datasets from '../data/datasets';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import { closedToCaller } from '../data/rowAccess';
 import { isLive } from '../data/liveDataset';
-import { liveRefusedMessage } from '../data/liveMessages';
+import * as lmsg from '../engine/liveSqlMessages';
 import { osUser } from '../app/catalog';
 import type { SqlTurn } from '../ai/answerSql';
 import * as msg from '../ai/answerSqlMessages';
@@ -19,22 +22,37 @@ import { keyClash, questionKey, sanitizeVerifiedSql, type VerifiedSqlQuestion } 
 import { listBoth, lockedKeys, writeVerifiedSql } from '../analysis/verifiedQuestions';
 import { NO_ACTION } from '../ai/suggestedAction';
 import type { TurnGuidance } from '../ai/turnGuidance';
-import { runAnswerSql } from './answerSql';
+import { liveSqlProblem, runAnswerSql } from './answerSql';
 import { sqlSnapshotFor, turnsForBrowser } from './answerSnapshots';
 
-/**
- * Why `q` no longer runs, in a sentence, or null. Metadata always: every dataset it reads still there, none Live (SQL
- * on Live is phase F). `deep` (the Verified page): the statement DESCRIBEd through the gate too, no row read, so a
- * column gone or a dataset renamed says why. A dataset the caller may not read whole is not checked for them: that is
- * their access, not a breakage, and asking it gives them the gate's refusal.
- */
-export async function sqlProblem(projectId: string, q: VerifiedSqlQuestion, deep: boolean): Promise<string | null> {
+/** How many of the question's datasets are Live, or null when one is gone. */
+async function liveOf(projectId: string, q: VerifiedSqlQuestion): Promise<number | null> {
+  let n = 0;
   for (const id of q.sql.datasetIds) {
     const meta = await datasets.getDatasetMeta(projectId, id);
-    if (!meta) return vmsg.verifiedDatasetGone();
-    if (isLive(meta)) return msg.verifiedSqlBroken(liveRefusedMessage());
+    if (!meta) return null;
+    if (isLive(meta)) n += 1;
   }
+  return n;
+}
+
+/**
+ * Why `q` no longer runs, in a sentence, or null. Metadata always: every dataset it reads still there, and all of them
+ * Live or none (F-D9: a copy switched to Live beside one that was not). `deep` (the Verified page): the statement
+ * DESCRIBEd through the gate too, no row read, or over Live translated, bound and printed for the caller with no
+ * warehouse call (F4), so a column gone (a schema sync dropped it), a dataset renamed or a construct a warehouse can't
+ * carry says why. A dataset the caller may not read whole is not checked for them: that is their access, not a
+ * breakage, and asking it gives them the gate's refusal (on Live, the row rules' own, which carries no code).
+ */
+export async function sqlProblem(projectId: string, q: VerifiedSqlQuestion, deep: boolean): Promise<string | null> {
+  const live = await liveOf(projectId, q);
+  if (live === null) return vmsg.verifiedDatasetGone();
+  if (live && live < q.sql.datasetIds.length) return msg.verifiedSqlBroken(lmsg.sqlMixedEngines());
   if (!deep) return null;
+  if (live) {
+    const why = await liveSqlProblem(projectId, q.sql.text, q.sql.datasetIds);
+    return why?.code ? msg.verifiedSqlBroken(why.reason) : null;
+  }
   for (const id of q.sql.datasetIds) if (await closedToCaller(projectId, id)) return null;
   const r = await sqlDatasets.explainSql(projectId, q.sql.text, []);
   if (!r.ok) return msg.verifiedSqlBroken(r.error);
@@ -43,18 +61,18 @@ export async function sqlProblem(projectId: string, q: VerifiedSqlQuestion, deep
 }
 
 export interface SqlSaveInput { question: string; phrasings?: string[]; note?: string; sql: string }
-type Saved = { ok: true; q: VerifiedSqlQuestion } | { ok: false; error: string; field?: 'question' | 'phrasings' | 'spec'; code?: 'live_refused' };
+type Saved = { ok: true; q: VerifiedSqlQuestion } | { ok: false; error: string; field?: 'question' | 'phrasings' | 'spec' };
 
 /**
- * Verify an SQL answer: the statement runs once through the gate for the editor (it must run to be kept), and what is
- * kept is that text and the datasets the gate says it read, never the browser's list and never a figure. New only:
+ * Verify an SQL answer: the statement runs once through the gate for the editor (it must run to be kept), or over Live
+ * datasets once through phase F (F4), and what is kept is that text and the datasets the gate says it read (the
+ * translator's, on Live), never the browser's list and never a figure. New only:
  * an SQL question is not edited in place (the Verified page offers no edit for one); delete and verify again.
  */
 export async function saveVerifiedSql(projectId: string, input: SqlSaveInput): Promise<Saved> {
   if (!questionKey(input.question)) return { ok: false, error: vmsg.verifiedNoWords(), field: 'question' };
   const run = await runAnswerSql(projectId, input.sql, null, input.question);
-  // SQL over a Live dataset answers (phase F, F3) but is not verified yet (F4): said so, typed; any other reason is why it cannot be verified.
-  if (!run.ok) return run.reason === liveRefusedMessage() ? { ok: false, code: 'live_refused', error: msg.verifiedSqlOnLive(), field: 'spec' } : { ok: false, error: vmsg.verifiedDoesNotDraw(run.reason), field: 'spec' };
+  if (!run.ok) return { ok: false, error: vmsg.verifiedDoesNotDraw(run.reason), field: 'spec' };
   const now = new Date().toISOString();
   const q = sanitizeVerifiedSql({
     id: randomUUID(), projectId, question: input.question, phrasings: input.phrasings ?? [], note: input.note,
@@ -80,22 +98,25 @@ export async function sqlRow(projectId: string, q: VerifiedSqlQuestion, tag: str
   };
 }
 
-/** Every SQL question of the project as the Verified page lists it, each checked through the gate (DESCRIBE, no row). */
+/** Every SQL question of the project as the Verified page lists it, each checked through the gate (DESCRIBE, no row), or translated (Live, no warehouse call). */
 export async function sqlRows(projectId: string, list: ReadonlyArray<{ rec: VerifiedSqlQuestion; tag: string }>) {
   return Promise.all(list.map(async (t) => sqlRow(projectId, t.rec, t.tag, await sqlProblem(projectId, t.rec, true))));
 }
 
 /**
- * Step 2 for an SQL question asked word for word: null when it no longer runs (a dataset gone or Live: the model takes
- * the question, as for a chart's). Otherwise its SQL runs again for the caller, and a refusal or a failure answers
+ * Step 2 for an SQL question asked word for word: null when it no longer runs by its metadata (a dataset gone: the model
+ * takes the question, as for a chart's). Otherwise its SQL runs again for the caller, and a refusal or a failure answers
  * `{ ok: false }` with the reason and falls no further, as a chart's hit does. No model call, no words of the model.
+ * Over Live it is translated again for the caller and printed under their lock (F4): their own statement and cache entry.
  */
 export async function verifiedSqlAsk(projectId: string, hit: VerifiedSqlQuestion, question: string, target: () => Promise<string | undefined>, note: string | null) {
   if ((await sqlProblem(projectId, hit, false)) !== null) return null;
+  const live = !!(await liveOf(projectId, hit));
   // The caller may not read a dataset whole: the gate's refusal is theirs, said as the gate says it. Else a failure is a breakage.
-  const closed = (await Promise.all(hit.sql.datasetIds.map((id) => closedToCaller(projectId, id)))).some(Boolean);
+  const closed = !live && (await Promise.all(hit.sql.datasetIds.map((id) => closedToCaller(projectId, id)))).some(Boolean);
   const run = await runAnswerSql(projectId, hit.sql.text, hit.sql.datasetIds, hit.question);
-  if (!run.ok) return { ok: false as const, error: closed ? run.reason : msg.verifiedSqlBroken(run.reason) };
+  // On Live a breakage is what the translate-only check names (no warehouse call); the rest (their lock, the cost limits, the warehouse) is said as is.
+  if (!run.ok) return { ok: false as const, error: live ? ((await sqlProblem(projectId, hit, true)) ?? run.reason) : closed ? run.reason : msg.verifiedSqlBroken(run.reason) };
   const sql: SqlTurn = { text: hit.sql.text, datasetIds: run.deps, title: hit.question };
   const guidance: TurnGuidance = { verifiedId: hit.id, instructions: 0, examples: [] };
   const text = note ?? '';

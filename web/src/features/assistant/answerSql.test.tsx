@@ -110,15 +110,22 @@ describe('AnswerSql', () => {
     expect(sent.input.question).toBe('Which customers ordered more than once?');
   });
 
-  it('a table the warehouse answered (Live) is not offered Verify, even to an editor; an extract one is', () => {
+  it('a table the warehouse answered (Live) is offered Verify to an editor (phase F, F4), never to a viewer', async () => {
     serve({});
-    role.editor = true;
-    draw({ ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'live' } });
+    const LIVE: SqlCard = { ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'live' } };
+    draw(LIVE);
     expect(screen.getByTestId('answer-sql-unchecked').textContent).toBe(NOT_CHECKED);
-    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull(); // a viewer
     cleanup();
-    draw({ ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'extract' } }); // NEGATIVE CONTROL: the same card off our copy
-    expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy();
+    role.editor = true;
+    const calls = serve({ 'verified:save': { ok: true, question: { id: 'x' } } });
+    draw(LIVE);
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'verified:save')).toBe(true));
+    const sent = calls.find((c) => c.channel === 'verified:save')!.payload as { input: Record<string, unknown> };
+    expect(sent.input.sql).toBe(SQL);
+    expect(Object.keys(sent.input).sort()).toEqual(['note', 'phrasings', 'question', 'sql']); // the datasets are the server's, never sent
   });
 
   it('a verified statement says who verified it, and is neither Not checked nor offered Verify', () => {
