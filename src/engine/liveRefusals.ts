@@ -170,3 +170,8 @@ export function liveCalcDialectRefused(): string {
 export function liveCalcTooLarge(): string {
   return t('liveRefusals.the_calculated_fields_this_question');
 }
+
+/** A table whose required partition filter has no default range (an integer range, engine/live/liveDateRange): the question must filter it. */
+export function liveRequiredFilter(column: string): string {
+  return t('liveRefusals.this_table_needs_a_filter_on', { column });
+}

@@ -527,6 +527,7 @@
   "liveRefusals.this_dataset_s_calculated_fields_can": "Ce serveur ne sait pas calculer les champs calculés de ce jeu de données ; il ne répond donc à rien. Demandez à votre admin de terminer la mise à niveau d’Ordinate.",
   "liveRefusals.this_live_dataset_has_no_table": "Ce jeu de données en direct n’a ni table ni requête à lire.",
   "liveRefusals.this_question_cannot_be_asked_of": "Cette question ne peut pas être posée à un jeu de données en direct.",
+  "liveRefusals.this_table_needs_a_filter_on": "Cette table a besoin d’un filtre sur « {column} » : ajoutez-en un à la question.",
   "liveSqlMessages.a_dataset_answered_by_a_semantic": "Un jeu de données servi par une couche sémantique ne peut pas être lu en SQL. Demandez plutôt un graphique.",
   "liveSqlMessages.a_true_or_false_value_can": "Une valeur vrai ou faux ne peut être qu’une condition ici. Pour la compter, écrivez CASE WHEN … THEN 1 ELSE 0 END.",
   "liveSqlMessages.aggregates_and_window_functions_can_only": "Les agrégats et les fonctions de fenêtre ne s’utilisent que dans les colonnes renvoyées ou dans le tri, et un agrégat aussi dans HAVING.",

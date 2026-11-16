@@ -178,7 +178,10 @@ The lock column may itself be hidden: the WHERE applies before the projection. A
 filter on a table (`partition.required`, or an editor's "required filters", phase A) follows the
 chart's rule: the second call is told the table needs one, and where neither the lock, the base
 filters nor a WHERE of the statement names the column, the view gets *Last 12 months* and the card
-says so in the chart's sentence (follow-ups as built, below).
+says so in the chart's sentence (follow-ups as built, below). An ingestion-time BigQuery table that
+requires a filter gets the same range on `_PARTITIONTIME`, a TIMESTAMP base filter of its view (the
+statement cannot name the pseudo-column). A required integer-range partition that no lock, base filter
+or WHERE names refuses the statement, naming the column (`requiredFilter`), as a chart is refused.
 
 ## Cost limits
 

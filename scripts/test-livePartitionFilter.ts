@@ -14,7 +14,13 @@
 //      byte; on, a key column is compared raw and half-open, every value bound, the bound typed for
 //      the column (DATE, TIMESTAMP, BigQuery TIMESTAMP), and anything else keeps the cast. Parity with
 //      the extract is test-liveParity's (scripts/liveParityRawRange.ts).
-//   3. The nightly's pruning measurement: its plan skips without variables, refuses a half-set, and
+//   3. LOOKUPS (the answers' case fix, the latest-day probe) carry the same range; the probe's day is
+//      never claimed for a period past the range, and the card says the range (NEGATIVE CONTROL: no
+//      doc, no range). PARTITIONS THAT ARE NOT A DECLARED DATE: an integer-range partition that is
+//      required refuses an unfiltered question on every door (chart, tile, answer, SQL) naming it, and a
+//      filtered one passes, its case fix included; BigQuery's `_PARTITIONTIME` is a TIMESTAMP range among
+//      the base filters, on the table scan under a calc, BigQuery only (NEGATIVE CONTROL: DuckDB refuses).
+//   4. The nightly's pruning measurement: its plan skips without variables, refuses a half-set, and
 //      compiles its two forms; test-warehouseLive skips green without secrets and writes no artifact.
 //
 //   npm run build:ts && node scripts/test-livePartitionFilter.js
@@ -33,6 +39,8 @@ const dateRange: typeof import('../src/engine/live/liveDateRange') = require('..
 const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 const compileFilter: typeof import('../src/engine/live/compileFilter') = require('../src/engine/live/compileFilter');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const liveSql: typeof import('../src/engine/live/liveSql') = require('../src/engine/live/liveSql');
+const liveTarget: typeof import('../src/engine/live/liveTarget') = require('../src/engine/live/liveTarget');
 const pruning: typeof import('./warehousePruning') = require('./warehousePruning');
 const { DIALECT_IDS, dialectFor }: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 
@@ -123,6 +131,115 @@ async function requiredRange(): Promise<void> {
   ok('NEGATIVE CONTROL: a required filter naming another word (`d_utc`) adds nothing', near.sent.every((r) => r.length === 0) && !near.viz.notes?.includes(SENTENCE), JSON.stringify(near.sent));
 }
 
+/** The date params of the statements since the reset whose SQL matches `re`. */
+function datesOf(re: RegExp): string[][] {
+  return H.fake.calls.filter((c) => re.test(c.sql)).map((c) => c.params.filter((p) => p.type === 'date').map((p) => String(p.value)));
+}
+
+const card = (P: string, liveId: string, filters: import('../src/ai/answerSpec').AnswerFilter[]) =>
+  H.as(H.ORG_A, () => answers.computeCard(P, { datasetId: liveId, category: 'cat', measures: ENC.values, filters, chartType: 'bar', title: 't' }));
+
+async function lookups(): Promise<void> {
+  const P = (await H.setupOrg(H.ORG_A)).projectId;
+  const withDoc = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  await H.as(H.ORG_A, async () => {
+    const made = await store.createSourceDoc(P, withDoc.connId, 'live_typed', {});
+    if (!made.ok) throw new Error('no doc');
+    await store.updateSourceDoc(P, withDoc.connId, made.docId, (d) => ({ ...d, facts: { columns: [{ name: 'd', type: 'DATE' }], partition: { columns: ['d'], method: 'DAY', required: true }, readAt: '2025-03-01T00:00:00Z', readBy: 'ana' } }));
+  });
+  const bare = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  const RANGE = '["2024-03-01","2025-02-28"]';
+
+  H.fakeMod.resetFake();
+  await card(P, withDoc.liveId, [{ column: 'region', op: '=', value: 'WEST' }]);
+  const fixed = datesOf(/SELECT DISTINCT/);
+  ok('case fix: its lookup carries the required range on `d`, bound', fixed.length === 1 && JSON.stringify(fixed[0]) === RANGE, JSON.stringify(fixed));
+  H.fakeMod.resetFake();
+  await card(P, bare.liveId, [{ column: 'region', op: '=', value: 'WEST' }]);
+  ok('NEGATIVE CONTROL: no doc — the case fix sends no range', JSON.stringify(datesOf(/SELECT DISTINCT/)) === '[[]]', JSON.stringify(datesOf(/SELECT DISTINCT/)));
+
+  // `this_week` (2025-03-09…) is empty; the data ends on 2025-03-01, after the range's end (2025-02-28).
+  H.fakeMod.resetFake();
+  const week = await card(P, withDoc.liveId, [{ column: 'd', period: 'this_week' }]);
+  const probe = datesOf(/AS o_l0/);
+  const notes = 'card' in week ? week.card.notes : [];
+  ok('latest-day probe: held to the required range (never wider), and the card says so', probe.length === 1 && JSON.stringify(probe[0]) === RANGE && notes.includes(SENTENCE), JSON.stringify([probe, notes]));
+  ok('…and a day it found inside the range is never said for a period after the range (the data really ends on 2025-03-01)', notes.every((n) => !/ends on/.test(n)), JSON.stringify(notes));
+  H.fakeMod.resetFake();
+  const bareWeek = await card(P, bare.liveId, [{ column: 'd', period: 'this_week' }]);
+  const bareNotes = 'card' in bareWeek ? bareWeek.card.notes : [];
+  ok('NEGATIVE CONTROL: no doc — the probe reads every day and the card says where the data ends', JSON.stringify(datesOf(/AS o_l0/)) === '[[]]' && bareNotes.some((n) => /ends on/.test(n)) && !bareNotes.includes(SENTENCE), JSON.stringify(bareNotes));
+}
+
+async function integerPartition(): Promise<void> {
+  const P = (await H.setupOrg(H.ORG_A)).projectId;
+  const ds = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  await H.as(H.ORG_A, async () => {
+    const made = await store.createSourceDoc(P, ds.connId, 'live_typed', {});
+    if (!made.ok) throw new Error('no doc');
+    await store.updateSourceDoc(P, ds.connId, made.docId, (d) => ({ ...d, facts: { columns: [{ name: 'tier', type: 'INT64' }], partition: { columns: ['tier'], method: 'RANGE', required: true }, readAt: '2025-03-01T00:00:00Z', readBy: 'ana' } }));
+  });
+  const NEEDS = 'This table needs a filter on "tier": add one to the question.';
+  const facts = await H.as(H.ORG_A, async () => {
+    const meta = await H.datasets.getDatasetMeta(P, ds.liveId);
+    return meta?.origin?.kind === 'connection' ? dateRange.dateFactsOf(P, meta.origin, undefined, H.fx.COLUMNS) : null;
+  });
+  ok('facts: a required integer-range partition is `unbounded`, no date range', JSON.stringify(facts) === '{"required":[],"keys":[],"unbounded":["tier"]}', JSON.stringify(facts));
+  const TIER = { type: 'filter' as const, column: 'tier', op: '=' as const, value: 1 };
+  H.fakeMod.resetFake();
+  const viz = (await post('visual:data', { projectId: P, datasetId: ds.liveId, encoding: ENC, filters: [] })).value;
+  const kpi = await post('dashboard:metric', { projectId: P, datasetId: ds.liveId, column: 'amt', aggregation: 'sum', filters: [] });
+  const ans = await card(P, ds.liveId, [{ column: 'region', op: '=', value: 'WEST' }]);
+  const sql = await H.as(H.ORG_A, () => liveSql.runLiveSql(P, 'SELECT count(*) AS n FROM t', [{ id: ds.liveId, names: ['t'] }]));
+  ok('unfiltered: chart, tile, answer and SQL refuse, naming the column, and nothing is asked', viz.ok === false && viz.error === NEEDS && JSON.stringify(kpi.value).includes(JSON.stringify(NEEDS).slice(1, -1)) && !('card' in ans) && ans.reason === NEEDS
+    && sql.ok === false && sql.error === NEEDS && H.fake.calls.length === 0, JSON.stringify([viz, kpi.value, ans, sql, H.fake.calls.length]));
+  H.fakeMod.resetFake();
+  const v2 = (await post('visual:data', { projectId: P, datasetId: ds.liveId, encoding: ENC, filters: [TIER] })).value;
+  const k2 = (await post('dashboard:metric', { projectId: P, datasetId: ds.liveId, column: 'amt', aggregation: 'sum', filters: [TIER] })).value;
+  const a2 = await card(P, ds.liveId, [{ column: 'region', op: '=', value: 'WEST' }, { column: 'tier', op: '=', value: 1 }]);
+  const s2 = await H.as(H.ORG_A, () => liveSql.runLiveSql(P, 'SELECT count(*) AS n FROM t WHERE tier = 1', [{ id: ds.liveId, names: ['t'] }]));
+  const fix = H.fake.calls.filter((c) => /SELECT DISTINCT/.test(c.sql));
+  ok('filtered on `tier`: every door answers, and the case fix reads tier as the question does', v2.ok === true && k2.ok === true && 'card' in a2 && s2.ok === true && fix.length === 1 && fix[0].params.some((p) => p.type === 'number' && p.value === 1),
+    JSON.stringify([v2.ok, k2.ok, 'card' in a2 ? 'card' : a2, s2.ok ? 'ok' : s2, fix.map((c) => c.params)]));
+}
+
+function partitionTime(): void {
+  const columns: LiveColumn[] = [{ name: 'amt', type: 'number' }, { name: 'cat', type: 'text' }];
+  const ir: LiveIR = { kind: 'metric', measures: [{ column: 'amt', aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null };
+  const env = { dialect: 'bigquery' as const, source: { kind: 'table' as const, parts: ['p', 'd', 't'] }, columns };
+  const r = dateRange.withRequiredRange(ir, { requiredTime: true, env });
+  const q = r.ok ? compile.compileMetric(r.ir, r.env) : null;
+  const sql = q?.ok ? q.query.sql : '';
+  ok('_PARTITIONTIME: a TIMESTAMP range on the pseudo-column, half-open, both ends bound at UTC midnight, the question IR untouched',
+    r.ok && r.ir === ir && r.notes.includes(SENTENCE) && sql.includes('WHERE (lv_src._PARTITIONTIME >= CAST(@p0 AS TIMESTAMP) AND lv_src._PARTITIONTIME < CAST(@p1 AS TIMESTAMP))')
+      && q?.ok === true && JSON.stringify(q.query.params.map((p) => [p.type, p.value])) === '[["timestamp","2024-03-01T00:00:00.000Z"],["timestamp","2025-03-01T00:00:00.000Z"]]', sql);
+  ok('…it is a base filter, so it is in the cache key (`keyOf` reads env.base)', r.ok && JSON.stringify(r.env.base?.map((f) => f.column)) === '["_PARTITIONTIME"]');
+  const calc = { ...env, source: { ...env.source, calcs: [{ name: 'dbl', expression: '[amt] * 2', type: 'number' as const }] } };
+  const rc = dateRange.withRequiredRange({ ...ir, measures: [{ column: 'dbl', aggregation: 'sum' }] }, { requiredTime: true, env: { ...calc, columns: [...columns, { name: 'dbl', type: 'number' }] } });
+  const qc = rc.ok ? compile.compileMetric(rc.ir, rc.env) : null;
+  const inner = qc?.ok ? qc.query.sql : '';
+  ok('…under a calc it sits on the table scan itself, innermost', /FROM `p`\.`d`\.`t` AS lv_src WHERE \(lv_src\._PARTITIONTIME >= /.test(inner), inner);
+  const duck = dateRange.withRequiredRange(ir, { requiredTime: true, env: { ...env, dialect: 'duckdb' } });
+  const qd = duck.ok ? compile.compileMetric(duck.ir, duck.env) : null;
+  ok('NEGATIVE CONTROL: any other dialect refuses the pseudo-column, never drops it', qd?.ok === false, JSON.stringify(qd));
+}
+
+async function partitionTimeFacts(): Promise<void> {
+  const P = (await H.setupOrg(H.ORG_A)).projectId;
+  const ds = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  await H.as(H.ORG_A, async () => {
+    const made = await store.createSourceDoc(P, ds.connId, 'live_typed', {});
+    if (!made.ok) throw new Error('no doc');
+    await store.updateSourceDoc(P, ds.connId, made.docId, (d) => ({ ...d, facts: { columns: [], partition: { columns: ['_PARTITIONTIME'], method: 'DAY', required: true }, readAt: '2025-03-01T00:00:00Z', readBy: 'ana' } }));
+  });
+  const [facts, target] = await H.as(H.ORG_A, async () => {
+    const meta = await H.datasets.getDatasetMeta(P, ds.liveId);
+    return [meta?.origin?.kind === 'connection' ? await dateRange.dateFactsOf(P, meta.origin, undefined, H.fx.COLUMNS) : null, await liveTarget.liveTarget(P, ds.liveId)] as const;
+  });
+  ok('facts: an ingestion-time table that requires a filter is `partitionTime`', JSON.stringify(facts) === '{"required":[],"keys":[],"partitionTime":true}', JSON.stringify(facts));
+  ok('NEGATIVE CONTROL: on a warehouse that is not BigQuery the target asks for no partition time', target.ok && target.target.requiredTime === undefined, JSON.stringify(target.ok && target.target.requiredTime));
+}
+
 function rawRangeCompile(): void {
   const columns: LiveColumn[] = [
     { name: 'd', type: 'date', sourceType: 'DATE' }, { name: 'ts', type: 'date', sourceType: 'TIMESTAMP' }, { name: 'tz', type: 'date', sourceType: 'TIMESTAMP_TZ' },
@@ -201,8 +318,12 @@ function pruningMeasurement(): void {
 
 async function main(): Promise<void> {
   rawRangeCompile();
+  partitionTime();
   pruningMeasurement();
   await requiredRange();
+  await lookups();
+  await integerPartition();
+  await partitionTimeFacts();
 }
 
 void main()

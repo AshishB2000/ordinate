@@ -527,6 +527,7 @@
   "liveRefusals.this_dataset_s_calculated_fields_can": "Dieser Server kann die berechneten Felder dieses Datensatzes nicht berechnen, daher liefert er keine Antwort. Bitten Sie Ihren Admin, das Upgrade von Ordinate abzuschließen.",
   "liveRefusals.this_live_dataset_has_no_table": "Dieser Live-Datensatz hat keine Tabelle und keine Abfrage, aus der gelesen werden kann.",
   "liveRefusals.this_question_cannot_be_asked_of": "Diese Frage kann einem Live-Datensatz nicht gestellt werden.",
+  "liveRefusals.this_table_needs_a_filter_on": "Diese Tabelle braucht einen Filter auf „{column}“: Fügen Sie der Frage einen hinzu.",
   "liveSqlMessages.a_dataset_answered_by_a_semantic": "Ein Datensatz, den eine semantische Schicht beantwortet, kann nicht mit SQL gelesen werden. Fragen Sie stattdessen nach einem Diagramm.",
   "liveSqlMessages.a_true_or_false_value_can": "Ein Wahr-oder-falsch-Wert kann hier nur eine Bedingung sein. Um ihn zu zählen, schreiben Sie CASE WHEN … THEN 1 ELSE 0 END.",
   "liveSqlMessages.aggregates_and_window_functions_can_only": "Aggregate und Fensterfunktionen können nur in den zurückgegebenen Spalten oder in der Sortierung verwendet werden, ein Aggregat auch in HAVING.",

@@ -350,7 +350,7 @@ async function fileLeg(): Promise<void> {
       await store.updateSourceDoc(P, W.main.conn, made.docId, (d) => ({ ...d, facts: { columns: [{ name: 'd', type: 'DATE' }], partition: { columns: ['d'], method: 'DAY', required: true }, readAt: '2025-03-01T00:00:00Z', readBy: 'ana' } }));
       return (await liveRecord.saveLiveRecord(P, { name: 'dated', columns: fx.COLUMNS, origin: { kind: 'connection', connId: W.main.conn, table: `${TABLE_CANARY}_dated` } }))!.id;
     });
-    const NOTE = dateRange.requiredRange(['d'], []).notes[0];
+    const NOTE = (dateRange.requiredRange({ requiredDates: ['d'] }, []) as { notes: string[] }).notes[0];
     const dates = () => (fake.calls.at(-1)?.params ?? []).filter((p) => p.type === 'date').map((p) => String(p.value));
     const REQ = 'SELECT count(*) AS n, min(d) AS first_day, max(d) AS last_day FROM dated';
     const req0 = await ask(ADMIN, REQ, ['dated']);

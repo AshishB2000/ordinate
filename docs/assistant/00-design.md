@@ -326,7 +326,12 @@ partition key that may stop the warehouse skipping data. Two parts are built
   needs a date range*. It is added once, in the executor's shared step (`liveQuery` `run`), so answers,
   charts and KPI tiles get it alike; the sentence is the chart's and tile's `notes` and the card's. A
   question that already filters the column (its own filter, a lock or a base filter) is left alone, and
-  so is a table with no such fact. The facts are records only: no warehouse call.
+  so is a table with no such fact. The facts are records only: no warehouse call. A lookup takes the
+  same range (`lookupRequired`): the case fix, and the latest-day probe, whose card then carries the
+  sentence and never says a day it found for a period that starts after the range. An ingestion-time
+  BigQuery table (`_PARTITIONTIME`, a table source only) gets the range as a TIMESTAMP base filter on the
+  table scan; a required integer-range partition has no default, so an unfiltered question is refused:
+  *This table needs a filter on "tier": add one to the question.*
 - **A half-open range on the raw column, built and OFF.** With the table's facts naming the column a
   partition, sort or cluster key, a range can compile as `col >= start AND col < end + 1 day`, every
   day bound, typed for the column: a DATE against a DATE, a timestamp against a DATE the engine
@@ -1016,8 +1021,11 @@ source table can answer, a question needing an undefined link, and a question on
   note and the rank merge: `docs/ai-models/00-plan.md`, "Meaning search".
 - **Date-filter pruning (phase A).** Built, switched off, and measured each night; see above. No
   dialect is in `RAW_RANGE_DIALECTS` until its nightly numbers show the cast costing bytes. If the cast
-  doesn't hurt pruning on a given warehouse, leave that dialect alone. Not covered yet: a Live lookup
-  (the answers' case fix, latest-date probes) gets no required range, and a required partition column
-  that is not a declared date (an integer range, BigQuery's `_PARTITIONTIME`) gets none either.
+  doesn't hurt pruning on a given warehouse, leave that dialect alone. Lookups and partitions that are
+  not a declared date: answered (`docs/live-data/log.md`, 2026-11-16). The answers' case fix and the
+  latest-day probe carry the required range; BigQuery's `_PARTITIONTIME` gets it as a TIMESTAMP base
+  filter; a required integer-range partition refuses an unfiltered question, naming the column. Not
+  covered yet: the key check ("Check now") and the schema sync's profile and probes still read the
+  whole table, so BigQuery refuses them on a table that requires a partition filter (a typed failure).
 - **Folders and `/p/` links (phase E).** A published dashboard keeps working for its audience;
   whether moving its folder should warn about published links too.

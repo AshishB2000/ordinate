@@ -31,7 +31,7 @@ import type { ChartData } from '../analysis/vizData';
 import { tileCaption } from '../analysis/captions';
 import { displayNames } from '../app/catalog';
 import { navContext } from './modelNavigation';
-import { ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, periodsAfterData, specFilterSteps } from '../ai/answerSpec';
+import { ANSWER_CHART_TYPES, answerChips, answerPeriod, defaultAnswerChart, periodsAfterData, specFilterSteps } from '../ai/answerSpec';
 import type { AnswerFilter, AnswerSpec } from '../ai/answerSpec';
 import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import { liveWithheld } from './liveProfile';
@@ -42,6 +42,7 @@ import type { LiveFailure } from '../engine/live/liveQuery';
 import { adaptFilter, adaptFilters, isRefusal, refuse } from '../engine/live/liveSpec';
 import type { LiveFilter } from '../engine/live/liveSpec';
 import { compileCaseMatches, compileLatestDates } from '../engine/live/compile';
+import * as dateRange from '../engine/live/liveDateRange';
 import { toNumber } from '../engine/live/shape';
 import { isoFromDays } from '../analysis/dateIntel';
 import { formatDate } from '../app/format';
@@ -116,7 +117,15 @@ export async function liveCaseFix(
         if (!f || isRefusal(f)) return isRefusal(f) ? f : refuse('unknownColumn', s.column); // a lock never skips
         locked.push(f);
       }
-      return compileCaseMatches(column, [...keys].sort(), t.env, locked);
+      // A required column with no default range (../engine/live/liveDateRange) is read as the question filters it.
+      for (const s of requiredSteps(filters, columns, t.requiredColumns)) {
+        const f = adaptFilter(s, t.columns, {}, []);
+        if (isRefusal(f)) return f;
+        if (f) locked.push(f);
+      }
+      // What its table requires (a date range, the partition time) unless the lock filters it; the spellings are no figure, so no note.
+      const need = dateRange.lookupRequired(t, locked);
+      return need.ok ? compileCaseMatches(column, [...keys].sort(), need.env, need.filters) : need;
     });
     if (!r.ok) return r;
     const byKey = new Map<string, string>();
@@ -153,14 +162,40 @@ export async function liveCaseFix(
  * The latest day the caller's rows hold in `column` (ISO), for an EMPTY answer's note — never a figure. Only the row
  * lock narrows it, as the extract's `lockedTable` rows: a term's steps are the question's. Null when it cannot be said.
  */
-async function liveEndsOn(projectId: string, meta: DatasetMeta, column: string, lock: readonly FilterStep[]): Promise<string | null> {
-  if (meta.live?.semantic) return semanticLatestDay(projectId, meta.id, column); // a layer's: one lookup, under the caller's lock
+async function liveEndsOn(projectId: string, meta: DatasetMeta, column: string, lock: readonly FilterStep[]): Promise<Ends> {
+  if (meta.live?.semantic) return { day: await semanticLatestDay(projectId, meta.id, column) }; // a layer's: one lookup, under the caller's lock
+  let ranged: Pick<Ends, 'within' | 'note'> = {};
   const r = await liveLookup(projectId, meta.id, (t) => {
     const f = adaptFilters(lock.filter((s) => s.lock === true), t.columns, {});
-    return f.ok ? compileLatestDates(column, t.env, f.filters) : f;
+    if (!f.ok) return f;
+    // A table that requires a range (../engine/live/liveDateRange) is probed inside it, never wider; the card then says so.
+    const need = dateRange.lookupRequired(t, f.filters);
+    if (!need.ok) return need;
+    if (need.range) ranged = { within: need.range, note: need.notes[0] };
+    return compileLatestDates(column, need.env, need.filters);
   });
   const day = r.ok && r.rows[0] ? toNumber(r.rows[0][0]) : null;
-  return day === null || !Number.isFinite(day) ? null : isoFromDays(day);
+  return { day: day === null || !Number.isFinite(day) ? null : isoFromDays(day), ...ranged };
+}
+
+/** An empty answer's latest day; `within`/`note`: the required range the probe was held to, and its sentence. */
+interface Ends {
+  day: string | null;
+  within?: { from?: string; to?: string };
+  note?: string;
+}
+
+/**
+ * The day a period's note may say its data ends on: none when the probe was held to a range that ends before the
+ * period starts, as it never saw the days between (an empty probe is none too: nothing is claimed past the range).
+ */
+const endsFor = (e: Ends | undefined, from: string): string | null => (!e?.day || (e.within?.to !== undefined && e.within.to < from) ? null : e.day);
+
+/** The question's filters on a table's required columns with no default (an integer range), as steps; a term or a period is never one. */
+function requiredSteps(filters: readonly AnswerFilter[], columns: ParsedColumn[], required: readonly string[] | undefined): FilterStep[] {
+  if (!required?.length) return [];
+  const own = filters.filter((f) => !('term' in f) && !('period' in f) && required.includes(f.column));
+  return own.length ? specFilterSteps({ filters: own }, columns, []).steps : [];
 }
 
 /** `computeCard` for a Live dataset, or null when the dataset is not Live. */
@@ -216,9 +251,12 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   const shown = saidFilters(spec.filters, filterSaid, fixed.held);
   const shownLabels = shown === spec.filters ? filterLabels : labelsOf(shown);
   // As the extract's: no rows because the period starts after the caller's rows end, said, never another period.
-  const ends = new Map<string, string | null>();
+  const ends = new Map<string, Ends>();
   if (!data.labels.length) for (const f of spec.filters) if ('period' in f && !ends.has(f.column)) ends.set(f.column, await liveEndsOn(projectId, meta, f.column, lock));
-  const stale = periodsAfterData(spec, (column) => ends.get(column) ?? null).map((p) => periodAfterData(p.label, meta.name, formatDate(p.ends)));
+  const stale = spec.filters.flatMap((f) => ('period' in f ? periodsAfterData({ filters: [f] }, (column) => endsFor(ends.get(column), answerPeriod(f).from)) : []))
+    .map((p) => periodAfterData(p.label, meta.name, formatDate(p.ends)));
+  // A latest-day probe held to the table's required range is said, as a question given it is, once.
+  for (const e of ends.values()) if (e.note && !r.notes.includes(e.note) && !stale.includes(e.note)) stale.push(e.note);
   const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   return {
     card: {
