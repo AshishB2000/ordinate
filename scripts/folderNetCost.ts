@@ -5,7 +5,8 @@
 // Run by ./folderNet: `bare` in section 0 (no folder anywhere), `foldered` in section 9 (folders on P and one more).
 // And ⌘K (E4): `bareSearch` in section 0 — `search:query` makes exactly the statements it makes with no folder code, as
 // whether the project has a folder is read in the index's own marker statement (src/server/searchIndex.ts `unbuilt`);
-// `folderedSearch` in section 6 — then it reads P's tree once. Not a test file itself (no `test-` prefix).
+// `folderedSearch` in section 6 — then it reads P's tree once. And reach (E5): `figuresBare` in section 0 — a dashboard's
+// figure calls read nothing of dashboard_reads with no folder. Not a test file itself (no `test-` prefix).
 
 import { Client } from 'pg';
 import { ok } from './selfcheck';
@@ -16,18 +17,21 @@ const folders: typeof import('../src/server/authz/folders') = require('../src/se
 const searchIndex: typeof import('../src/server/searchIndex') = require('../src/server/searchIndex');
 
 const WHO: H.Person[] = ['opsLead', 'opsViewer'];
-type Cost = { statements: number; trees: number };
+type Cost = { statements: number; trees: number; reach: number };
+type Calls = Array<[string, unknown]>;
 
-/** The least cost of three calls (`projects:overview` unless named) by `who`: statements, and how many read a project's folder tree. */
+/** The least cost of three calls (`projects:overview` unless named) by `who`: statements, how many read a folder tree, how many dashboard_reads (reach, E5). */
 async function cost(W: H.World, who: H.Person, call: () => Promise<unknown> = () => W.call(who, 'projects:overview')): Promise<Cost> {
   const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown };
   const query = proto.query;
   let best: Cost | null = null;
   for (let i = 0; i < 3; i++) {
-    const c: Cost = { statements: 0, trees: 0 };
+    const c: Cost = { statements: 0, trees: 0, reach: 0 };
     proto.query = function (this: unknown, ...a: unknown[]) {
       c.statements++;
-      if (String(typeof a[0] === 'string' ? a[0] : (a[0] as { text?: unknown } | null)?.text ?? '').includes('LEFT JOIN folder_grants')) c.trees++;
+      const text = String(typeof a[0] === 'string' ? a[0] : (a[0] as { text?: unknown } | null)?.text ?? '');
+      if (text.includes('LEFT JOIN folder_grants')) c.trees++;
+      if (text.includes('dashboard_reads')) c.reach++;
       return query.apply(this, a);
     };
     try {
@@ -48,6 +52,20 @@ async function baseline(W: H.World, who: H.Person, call?: () => Promise<unknown>
   } finally {
     gate.setFolderChecksForTest(true);
   }
+}
+
+/**
+ * Section 0, E5: a dashboard's figure calls with no folder anywhere read no dashboard_reads (reach is asked only of a
+ * dataset a folder closes) and cost what E2's checks cost — the one tree read per request — over no folder code.
+ */
+export async function figuresBare(W: H.World, calls: Calls): Promise<void> {
+  const who: H.Person = 'opsViewer';
+  const run = async (): Promise<void> => {
+    for (const [ch, payload] of calls) await W.call(who, ch, payload);
+  };
+  const [on, off] = [await cost(W, who, run), await baseline(W, who, run)];
+  ok(`inert in cost: ${calls.length} figure calls by ${who} with no folder read dashboard_reads ${on.reach} times; ${on.statements} statements ≤ ${off.statements} (no folder code) + one tree read (3) per call`,
+    on.reach === 0 && on.trees <= calls.length && on.statements <= off.statements + 3 * calls.length, JSON.stringify({ on, off }));
 }
 
 /** Each project resolved on its own, as before the batch: the negative control's cost. */

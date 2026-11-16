@@ -67,6 +67,7 @@ import type { SqlBindValue, SqlParam } from '../analysis/params';
 import { assignViewNames, extractDeps, slugify } from './sqlNames';
 import { readOnlyError, astRelationError, ONLY_DATASETS } from './sqlGate';
 import { requireExtract } from '../data/liveDataset';
+import { folderGate } from '../server/authz/folderGate';
 // One API surface for callers and the self-check.
 export { assignViewNames, extractDeps, slugify } from './sqlNames';
 export { readOnlyError } from './sqlGate';
@@ -280,6 +281,9 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   const ctes: string[] = [];
   for (const id of deps) {
     const e = cat.find((x) => x.id === id) as NameEntry;
+    // User SQL reads rows: a dataset the caller only reaches (a dashboard's figures) refuses `figures_only`, even inside
+    // a door's figure scope, where the storage net below would hand it through (docs/team-folders D9).
+    await folderGate(projectId, id, undefined, 'open');
     const src = await datasets.residentSource(projectId, id);
     if (!src) {
       requireExtract(await datasets.getDatasetMeta(projectId, id)); // a Live dataset: refused, typed — never an empty table

@@ -5,7 +5,8 @@
 // 0. INERT: with no folder besides Everyone, every steady reply (the same on two runs) is identical with the
 //    folder checks on and off (src/server/authz/folderGate's seam), for every person; and projects:overview over 51
 //    projects costs at most one statement more than no folder code, ⌘K none (./folderNetCost; NEGATIVE CONTROLS: per
-//    project; folders resolved without asking first).
+//    project; folders resolved without asking first); and a dashboard's figure calls read nothing of reach (E5), E2's
+//    one tree read per call at most.
 // 2. THE SWEEP: every read contract with one payload each (naming HR's ids where it takes one), as opsViewer,
 //    opsLead, opsEditorView, finViewer and ed: no reply carries an HR canary — but those in LATER, each a later
 //    PR's, and each must still leak (so the list only shrinks). D8: no reply to Ops's Can-view callers carries
@@ -16,7 +17,8 @@
 // 4. FIGURES: every FIGURE channel on HR's dataset refuses `closed` (or answers as for an unknown id) for
 //    opsViewer, and answers on Ops's twin; a chart on Orders labelled from HR's dimension refuses even when the
 //    answer is cached. NEGATIVE CONTROLS: padmin is answered; with the doors' check of what a question reads off,
-//    opsViewer is served the cached answer, HR's labels and all.
+//    opsViewer is served the cached answer, HR's labels and all. Then reach (E5, ./folderNetReach): a dataset read
+//    by a dashboard the caller opens answers its figures and nothing else, the publish refusal, the refresh push.
 // 5. THE NET: getDataset and residentSource on HR in opsViewer's request refuse FolderError; SQL, a Prepare
 //    union and a join preview over HR, as opsLead, carry no HR row. NEGATIVE CONTROL: padmin reads them.
 // 7. SECURITY WALKS: figureDatasets is the same for opsViewer as for padmin, and so are hiddenAnywhere and
@@ -26,14 +28,14 @@
 // The sweep covers E3's readers too (comments, mentions, stories, scorecards, scenarios, reports, Trash, versions,
 // topics, Recent, Home, the switcher), on HR's planted records — and since E4 ⌘K and the Assistant's history, whose
 // conversations held while HR was open (section 0) name its items. Section 6 (E4, ./folderNetIndexes): the indexes per
-// person, by words and meaning, against their references, on Finance's canaries. Reach (section 4's `figures_only`, the
-// Finance board) is E5's; sections 8 and 11 are E6 and E7's.
+// person, by words and meaning, against their references, on Finance's canaries. Sections 8 and 11 are E6 and E7's.
 
 import { randomUUID } from 'crypto';
 import { ok } from './selfcheck';
 import { READS } from './folderReaders';
 import * as H from './folderHarness';
 import { sendSections } from './folderNetSends';
+import { reachSection } from './folderNetReach';
 import * as cost from './folderNetCost';
 import { indexSections } from './folderNetIndexes';
 
@@ -58,6 +60,7 @@ const UNSWEPT = new Set(['projects:list', 'projects:roles', 'onboarding:status',
 /** Every wholeProject() call site (D14): a security walk, a uniqueness check, or upkeep that is never a reply. */
 const WHOLE_PROJECT: Readonly<Record<string, number>> = {
   'src/analysis/alertStore.ts': 1, // syncWatchRules: every watched dataset, or another folder's rules read as gone
+  'src/analysis/publishedReads.ts': 2, // what a published copy reads (reach, D9); a reached metric's datasets
   'src/analysis/termNames.ts': 2, // a term's or metric's name is unique in the project
   'src/app/trash.ts': 1, // a restored verified question's words are unique in the project
   'src/data/datasetDependents.ts': 1, // the push refresh of every query over a changed dataset
@@ -168,6 +171,9 @@ export async function databaseSections(): Promise<void> {
     const spare = await cost.moreProjects(W, 50);
     await cost.bare(W, spare.length + 1);
     await cost.bareSearch(W);
+    const enc = { category: 'dept', values: [{ column: 'salary', aggregation: 'sum' }] };
+    await cost.figuresBare(W, [['analysis:tiles', { projectId: P, items: [{ kind: 'visual', datasetId: ops.ds, encoding: enc, chartType: 'bar' }, { kind: 'metric', metricId: ops.metric, datasetId: ops.ds, column: 'salary', aggregation: 'sum' }] }],
+      ['visual:rows', { projectId: P, datasetId: ops.ds, encoding: enc, mark: { category: 'd1' } }], ['dataset:distinct', { projectId: P, datasetId: ops.ds, column: 'dept' }]]);
 
     await W.plantFolders();
 
@@ -245,6 +251,7 @@ export async function databaseSections(): Promise<void> {
     gate.setDoorReadsForTest(false);
     const leaked = await W.call('opsViewer', 'visual:data', labelled).finally(() => gate.setDoorReadsForTest(true));
     ok('NEGATIVE CONTROL: with the doors\' check of what a question reads off, opsViewer is served the cached answer, HR\'s labels and all', /HRCANARY_label/.test(leaked.text), short(leaked));
+    await reachSection(W, list.filter(([, ch]) => classOf(ch) === 'OPEN'), toOps, unknown); // E5: reach (./folderNetReach)
 
     // ── 5. The net ───────────────────────────────────────────────────────
     const net = (who: Person, fn: () => Promise<unknown>): Promise<string> => W.as(who, fn).then((v) => (v ? 'read' : 'null'), (e: unknown) => (folders.isFolderError(e) ? 'refused' : `threw ${(e as Error).message}`));

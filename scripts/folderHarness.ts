@@ -9,7 +9,8 @@
 // Ops holds their twins (`Orders`, the same columns but `ops_bonus`), so every payload asked of HR — which names
 // only ids and the shared columns, never a canary — can be asked of Ops (a control) and of an unknown id
 // (section 3), by swapping ids. Everyone holds `Plain`. An Ops dashboard published and then
-// edited (`OPSDRAFTCANARY`) is D8's: an editor with Can view on Ops reads only its copy.
+// edited (`OPSDRAFTCANARY`) is D8's: an editor with Can view on Ops reads only its copy. Reach (D9) has a Finance
+// board showing Orders (finViewer reaches it) and an Everyone board's KPI on HR's dataset (HR shares no figures).
 //
 // Not a test file itself (no `test-` prefix): the safety net imports it.
 
@@ -57,6 +58,8 @@ export interface World {
   topic: string;
   /** HR's version keys (its visual's and report's first), for a payload that names one. */
   versions: { visual: string; report: string };
+  /** Reach (E5): a Finance board showing Orders (its chart, a KPI, its saved metric), and an Everyone board's KPI on HR's dataset. */
+  reach: { finBoard: string; everyoneBoard: string };
   teams: { ops: string; leads: string; fin: string };
   uid: Record<Person, string>;
   pool: Pool;
@@ -182,6 +185,17 @@ export async function world(label: string): Promise<World | null> {
   const hr = await itemsOn(hrDs, 'HRCANARY');
   const ops = await itemsOn(opsDs, 'Ops');
   await call('boss', 'analysis:update', { projectId: P, id: ops.board, name: 'OPSDRAFTCANARY board' }); // its draft, past its copy
+  const published = async (name: string, cards: object[]): Promise<string> => {
+    const b = await call('boss', 'analysis:create', { projectId: P, name, sheets: [{ name: 'One', cards: cards.map(card) }] });
+    const id = must(name, String(b.body?.id ?? b.body?.analysis?.id ?? ''));
+    must(`publish ${name}`, (await call('boss', 'analysis:publish', { projectId: P, id })).body?.ok === true);
+    return id;
+  };
+  const kpi = (ds: string, label: string, metricId?: string) => ({ type: 'metric', metric: { datasetId: ds, column: 'salary', aggregation: 'sum', label, ...(metricId ? { metricId } : {}) } });
+  const reach = {
+    finBoard: await published('Finance board', [{ type: 'visual', visualId: ops.visual }, kpi(opsDs, 'Orders total'), kpi(opsDs, 'Orders metric', ops.metric)]),
+    everyoneBoard: await published('Everyone board', [kpi(hrDs, 'Everyone total')]),
+  };
   // opsViewer follows HR's metric and scorecard while HR is open; a chart on HR goes to the Trash; a topic spans both.
   for (const [kind, id] of [['metric', hr.metric], ['scorecard', hr.scorecard]]) must(`follow ${kind}`, (await call('opsViewer', 'numbers:follow', { projectId: P, kind, id, on: true })).body?.ok === true);
   const gone = await call('boss', 'visual:save', { projectId: P, datasetId: hrDs, name: 'HRCANARY trashed chart', chartType: 'bar', encoding: { category: 'dept', values: [{ column: 'salary', aggregation: 'sum' }] } });
@@ -217,9 +231,10 @@ export async function world(label: string): Promise<World | null> {
     await place('dashboard', hr.board, folders.hr);
     await place('dataset', ops.ds, folders.ops);
     await place('dashboard', ops.board, folders.ops);
+    await place('dashboard', reach.finBoard, folders.fin);
   };
   return {
-    P, folders, hr, ops, plain, opsBoard: ops.board, hrDim, labelled, topic, versions, teams: T, uid: uid as Record<Person, string>, pool, call, mcp, as, plantFolders,
+    P, folders, hr, ops, plain, opsBoard: ops.board, hrDim, labelled, topic, versions, reach, teams: T, uid: uid as Record<Person, string>, pool, call, mcp, as, plantFolders,
     async close() {
       await app.close();
       await pool.end();

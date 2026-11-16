@@ -8,6 +8,7 @@ import * as drafts from '../analysis/publishDashboard';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { dashboardGone } from '../analysis/savedViewMessages';
 import { nothingPublished } from '../analysis/draftMessages';
+import { isFolderError } from '../server/authz/folders';
 
 export function register(): void {
   ipcMain.handle('analysis:publish', async (_e, { projectId, id, base }: any = {}) => {
@@ -16,6 +17,7 @@ export function register(): void {
       return r ? { ok: true, status: r.status, published: drafts.metaOf(r.analysis.published) } : { ok: false, error: dashboardGone() };
     } catch (err: any) { // any: a write's throw
       if (isRecordChanged(err)) throw err; // the route's 409, with the current tag
+      if (isFolderError(err)) throw err; // D16: a dataset the publisher cannot open — the route's 409 `folder` / `publish`
       return { ok: false, error: err?.message || dashboardGone() };
     }
   });

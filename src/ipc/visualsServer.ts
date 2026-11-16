@@ -30,6 +30,7 @@ import { pageFor } from './datasets';
 import { csvFileName, writeDrillCsv } from './visuals';
 import { drillFilters } from './drillScope';
 import { visualForCaller } from './rowDoors';
+import { inReach } from '../server/authz/folderGate'; // a dataset the caller only reaches answers its figures (docs/team-folders D9)
 import { shownColumns } from './columnDoors';
 
 /** The picker's quick picks, short to long (periodPicker.ts PP_GROUPS). */
@@ -69,7 +70,7 @@ export function register(): void {
   // The same arguments the panel's `visual:rows` took, so the file IS the grid:
   // same filters, search and order. The rows leave the app here, so the Share
   // policy shapes every row and the header (rowShaper 'export').
-  ipcMain.handle('visual:rowsDownload', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params, metricId }: any = {}) => { // any: zod-checked at the door
+  ipcMain.handle('visual:rowsDownload', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params, metricId }: any = {}) => inReach(projectId, datasetId, async () => { // any: zod-checked at the door
     try {
       const meta = await datasets.getDatasetMeta(projectId, datasetId);
       if (!meta) return { ok: false, error: 'Dataset not found' };
@@ -77,7 +78,7 @@ export function register(): void {
       if (!resolved.available) return { ok: false, error: resolved.reason };
       const p = page && typeof page === 'object' ? page : {};
       const base = { offset: 0, limit: 0, search: p.search, sortColumn: p.sortColumn, sortDir: p.sortDir, filters: resolved.filters };
-      const counted = await pageFor(projectId, datasetId, base, 'drillExport');
+      const counted = await pageFor(projectId, datasetId, base, 'drillExport', 'figures');
       if (!counted.ok) return counted;
       if (counted.total === 0) return { ok: false, error: 'There are no rows to export.' };
       const shown = shownColumns(meta.columns, counted.hidden); // the hidden columns leave no file, not even as empty cells
@@ -89,7 +90,7 @@ export function register(): void {
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Failed to export the rows' };
     }
-  });
+  }));
 
   ipcMain.handle('period:picker', async (_e, { spec }: { spec?: unknown } = {}) => {
     const cal = getCalendar();

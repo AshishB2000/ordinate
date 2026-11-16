@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
-import { expandedOrRefusal, folderRefused, lockedViz, storedFigureAsk, visualReplyForCaller, withNotes } from './rowDoors';
+import { expandedOrRefusal, folderScoped, lockedViz, storedFigureAsk, visualReplyForCaller, withNotes } from './rowDoors';
+import { inReach } from '../server/authz/folderGate';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
@@ -383,7 +384,7 @@ export async function writeDrillCsv(
   try {
     await write(csvLine(columns.map((c) => c.name)) + '\r\n');
     for (let offset = 0; offset < total; offset += EXPORT_CHUNK) {
-      const res = await pageFor(projectId, datasetId, { ...base, offset, limit: EXPORT_CHUNK }, 'drillExport');
+      const res = await pageFor(projectId, datasetId, { ...base, offset, limit: EXPORT_CHUNK }, 'drillExport', 'figures');
       if (!res.ok || res.rows.length === 0) break;
       await write(res.rows.map((r) => csvLine(shapeRow(r))).join('\r\n') + '\r\n');
       written += res.rows.length;
@@ -456,14 +457,15 @@ async function overCeiling(projectId: string, datasetId: string, max?: number): 
 export type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean };
 /** THE chart door: terms expanded, a date control's period moved onto the date the chart counts by (D9), row access rules (./rowDoors), then the body (./vizDataCached). */
 export async function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
-  const closed = await folderRefused(projectId, datasetId); // shared folders before anything reads the question (docs/team-folders D9)
-  if (closed) return closed;
-  const expanded = await expandedOrRefusal(projectId, datasetId, filters);
-  if (!('steps' in expanded)) return expanded;
-  const scoped = await chartScope(projectId, datasetId, encoding, expanded.steps); // no mark: the same steps, no read
-  if (!scoped.ok) return { ok: false, error: scoped.error };
-  const reply = withNotes(await lockedViz(projectId, datasetId, encoding, scoped.filters, opts, vizDataForUnlocked), expanded.notes); // the dashboard terms it left out
-  return reply.ok && scoped.periodOn ? { ...reply, periodOn: scoped.periodOn } : reply;
+  // Shared folders before anything reads the question (docs/team-folders D9): a reached dataset reads in its figure scope.
+  return folderScoped(projectId, datasetId, undefined, async () => {
+    const expanded = await expandedOrRefusal(projectId, datasetId, filters);
+    if (!('steps' in expanded)) return expanded;
+    const scoped = await chartScope(projectId, datasetId, encoding, expanded.steps); // no mark: the same steps, no read
+    if (!scoped.ok) return { ok: false, error: scoped.error };
+    const reply = withNotes(await lockedViz(projectId, datasetId, encoding, scoped.filters, opts, vizDataForUnlocked), expanded.notes); // the dashboard terms it left out
+    return reply.ok && scoped.periodOn ? { ...reply, periodOn: scoped.periodOn } : reply;
+  });
 }
 
 export async function computeVizData(
@@ -605,7 +607,8 @@ export function register() {
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency, ...drawnAs }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  // A dataset the caller only reaches answers in its figure scope (docs/team-folders D9): its periods, compare and overlays too.
+  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency, ...drawnAs }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, () => inReach(projectId, datasetId, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -643,7 +646,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
-  }));
+  })));
   // `table`: a source table's question (Explore, phase D), asked inside its Live view (./sourceAnswers onSourceTable).
   ipcMain.handle('visual:data', (_e, { table, ...args }: any = {}) => onSourceTable(args.projectId, args.datasetId, table, () => vizData(args)));
   // Server: several charts of ONE project in one round trip (a page of tiles —
@@ -664,7 +667,7 @@ export function register() {
   //
   // Returns the resolved filter list so the panel can render it as chips, or
   // `available: false` + a reason when the row set cannot be derived faithfully.
-  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params, asOf, metricId }: any = {}) => withAsOf(projectId, asOf, async () => {
+  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params, asOf, metricId }: any = {}) => withAsOf(projectId, asOf, () => inReach(projectId, datasetId, async () => {
     try {
       // Metadata only: the column list is all `resolveDrill` needs, and the grid
       // needs it for headers. No rows are hydrated to answer a refusal.
@@ -684,7 +687,7 @@ export function register() {
         sortDir: p.sortDir,
         filters: resolved.filters,
       };
-      const res = await pageFor(projectId, datasetId, req, 'drillRows');
+      const res = await pageFor(projectId, datasetId, req, 'drillRows', 'figures');
       if (!res.ok) return res;
       return {
         ok: true,
@@ -698,7 +701,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the underlying rows' };
     }
-  }));
+  })));
 
   // OPTIONAL AI chart suggestion. Builds the SAME compact column summary (app-
   // computed stats as facts), asks the model to propose STRUCTURE ONLY (an

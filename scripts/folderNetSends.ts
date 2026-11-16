@@ -114,8 +114,8 @@ export async function sendSections(W: H.World): Promise<void> {
       return JSON.stringify([home?.datasets, home?.dashboards, home?.visuals, row?.datasets, row?.dashboards]);
     };
     const [mine, theirs, off] = [await counts('opsViewer'), await counts('padmin'), await unchecked(() => counts('opsViewer'))];
-    ok('counts: Home and the switcher count what opsViewer opens (Orders and Plain; Ops board; Ops\'s two charts), padmin everything', mine === '[2,1,2,2,1]' && theirs === '[4,2,3,4,2]', `${mine} | ${theirs}`);
-    ok('NEGATIVE CONTROL: with the folder checks off, opsViewer\'s counts take HR in', off !== mine && off === '[4,2,3,4,2]', off);
+    ok('counts: Home and the switcher count what opsViewer opens (Orders and Plain; Ops and Everyone boards; Ops\'s two charts), padmin everything', mine === '[2,2,2,2,2]' && theirs === '[4,4,3,4,4]', `${mine} | ${theirs}`);
+    ok('NEGATIVE CONTROL: with the folder checks off, opsViewer\'s counts take HR in', off !== mine && off === '[4,4,3,4,4]', off);
     const numbers = async () => (await W.call('opsViewer', 'numbers:get', { projectId: P })).text;
     const followed = await numbers();
     ok('"Your numbers": the HR metric and scorecard opsViewer followed show nowhere, not even as a choice', !H.CANARY.test(followed), followed.slice(0, 200));

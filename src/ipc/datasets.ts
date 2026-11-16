@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import { withLockOf } from './rowDoors';
+import { inReach } from '../server/authz/folderGate'; // a dataset the caller only reaches answers its figures (docs/team-folders D9)
 import { pageWithoutHidden } from './columnDoors';
 import { RowPolicyError, closedToCaller, hiddenColumnsFor, isRowPolicyError, withLockSteps } from '../data/rowAccess';
 import { markHidden } from '../data/columnAccess';
@@ -205,9 +206,11 @@ export type PageReply =
  * against. One definition of the window, two ways of getting there.
  *
  * `op` names the call site for `residentTrace`, so a fast path that silently
- * stops firing is visible per feature rather than pooled.
+ * stops firing is visible per feature rather than pooled. `folders`: `figures`
+ * for the rows behind a chart's mark, which a dataset the caller only reaches
+ * answers (docs/team-folders D9); the grid itself needs the dataset open.
  */
-export async function pageFor(projectId: string, datasetId: string, asked: PageRequest, op: string): Promise<PageReply> {
+export async function pageFor(projectId: string, datasetId: string, asked: PageRequest, op: string, folders: 'figures' | 'open' = 'open'): Promise<PageReply> {
   const req = { ...asked, filters: (await expandTerms(projectId, datasetId, asked.filters)).steps }; // a step it cannot apply THROWS, before the lock
   // Row access rules (docs/row-policy D7): the caller's lock first in `filters`, which both paths below honour.
   // A quality rule's row filter is computed over the whole table (and another dataset): never under a lock.
@@ -216,7 +219,7 @@ export async function pageFor(projectId: string, datasetId: string, asked: PageR
     if (!lock) return pageForUnlocked(projectId, datasetId, req, op);
     if (req.rowFilter) throw new RowPolicyError('reader');
     return pageForUnlocked(projectId, datasetId, { ...req, filters: withLockSteps(lock, req.filters) }, op);
-  }), { filters: req.filters, sortColumn: req.sortColumn, rowFilter: req.rowFilter });
+  }), { filters: req.filters, sortColumn: req.sortColumn, rowFilter: req.rowFilter }, folders);
 }
 
 async function pageForUnlocked(projectId: string, datasetId: string, req: PageRequest, op: string): Promise<PageReply> {
@@ -386,13 +389,13 @@ export function register() {
   // The data grid's header (web/src/ui/DataGrid): `dataset:meta` minus every
   // field that says where the rows came from — an origin can hold a file path,
   // a URL with a key in it or a SQL statement, none of which a grid draws.
-  ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
+  ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => inReach(projectId, id, async () => {
     const meta = await datasets.getDatasetMeta(projectId, id);
     // `mode: 'live'` so a screen knows before it asks for rows a Live dataset does not keep (L2.1).
     const scoped = meta && (await closedToCaller(projectId, id)) ? { scoped: true as const } : {}; // row access rules restrict the caller here
     const header = meta && headerOf(meta);
     return header ? { ...header, columns: markHidden(header.columns, await hiddenColumnsFor(projectId, id)), ...(isLive(meta) ? { mode: 'live' as const } : {}), ...semanticKey(meta.live, true), ...scoped } : null; // a hidden column marked (part 4)
-  });
+  }));
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
   // visuals with it; `cascaded` says how many, for the toast.
@@ -476,7 +479,7 @@ export function register() {
   // 200 options. Never throws; an unreadable dataset yields no values, which the
   // caller already renders as "no values to filter on".
   // `table`: a source table's column (Explore, phase D), read inside its Live view: a view has no sample, so it says so.
-  ipcMain.handle('dataset:distinct', (_e, { projectId, datasetId, column, limit, search, filters, table }: any = {}) => onSourceTable(projectId, datasetId, table, async () => {
+  ipcMain.handle('dataset:distinct', (_e, { projectId, datasetId, column, limit, search, filters, table }: any = {}) => onSourceTable(projectId, datasetId, table, () => inReach(projectId, datasetId, async () => {
     try {
       const col = typeof column === 'string' ? column : '';
       const cap = typeof limit === 'number' && limit > 0 ? limit : MAX_DISTINCT;
@@ -500,7 +503,7 @@ export function register() {
       if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no values" would be a silent answer
       return { values: [], total: 0 };
     }
-  }));
+  })));
 
   // ── One column's median, for the column-profile panel ─────────────────────
   //

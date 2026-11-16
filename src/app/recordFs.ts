@@ -60,17 +60,20 @@ import { logger } from './logger';
 import { onRangeDelete as onSearchRangeDelete, onRecordWrite as onSearchWrite } from '../server/searchIndex'; // ⌘K's index follows every write (0022)
 import { onVerifiedRangeDelete, onVerifiedWrite } from '../server/verifiedIndex'; // and the verified questions' (0026)
 import { onAssistantRangeDelete, onAssistantWrite } from '../server/assistantSearchIndex'; // and the Assistant's search (0027)
+import { onDashboardReadsRangeDelete, onDashboardReadsWrite } from '../server/dashboardReads'; // and what each dashboard's copy reads (0035)
 
 /** Each derived index follows a write in its own savepoint: none can fail the save. */
 async function onRecordWrite(c: PoolClient, org: string, rel: string, body: string | null): Promise<void> {
   await onSearchWrite(c, org, rel, body);
   await onVerifiedWrite(c, org, rel, body);
   await onAssistantWrite(c, org, rel, body);
+  await onDashboardReadsWrite(c, org, rel, body);
 }
 async function onRangeDelete(c: PoolClient, org: string, rel: string): Promise<void> {
   await onSearchRangeDelete(c, org, rel);
   await onVerifiedRangeDelete(c, org, rel);
   await onAssistantRangeDelete(c, org, rel);
+  await onDashboardReadsRangeDelete(c, org, rel);
 }
 
 /** What a listing with `withFileTypes` returns — `fs.Dirent` satisfies it. */
@@ -176,8 +179,9 @@ export function memoRead<T>(key: string, read: () => Promise<T>): Promise<T> {
 
 /** `fn` on one client, in a transaction that sets the RLS org — or, inside `locked`, the hold's. Statements pass `a.org` as `$1`.
  *  Every transaction also says it keeps the verified index and the Assistant's search itself (`ordinate.verified_index`, 0026;
- *  `ordinate.assistant_search`, 0027, its keys, `ordinate.assistant_search_keys`, 0028, and both indexes' text, `ordinate.search_text`, 0030),
- *  and ⌘K's rows their folder anchors (`ordinate.search_anchors`, 0034), so their triggers leave the markers be. */
+ *  `ordinate.assistant_search`, 0027, its keys, `ordinate.assistant_search_keys`, 0028, both indexes' text, `ordinate.search_text`, 0030),
+ *  ⌘K's rows their folder anchors (`ordinate.search_anchors`, 0034) and what dashboards read (`ordinate.folders`, 0035),
+ *  so their triggers leave the markers be. */
 async function inTx<T>(a: At, fn: (c: PoolClient) => Promise<T>): Promise<T> {
   const h = holds.getStore();
   if (h && h.open && h.client && h.org === a.org && h.pool === a.pool) {
@@ -192,7 +196,7 @@ async function inTx<T>(a: At, fn: (c: PoolClient) => Promise<T>): Promise<T> {
   let broken: Error | undefined;
   try {
     // a.org passed ORG_RE above: it cannot close this literal.
-    await c.query(`BEGIN; SELECT set_config('ordinate.org', '${a.org}', true), set_config('ordinate.verified_index', 'on', true), set_config('ordinate.assistant_search', 'on', true), set_config('ordinate.assistant_search_keys', 'on', true), set_config('ordinate.search_text', 'on', true), set_config('ordinate.search_anchors', 'on', true)`);
+    await c.query(`BEGIN; SELECT set_config('ordinate.org', '${a.org}', true), set_config('ordinate.verified_index', 'on', true), set_config('ordinate.assistant_search', 'on', true), set_config('ordinate.assistant_search_keys', 'on', true), set_config('ordinate.search_text', 'on', true), set_config('ordinate.search_anchors', 'on', true), set_config('ordinate.folders', 'on', true)`);
     const out = await fn(c);
     await c.query('COMMIT');
     return out;
@@ -303,7 +307,7 @@ async function inTransaction<T>(hold: Hold, a: At, deadline: number, fn: () => P
   let broken: Error | undefined;
   try {
     // a.org passed ORG_RE and the timeout is an integer: neither can close its literal.
-    await c.query(`BEGIN; SELECT set_config('ordinate.org', '${a.org}', true), set_config('ordinate.verified_index', 'on', true), set_config('ordinate.assistant_search', 'on', true), set_config('ordinate.assistant_search_keys', 'on', true), set_config('ordinate.search_text', 'on', true), set_config('ordinate.search_anchors', 'on', true); SET LOCAL lock_timeout = ${left(deadline)}`);
+    await c.query(`BEGIN; SELECT set_config('ordinate.org', '${a.org}', true), set_config('ordinate.verified_index', 'on', true), set_config('ordinate.assistant_search', 'on', true), set_config('ordinate.assistant_search_keys', 'on', true), set_config('ordinate.search_text', 'on', true), set_config('ordinate.search_anchors', 'on', true), set_config('ordinate.folders', 'on', true); SET LOCAL lock_timeout = ${left(deadline)}`);
     await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKey(a)]);
     const out = await holds.run(hold, () => memo.run(null, fn));
     // An aborted transaction answers COMMIT with ROLLBACK, and no error.

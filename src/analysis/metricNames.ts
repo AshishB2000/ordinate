@@ -49,7 +49,7 @@ export function metricNames(projectId: string): MetricNames {
 }
 
 /** Every name a formula can look up: its bracketed and bare names, lower-cased, in its text and as its parameters bind it. */
-function namesSaid(def: MetricDefinition, params: ParamValues): string[] {
+export function namesSaid(def: MetricDefinition, params: ParamValues = new Map()): string[] {
   if (!metrics.isFormulaDefinition(def)) return [];
   return [def.formula, bindFormulaText(def.formula, params).text].flatMap((text) => {
     try {

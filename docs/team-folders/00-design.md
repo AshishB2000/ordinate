@@ -174,7 +174,7 @@ and caller), like `callerOn`; a database error throws (the request is refused), 
   every later check is answered from that without another query.
 - `placementOf(projectId, kind, ids)` reads `folder_items` by id in one query, memoised per id.
   Lists read the project's placements in one query (at most the number of moved items).
-- `reachOn(projectId, datasetIds)` (E5) runs only for datasets not open: one query over
+- `reaches(projectId, id)` (E5, in `folderGate.ts`) runs only for datasets not open: one query over
   `dashboard_reads` joined to the dashboards' placements, memoised per id (needs the project's
   `dashboard_reads_built` marker, else rebuilds it first, as `assistant_search` does).
 - `openerEmails(pool, org, projectId, anchor, min)` (`anchor` an item, `{ kind, id }`; it needs no
@@ -240,7 +240,7 @@ paths that checked Edit first (D18).
   question reads besides its own dataset (`chartReads`, `metricReads`) is computed **inside `wholeProject`**: a
   relationship or a related dataset's meta read through the filtered stores would make the gate blind, and the
   answer cache (keyed by the base dataset and the question) would then hand a closed dataset's labels over. The
-  figure scope (`withFigureScope`) comes with reach, in E5; until then a closed dataset is never reached.
+  figure scope came with reach, in E5 (*Reach, as built*): `folderGate` returns it.
 - **`wholeProject` call sites** (an allowlist in the safety net, section 7): `figureDatasets` / `datasetsOfRoot`,
   `hiddenAnywhere`, the project-wide rules check remembered across callers, the doors' reads, `syncWatchRules` (a
   narrowed list would read another folder's watched datasets as gone and drop their rules), the push refresh of
@@ -300,7 +300,7 @@ paths that checked Edit first (D18).
 - **Pushes** (`toOpeners`, `src/server/jobs/schedules.ts`): one push per reader carrying only the items whose anchor
   they open — `alerts:fired` (each event's rule's dashboard, else its dataset), `hub:dataset-refreshed` (success and
   failure), `hub:record-saved` (Edit-level openers of a dashboard, or of a record's dataset). With no folder besides
-  Everyone every reader gets today's push. E5 adds the dataset's reachers to the refresh push.
+  Everyone every reader gets today's push. E5 added the dataset's reachers to the refresh push (*Reach, as built*).
 - **Recipients**: an email send's recipients, resolved at send time, keep only `openers` of the subscription's dashboard
   or the alert's anchor (`emailChannel.audience`; the alert `Delivery` carries its `anchor`). A mention's one recipient
   was narrowed by its notice. Slack and Teams are unchanged. The dialog's *2 recipients can't open this dashboard* waits
@@ -523,26 +523,79 @@ Everyone, admins, without a database; with one, the note's people through forced
 against the resolver, no folders against `authorize`'s rank, the memo and the constraints), `test-dashboardReads` (D16, below), and `test-dashboardDraftsViewer`
 extended with `opsEditorView` (an editor at view level reads only published copies).
 
-## Reach, as built (D9, D16)
+## Reach, as built (E5: D9, D16, D17)
 
-- `publishedReads(projectId, copy)` is a narrowing of `datasetsOfRoot`: every id under a
-  `…datasetId(s)` key of the copy (whose visual cards are frozen inline), the datasets of every
-  metric a card names (formula operands followed to depth 16), and each frozen definition's join
-  plan reads (`joinPlan.planReads`). No lineage climb (a refresh reads parents as the system) and no
-  relationship walk beyond the plan. `analysis:publish`, the scheduled re-publish and the Ready
-  migration store it as `published.reads`; `sanitizePublished` keeps it.
-- `dashboard_reads` (0035) is derived from that field by a pure describer in the record's write
-  transaction, the 0022 pattern. A write by a pod that does not set `ordinate.folders = 'on'` fires
-  a trigger that deletes that dashboard's rows and the project's marker, so an older pod can only
-  narrow reach. A copy without `reads` (published before this) is computed when the marker is
-  rebuilt; the rebuild never writes the record.
-- `folder:move` of a dataset out of Everyone waits for the project's marker (it builds it first), so
-  no dashboard loses a chart because its reach was not indexed yet.
-- **`test-dashboardReads`**: for a corpus of dashboards (visual, metric, formula metric, KPI, related
-  column, control, stats card, scorecard and metric-tree cards), every dataset the doors touch while
-  rendering the published copy, recorded by the fan-out scope's recorder, is in `reads`, and `reads`
-  holds nothing the copy does not name (`Object.is` on the sorted lists). NEGATIVE CONTROL: dropping
-  one id from `reads` refuses that tile for `finViewer`.
+- **What a copy reads**: `publishedReads(projectId, copy)` (`src/analysis/publishedReads.ts`) is a narrowing of
+  `datasetsOfRoot`, run inside `wholeProject`: every id under a `…datasetId(s)` key of the copy (its visual cards are
+  frozen inline; a Ready copy's unfrozen cards read their chart as stored), the datasets of every metric a card names —
+  a formula's operands by name, a period's base, a tree's parts and a target's metric, to depth 16 — and each chart's
+  and KPI's join plan reads (`chartReads` / `metricReads`, what the doors gate). No lineage climb and no relationship
+  walk beyond the plan. `analysis:publish` (and MCP's publish) and the Ready migration store it as `published.reads`,
+  lowercase and sorted; `sanitizePublished` keeps it (UUIDs only, at most 1,000).
+- **The publish refusal (D16)**: Publish computes `reads` inside the record's lock and refuses `folder` / `publish`
+  (409, the route's) when one of them is a dataset the publisher cannot open that the previous copy did not read
+  (a copy without `reads` is worked out first). Without folders every dataset opens and nothing more is read.
+- **`dashboard_reads` (0035)** holds `(dashboard, dataset)` rows, kept by `src/server/dashboardReads.ts` in the record's
+  own write transaction (recordFs's hooks, the 0026 pattern: a SAVEPOINT under a shared advisory lock, a failure drops
+  the marker). The describer is pure (`publishedCopy.copyReadsOf`): the copy's `reads`, `[]` with no copy, null for a
+  copy published before `reads` — then the write drops the project's marker. A project with no marker at
+  `DASHBOARD_READS_VERSION` is rebuilt on the next reach question, once under an exclusive lock: copies without `reads`
+  are worked out first, outside the lock (`bodyReads`, which reads other records), and never written back; one that
+  changed meanwhile leaves the marker unset (a narrower reach, asked again next time). A write by a pod that does not
+  set `ordinate.folders = 'on'` (recordFs sets it beside `ordinate.org`) fires the trigger, which deletes that
+  dashboard's rows and the marker: an older pod can only narrow reach.
+- **Reach in the doors** (`src/server/authz/folderGate.ts`): `reaches(projectId, id)` is asked only of a dataset a folder
+  closes to the caller — its folder's root shares figures (`access.shareFigures`) and the published copy of a dashboard
+  they open reads it: ONE statement per dataset per request (`readersIn`, the marker read with it). `folderGate` now
+  returns a **figure scope**: open datasets go on, reached ones run the door's body inside a scope holding exactly the
+  reached ids it may read (a door inside another reads only its own), neither refuses `closed`; `mode: 'open'` (the grid,
+  a profile, drivers, an answer card: `withLockOf`'s default, `pageFor('open')`) refuses a reached one `figures_only`.
+  Inside the scope `opens()` answers true for those ids, so the stores (a metric by id, a term) and the storage net hand
+  them through; **outside it a reached dataset is closed** — not listed, `getDatasetMeta` null, the net refusing
+  `figures_only` — so a reader nobody opted in answers as for a missing id or refuses, never leaks (section 4 holds
+  every `OPEN` channel to that). The doors: `vizDataFor`, `lockedViz`, `lockedMetric`, `withLockOf` (`figures`: the rows
+  behind a mark through `pageFor(…, 'figures')`, `distinctFor`, an alert's periods). FIGURE handlers that read around
+  their door open the scope first (`inReach`): `visual:data` / `:dataBatch`, `visual:rows`, `visual:rowsDownload`,
+  `visual:drillDown`, `dataset:columns`, `dataset:distinct`, `dashboard:metric`, `stats:tile`; `metric:value` runs in
+  the scope of its metric's datasets (`inMetricReach`: its own and those of the metrics it names), so a dashboard's
+  saved-metric KPI answers too. D10 holds as decided: a reached dataset answers any figure question at those doors.
+- **User SQL is OPEN-class**: `compile()` (`src/engine/sqlDatasets.ts`) asks `folderGate(…, 'open')` of every dataset a
+  statement names, so the Query tab, a SQL dataset, a notebook cell, the Assistant's SQL answer and a verified SQL
+  question (#528, the same `runAnswerSql`) refuse a reached dataset `figures_only` — even inside a door's figure scope,
+  where the storage net would hand it through.
+- **`/p/` and embeds (D17)** are unchanged: a published request opens every folder (E2), and a site build or a
+  scheduled run reaches as its publisher does.
+- **Pushes**: `hub:dataset-refreshed` (success and failure) carries `reach` on its anchor, and `openerEmails` adds the
+  openers of every dashboard whose copy reads the dataset when its root shares figures (one more statement, only for a
+  dataset in a folder; the rows rebuilt first when unbuilt). A reading dashboard in Everyone sends it to every reader.
+- **Cost**: with no folder anywhere, a dashboard's figure calls read nothing of reach (section 0: 0 statements on
+  `dashboard_reads`, 120 statements against 114 with no folder code for three calls — E2's tree read). With folders,
+  finViewer's three tiles on Orders read `dashboard_reads` once. A dashboard write pays the index's four statements
+  (as 0022 and 0026 do), with or without folders.
+- **The net, section 4** (`scripts/folderNetReach.ts`): finViewer's figure calls on Orders through the Finance board
+  (tiles, chart, rows behind a mark, a control's values, columns, KPI, a page of charts, a drill) are `Object.is`-equal
+  to padmin's (NEGATIVE CONTROL: reach off, the tiles refuse `closed`); each of 53 `OPEN` channels on Orders refuses
+  finViewer `figures_only` or `closed`, or answers as for an unknown id, and `dataset:list` never names it; the Everyone
+  board's HR KPI refuses ed (HR shares nothing; NEGATIVE CONTROL: switch on, it answers — and ed's grid on HR still
+  refuses `figures_only` with no canary row, which `figures_only` off hands over); an older pod's write of the Finance
+  board without Orders in `reads` refuses finViewer its KPI on the next request, and a republish restores it; D16 refuses
+  ed's publish of a board newly reading HR (NEGATIVE CONTROLS: padmin's publish; ed's republish of a copy that already
+  read HR); an Orders refresh reaches finViewer (NEGATIVE CONTROL: reach off); SQL over Orders — `sql:run`, and the
+  Assistant's SQL answer run inside Orders' figure scope — refuses finViewer `figures_only` (NEGATIVE CONTROL: with
+  `figures_only` off, `sql:run` hands Orders' rows). The harness adds the Finance board and
+  the Everyone board, so the counts of section 9 moved by one dashboard each.
+- **`test-dashboardReads`** (both modes): over nine shapes (chart, KPI, saved metric, formula with an operand on another
+  dataset, related dimension, control, statistics card, metric tree over two datasets, text) the copy's `reads` are
+  `Object.is`-equal to what a fan-out build's recorder saw the doors touch rendering it (NEGATIVE CONTROL: the copy's own
+  dataset keys alone miss the formula's operand); a copy without `reads` is null to the describer and `bodyReads`
+  equals what Publish recorded; with Postgres the rows are the describer's from the writes alone, three questions at once
+  rebuild once, an older pod's writes drop rows and marker and the rebuild restores them without writing the record
+  (NEGATIVE CONTROL: the same write with `ordinate.folders` keeps the marker), unpublish and republish follow, and a
+  deleted project leaves nothing.
+- **Left for E6 and later**: `folder:move` building the marker before a dataset leaves Everyone (E7); a metric tree,
+  scorecard or `metric:series` on a reached dataset (they answer as for a closed one — a hole, never a leak); a `/p/`
+  build by a publisher who only reaches a saved metric's dataset (the KPI falls back to its column); the Publish
+  dialog's "shows data from folders …" list and the subscription dialog's line wait for E7, when a folder can exist.
 
 ## Connection tables per team
 
@@ -639,7 +692,7 @@ row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids co
 | 0032 `folders` (E1, as built) | `folders (org_id, project_id, id, parent_id NULL, name, share_figures bool default true, created_by, created_at)`, `id <> project_id`, names 1–120 characters, and a generated `parent_folder` (= `NULLIF(parent_id, project_id)`) with a foreign key to the parent, so a parent in another project and deleting a folder that has subfolders are refused (a whole subtree goes in one statement); a unique index on `(org_id, project_id, coalesce(parent_id, <the zero uuid>), lower(name))`; `folder_grants (org_id, project_id, folder_id, team_id, level CHECK IN ('view','edit'))`, PK `(org_id, project_id, folder_id, team_id)`, an index by team, with `(team_id, org_id)` → `teams` ON DELETE CASCADE and → `folders` ON DELETE CASCADE; `folder_items (org_id, project_id, kind, item_id text, folder_id, moved_by, moved_at)`, PK `(org_id, project_id, kind, item_id)`, `item_id` lowercase-checked, → `folders` ON DELETE RESTRICT; an index on `(org_id, project_id, folder_id)` |
 | 0033 `editor_asks` (Ask an editor, as built) | `editor_asks (org_id, user_email, id, project_id, asker, question, reason, note, created_at, seen_at)`, forced RLS; `users.request_email boolean NOT NULL DEFAULT false` ("Email me when a viewer asks for data"; dashboard requests reuse it) |
 | 0034 `search_anchors` (E4, as built) | `ordinate_turn_datasets(body)` (an Assistant turn's chart, "Did you mean" and SQL answer datasets, `{}` for a body that is no JSON: the conversation list's count of shown turns); `search_entries.anchor_kind`, `anchor_id` (nullable, no table rewrite, `COLLATE "C"`); `verified_keys.reads` (every dataset a verified question reads: an SQL question's all); `search_anchors_stale()` and the trigger `records_search_anchors_written` (INSERT or UPDATE on `records`): a write whose transaction does not set `ordinate.search_anchors` = 'on' drops that ⌘K source's marker, or the project's verified one, 0030's pattern. No DELETE trigger: an older pod's delete removes its rows as this release would |
-| 0035 `dashboard_reads` | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; the trigger on `records` for writers without `ordinate.folders` |
+| 0035 `dashboard_reads` (E5, as built) | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, lowercase-checked, PK on all four, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; two triggers on `records` (`projects/%/analyses/%`) for writers without `ordinate.folders`: that dashboard's rows and the project's marker go |
 | 0036 `team_tables` | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, team → `teams` ON DELETE CASCADE |
 | 0037 `dashboard_requests` | the table above with indexes for an approver's open list and a requester's own (`users.request_email`, off by default, is already there: Ask an editor's 0033 made it, and requests use the same switch) |
 

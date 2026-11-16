@@ -8,6 +8,7 @@
 // it is the tile's own question, the executor's cached answer. A drill that names a column hidden from the caller
 // (part 4) is refused at the column gate first, as `visual:data` refuses its chart.
 
+import { inReach } from '../server/authz/folderGate'; // a dataset the caller only reaches answers its figures (docs/team-folders D9)
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import { sanitizeEncoding } from '../analysis/visuals';
@@ -71,12 +72,12 @@ export async function drillDown(projectId: string, datasetId: string, req: Drill
 
 export function register(): void {
   // `table`: a source table's chart (Explore, phase D), drilled inside its Live view (./sourceAnswers onSourceTable).
-  ipcMain.handle('visual:drillDown', async (_e, { projectId, datasetId, encoding, filters, mark, params, table }: Record<string, unknown> = {}): Promise<DrillDownReply> => {
+  ipcMain.handle('visual:drillDown', async (_e, { projectId, datasetId, encoding, filters, mark, params, table }: Record<string, unknown> = {}): Promise<DrillDownReply> => inReach(String(projectId ?? ''), datasetId, async () => {
     try {
       const [p, d] = [String(projectId ?? ''), String(datasetId ?? '')];
       return await onSourceTable(p, d, table, () => gateColumnsReply(p, d, async () => [], [encoding, filters], (hidden) => drillDown(p, d, { encoding, filters, mark, params }, hidden)));
     } catch (err) {
       return { ok: false, error: (err instanceof Error && err.message) || drillFailed() };
     }
-  });
+  }));
 }

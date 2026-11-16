@@ -18,7 +18,7 @@
 // name, and an org member with no grant on the project must see neither. A
 // failed refresh's push says which dataset, never why: its error can quote a value or a warehouse table.
 // Not every reader either (shared folders D17): each goes to those who open what
-// it is about — an event's rule's dashboard or dataset, the refreshed dataset —
+// it is about — an event's rule's dashboard or dataset, the refreshed dataset (and its reachers, D9) —
 // one push per reader with only theirs, so without folders it is today's push.
 //
 // A SUCCESSFUL refresh is announced by refreshAsJob itself (data/refreshEvents,
@@ -67,7 +67,8 @@ export async function toReaders(pool: Pool, everyone: boolean, projectId: string
   for (const user of await (writersOnly ? writerEmails : readerEmails)(pool, org, projectId)) publish({ org, user }, channel, payload);
 }
 
-export type Anchor = { kind: PlacedKind; id: string };
+/** What a push is about; `reach`: a refreshed dataset, whose reachers (D9) get it too. */
+export type Anchor = { kind: PlacedKind; id: string; reach?: true };
 
 /**
  * `items` to each member who opens their anchor at `min` (shared folders D17), ONE push per member carrying only
@@ -79,7 +80,7 @@ export async function toOpeners<T>(pool: Pool, everyone: boolean, projectId: str
   const groups = new Map<string, { anchor: Anchor; items: Set<T> }>();
   for (const x of items) {
     const a = anchorOf(x);
-    const key = `${a.kind}:${a.id.toLowerCase()}`;
+    const key = `${a.kind}:${a.id.toLowerCase()}:${a.reach === true}`;
     (groups.get(key) ?? groups.set(key, { anchor: a, items: new Set() }).get(key)!).items.add(x);
   }
   const mine = new Map<string, Set<T>>();
@@ -165,7 +166,7 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
     // A failure's text can quote a value (row-policy N2) or a warehouse relation (D13): no reader's tab gets it.
-    if (!o.ok) void toOpeners(pool, devAuth, o.projectId, 'hub:dataset-refreshed', [failedRefreshPayload(o)], () => ({ kind: 'dataset', id: o.datasetId }), ([p]) => p).catch(() => undefined);
+    if (!o.ok) void toOpeners(pool, devAuth, o.projectId, 'hub:dataset-refreshed', [failedRefreshPayload(o)], () => ({ kind: 'dataset', id: o.datasetId, reach: true }), ([p]) => p).catch(() => undefined);
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
     const { org, user, requestId } = ctx(); // the tick's: the job identity, for this org

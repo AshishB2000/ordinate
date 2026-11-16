@@ -445,7 +445,7 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
       if (!ds) return null;
       const t = lockedTable(ds, lock);
       return distinctAllJs(t.columns, t.rows, column);
-    }, [column]);
+    }, [column], 'figures');
   } catch (err) {
     if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no periods" would be a silent answer — and so would a refusal
     return null; // a rule that cannot read its period column simply does not fire
