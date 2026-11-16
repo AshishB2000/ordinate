@@ -20,7 +20,8 @@
 // An SQL answer (./answerSql) keeps its result table the same way, as its `card` (`kind: 'sql'`): its fingerprint is of the caller's
 // access on EVERY dataset the statement read (`sqlAccessPrint`), and Refresh runs the SQL again through the gate. Over Live
 // datasets (docs/live-data/01-live-sql.md, F3) it is kept as of when the warehouse answered (a cached or stale table's
-// own time), and Refresh is one counted statement unless the cache holds it.
+// own time), and Refresh is one counted statement unless the cache holds it. One that read a source table (F5, `sql.table`)
+// is snapshotted, checked, delivered and refreshed inside the table's view, as a chart answer from a table is.
 //
 // SHARED FOLDERS: an answer on a dataset the caller cannot open (a chart's, a "Did you mean" option's, any an SQL answer
 // read), and the question it answered, are not sent at all (./turnsOpen); a kept card on a dataset since moved into such a
@@ -46,7 +47,7 @@ import { sameSql, type SqlCard, type SqlTurn } from '../ai/answerSql';
 import { sqlCardFor } from './answerSql';
 import { verifiedSqlOn } from './verifiedLookup';
 import type { AnswerCard, Built, CardLearn, Failure } from './answers';
-import { inSourceTable } from './sourceAnswers';
+import { inSourceTable, inSqlTables } from './sourceAnswers';
 import { openTurns } from './turnsOpen';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
@@ -83,7 +84,8 @@ export async function sqlAccessPrint(projectId: string, datasetIds: readonly str
 export async function sqlSnapshotFor(projectId: string, card: SqlCard, sql: SqlTurn): Promise<AnswerSnapshot | undefined> {
   try {
     const now = new Date().toISOString();
-    return makeSnapshot(card, { asOf: card.asOf?.at ?? now, firstAsked: now }, await sqlAccessPrint(projectId, sql.datasetIds), []) ?? undefined;
+    const access = await inSqlTables(projectId, sql, () => sqlAccessPrint(projectId, sql.datasetIds)); // a source table's view, as it is read on open
+    return makeSnapshot(card, { asOf: card.asOf?.at ?? now, firstAsked: now }, access, []) ?? undefined;
   } catch {
     return undefined;
   }
@@ -156,9 +158,12 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
   };
   const out: BrowserTurn[] = [];
   for (const { snapshot, ...turn } of await openTurns(projectId, turns)) {
-    if (turn.sql) {
-      const kept = snapshot && (await sqlAccessNow(turn.sql.datasetIds)) === snapshot.access ? cardOf(snapshot) : null;
-      out.push(kept && snapshot ? { ...turn, card: await sqlDelivered(projectId, kept, turn.sql, keptView(snapshot, snapshot.firstAsked, [])) } : turn);
+    const sql = turn.sql;
+    if (sql) {
+      out.push(await inSqlTables(projectId, sql, async () => {
+        const kept = snapshot && (await sqlAccessNow(sql.datasetIds)) === snapshot.access ? cardOf(snapshot) : null;
+        return kept && snapshot ? { ...turn, card: await sqlDelivered(projectId, kept, sql, keptView(snapshot, snapshot.firstAsked, [])) } : turn;
+      }));
       continue;
     }
     // An answer read straight from a source table is checked and delivered inside its view (./sourceAnswers): outside it
@@ -194,7 +199,8 @@ export function registerSnapshots(compute: Compute): void {
   ipcMain.handle('answer:refresh', keepReads(async (_e, { projectId, threadId, turnId }: any = {}) => {
     try {
       const turn = typeof threadId === 'string' && typeof turnId === 'string' ? await copilot.findTurn(projectId, threadId, turnId) : null;
-      if (turn?.sql) return await refreshSql(projectId, threadId, turnId, turn, turn.sql);
+      const sql = turn?.sql;
+      if (turn && sql) return await inSqlTables(projectId, sql, () => refreshSql(projectId, threadId, turnId, turn, sql));
       if (!turn || !turn.answer) return { ok: false, reason: answerNotThere() };
       const spec = turn.answer;
       return await inSourceTable(projectId, spec, () => refreshCard(projectId, threadId, turnId, turn, spec, compute), true);

@@ -30,6 +30,7 @@ import { inOrg, orgDb } from '../server/db/inOrg';
 import { folderOf } from '../server/authz/folderSql';
 import type { AnswerSpec } from './answerSpec';
 import type { AnswerSnapshot } from './answerSnapshot';
+import type { SqlTurn } from './answerSql';
 // A cycle (./copilot imports this module): only used inside functions, never at load.
 import * as copilot from './copilot';
 import type { CopilotThread, CopilotThreadSummary, CopilotTurn } from './copilot';
@@ -295,10 +296,11 @@ export async function setSnapshot(projectId: string, threadId: string, turnId: s
 }
 
 /** ./copilot `replaceAnswer`. */
-export async function replaceAnswer(projectId: string, threadId: string, turnId: string, from: AnswerSpec, to: AnswerSpec, note: string): Promise<boolean> {
+export async function replaceAnswer(projectId: string, threadId: string, turnId: string, from: copilot.TurnAnswer, to: AnswerSpec | SqlTurn, note?: string): Promise<boolean> {
   return changeTurn(projectId, threadId, turnId, from, (turn) => {
-    turn.answer = to;
-    if (turn.provenance) turn.provenance = { ...turn.provenance, note };
+    if ('text' in to) turn.sql = to;
+    else turn.answer = to;
+    if (turn.provenance && note) turn.provenance = { ...turn.provenance, note };
     delete turn.snapshot;
   });
 }

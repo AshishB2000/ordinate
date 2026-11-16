@@ -12,12 +12,19 @@
 // `sql:run`: compile()'s gate (one read-only statement; FROM only datasets, CTEs and value generators), the caller's
 // org worker and its timeout, the storage net on every dataset it reads, the preview's row cap. The statement may read
 // only datasets the first call picked. Every figure is DuckDB's; the card's words are the app's (`cardOf`).
+//
+// Source tables (F5): an editor's Home question offers documented warehouse tables (./sourceAnswers, the SOURCE TABLES
+// block), and the first call may name one where no dataset has the name. Its in-memory Live view (../data/sourceView) is
+// then read like a Live dataset for the rest of the answer: the facts' columns in the second call, under the names a
+// dataset of its name would take now (so Keep, then Verify, reads the same text), and phase F's executor. A table on a
+// connection not asked live is Copy first (`needs: 'copy'`). Viewers get no table: none is offered or looked up for them.
 
 import * as analyze from '../ai/analyze';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import * as datasets from '../data/datasets';
 import { gateRows, hiddenColumnsFor, isRowPolicyError } from '../data/rowAccess';
 import { isLive } from '../data/liveDataset';
+import { isSourceView, withSourceViews } from '../data/sourceView';
 import { checkLiveSql, liveSqlClosed, runLiveSql, takeSqlHour, type LiveSqlTable } from '../engine/live/liveSql';
 import * as lmsg from '../engine/liveSqlMessages';
 import { listRelationships } from '../analysis/relationships';
@@ -31,6 +38,7 @@ import type { Cell } from '../data/transforms';
 import type { SuggestedAction } from '../ai/suggestedAction';
 import { vocabulary } from './answerCheck';
 import type { Failure } from './answers';
+import { copyRefusal, sourceVocabulary, viewDatasets, type SourceTable } from './sourceAnswers';
 
 /** A result this small, a label column and one number, is drawn as a chart too. */
 const CHART_ROWS = 50;
@@ -58,16 +66,36 @@ export function cardOf(o: { title: string; sql: string; datasets: string[]; colu
   return card;
 }
 
-/** The datasets the action names, resolved as a spec's dataset is (by id, name, then squashed name), for the caller. */
-async function picked(projectId: string, names: readonly string[], only?: ReadonlySet<string>): Promise<{ ok: true; ids: string[] } | Failure> {
+/**
+ * The datasets the action names, resolved as a spec's dataset is (by id, name, then squashed name), for the caller; a
+ * name no dataset has may be one of the ask's source tables (`tables`, F5), whose view then stands for it.
+ */
+async function picked(projectId: string, names: readonly string[], only: ReadonlySet<string> | undefined, tables: () => Promise<readonly SourceTable[]>): Promise<{ ok: true; ids: string[]; views: SourceTable[] } | Failure> {
   const vocab = await vocabulary(projectId, { specs: names.map((dataset) => ({ dataset })), only: only ?? null });
   const ids: string[] = [];
+  const views: SourceTable[] = [];
   for (const n of names) {
     const d = resolveDataset(n, vocab.datasets);
-    if (!d) return { ok: false, reason: msg.sqlNoDataset(n) };
-    if (!ids.includes(d.id)) ids.push(d.id);
+    if (d) {
+      if (!ids.includes(d.id)) ids.push(d.id);
+      continue;
+    }
+    const offered = await tables();
+    const v = resolveDataset(n, viewDatasets(offered));
+    const t = offered.find((x) => x.docId === v?.id);
+    if (!t) return copyRefusal(offered, { dataset: n }) ?? { ok: false, reason: msg.sqlNoDataset(n) };
+    if (!ids.includes(t.docId)) {
+      ids.push(t.docId);
+      views.push(t);
+    }
   }
-  return { ok: true, ids };
+  return { ok: true, ids, views };
+}
+
+/** The gate's names for the project's datasets (`projectNames`), and for each source table's view among `ids` the names a dataset of its name made now would take (F5). */
+async function namesOf(projectId: string, ids: readonly string[]): Promise<sqlDatasets.NameEntry[]> {
+  const views = await Promise.all(ids.filter((id) => isSourceView(projectId, id)).map(async (id) => ({ id, name: (await datasets.getDatasetMeta(projectId, id))?.name ?? '' })));
+  return sqlDatasets.projectNames(projectId, views);
 }
 
 /** How many of `ids` are Live: none (the extract lane), all (phase F, ../engine/live/liveSql), or some (refused, F-D9). */
@@ -99,7 +127,7 @@ export async function closedWhy(projectId: string, ids: readonly string[]): Prom
  * told a column hidden from the caller exists (a copied dataset hiding one never gets this far: `closedWhy`).
  */
 export async function tablesFor(projectId: string, ids: readonly string[]): Promise<string> {
-  const cat = await sqlDatasets.projectNames(projectId); // the names compile() resolves: one listing, kept for the question
+  const cat = await namesOf(projectId, ids); // the names compile() resolves: one listing, kept for the question
   const tableOf = new Map<string, string>();
   const hiddenOf = new Map<string, ReadonlySet<string>>();
   const tables: SqlTable[] = [];
@@ -169,7 +197,7 @@ async function runLive(projectId: string, text: string, allowed: readonly string
 
 /** Each dataset of `ids` under the names the second call was given (the gate's: the slug, the exact name). */
 async function liveVocabulary(projectId: string, ids: readonly string[]): Promise<LiveSqlTable[]> {
-  const cat = await sqlDatasets.projectNames(projectId);
+  const cat = await namesOf(projectId, ids);
   return ids.map((id) => {
     const e = cat.find((x) => x.id === id);
     return { id, names: e ? [e.slug, ...(e.alias ? [e.alias] : [])] : [] };
@@ -186,7 +214,7 @@ export async function liveSqlProblem(projectId: string, text: string, ids: reado
   return r && { ok: false, reason: r.error, ...(r.code ? { code: r.code } : {}) };
 }
 
-/** An SQL turn's card now, under the caller's access: Refresh, and a conversation that brought none. */
+/** An SQL turn's card now, under the caller's access: Refresh, and a conversation that brought none (inside a source table's view, the caller's: ./answerSnapshots). */
 export async function sqlCardFor(projectId: string, turn: SqlTurn): Promise<{ ok: true; card: SqlCard } | Failure> {
   const r = await runAnswerSql(projectId, turn.text, turn.datasetIds, turn.title);
   return r.ok ? { ok: true, card: r.card } : r;
@@ -194,22 +222,34 @@ export async function sqlCardFor(projectId: string, turn: SqlTurn): Promise<{ ok
 
 /**
  * The SQL answer to an `sql` action: its datasets resolved and checked, the second call, the run. `only`: an Assistant
- * agent's topic, the datasets it may read. `model`: the agent's model, the one the first call used.
+ * agent's topic, the datasets it may read (and no source table). `model`: the agent's model, the one the first call
+ * used. `context`: what the question was asked on (source tables are a Home question's, ./sourceAnswers).
  */
 export async function sqlAnswer(
-  projectId: string, action: SuggestedAction, question: string, only?: ReadonlySet<string>, model?: { provider: string; model: string } | null,
+  projectId: string, action: SuggestedAction, question: string, only?: ReadonlySet<string>, model?: { provider: string; model: string } | null, context?: { kind?: string },
 ): Promise<{ ok: true; sql: SqlTurn; card: SqlCard } | Failure> {
-  const pick = await picked(projectId, action.datasets ?? [], only);
+  let offered: Promise<SourceTable[]> | null = null;
+  const tables = (): Promise<SourceTable[]> => (offered ??= only ? Promise.resolve([]) : sourceVocabulary(projectId, context, question));
+  const pick = await picked(projectId, action.datasets ?? [], only, tables);
   if (!pick.ok) return pick;
-  const why = await closedWhy(projectId, pick.ids);
+  const { views } = pick;
+  return withSourceViews(projectId, views.flatMap((t) => (t.view ? [t.view] : [])), () => answered(projectId, pick.ids, views, question, action, model));
+}
+
+/** `sqlAnswer` past the pick, with the picked tables' views readable as Live datasets. */
+async function answered(
+  projectId: string, ids: string[], views: readonly SourceTable[], question: string, action: SuggestedAction, model?: { provider: string; model: string } | null,
+): Promise<{ ok: true; sql: SqlTurn; card: SqlCard } | Failure> {
+  const why = await closedWhy(projectId, ids);
   if (why) return { ok: false, reason: why };
   // SQL_PER_HOUR (F3): taken before the model writes a statement, so a refusal costs no model call and no warehouse statement.
-  const hour = (await liveCount(projectId, pick.ids)) ? await takeSqlHour(projectId, pick.ids) : null;
+  const hour = (await liveCount(projectId, ids)) ? await takeSqlHour(projectId, ids) : null;
   if (hour) return { ok: false, reason: hour, code: 'live_refused' };
-  const written = await writeSql(await tablesFor(projectId, pick.ids), question, model);
+  const written = await writeSql(await tablesFor(projectId, ids), question, model);
   if (typeof written !== 'string') return written;
   const title = (action.intent || question).replace(/\s+/g, ' ').trim().slice(0, 300) || 'Answer';
-  const run = await runAnswerSql(projectId, written, pick.ids, title);
+  const run = await runAnswerSql(projectId, written, ids, title);
   if (!run.ok) return run;
-  return { ok: true, sql: { text: written, datasetIds: run.deps, title }, card: run.card };
+  const table = views.find((t) => run.deps.includes(t.docId))?.connId; // it read a table: Keep comes before Verify
+  return { ok: true, sql: { text: written, datasetIds: run.deps, title, ...(table ? { table } : {}) }, card: run.card };
 }

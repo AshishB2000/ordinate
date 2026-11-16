@@ -6,10 +6,15 @@
 // createLiveDataset: its columns read from the warehouse's catalog, its first schema sync queued), and the turn's answer
 // re-pointed at it, so Save as visual, Verify and Add to dashboard then work as on any dataset. The card is computed
 // again on open, on the new dataset. A turn already kept (or never a table's) makes nothing: one click, one dataset.
+// An SQL answer that read source tables (docs/live-data/01-live-sql.md F5, `sql.table`) keeps each the same way and
+// re-points its datasets: its text is unchanged, since a kept table takes the names its view had, so Verify then saves
+// the statement against the kept datasets.
 // `explore:keepTable` (`write`) is the same make for the table Explore is on, with no turn to re-point.
 
 import { ipcMain } from './bus';
 import * as copilot from '../ai/copilot';
+import * as datasets from '../data/datasets';
+import type { SqlTurn } from '../ai/answerSql';
 import { sourceView } from './sourceAnswers';
 import { createLiveDataset } from './liveDatasets';
 import { answerNotThere } from '../ai/answerSnapshotMessages';
@@ -28,6 +33,7 @@ async function keepView(projectId: string, connId: string, docId: string): Promi
 
 export async function keepTable(projectId: string, threadId: string, turnId: string): Promise<Record<string, unknown>> {
   const turn = await copilot.findTurn(projectId, threadId, turnId);
+  if (turn?.sql) return keepSql(projectId, threadId, turnId, turn.sql);
   if (!turn || !turn.answer) return { ok: false, reason: answerNotThere() };
   const spec = turn.answer;
   if (!spec.table) return { ok: false, reason: notFromTable() };
@@ -37,6 +43,23 @@ export async function keepTable(projectId: string, threadId: string, turnId: str
   const kept = { ...rest, datasetId: made.datasetId };
   if (!(await copilot.replaceAnswer(projectId, threadId, turnId, spec, kept, LIVE_NOTE))) return { ok: false, reason: answerNotThere() };
   return { ok: true, datasetId: made.datasetId, turns: await turnsForBrowser(projectId, await copilot.loadHistory(projectId, threadId)) };
+}
+
+/** An SQL answer's source tables (its ids that are no dataset), each kept as a Live dataset, and the turn re-pointed at them. */
+async function keepSql(projectId: string, threadId: string, turnId: string, sql: SqlTurn): Promise<Record<string, unknown>> {
+  if (!sql.table) return { ok: false, reason: notFromTable() };
+  const ids = [...sql.datasetIds];
+  // shortcut: a keep that fails after another table was kept leaves that dataset made and the turn as it was; a second
+  // click makes it again. Upgrade if answers read several tables often.
+  for (const [i, id] of ids.entries()) {
+    if (await datasets.getDatasetMeta(projectId, id)) continue; // a Live dataset beside the table: already one
+    const made = await keepView(projectId, sql.table, id);
+    if (!made.ok) return made;
+    ids[i] = made.datasetId;
+  }
+  const { table: _t, ...rest } = sql;
+  if (!(await copilot.replaceAnswer(projectId, threadId, turnId, { sql: sql.text }, { ...rest, datasetIds: ids }))) return { ok: false, reason: answerNotThere() };
+  return { ok: true, datasetId: ids.find((x) => !sql.datasetIds.includes(x)), turns: await turnsForBrowser(projectId, await copilot.loadHistory(projectId, threadId)) };
 }
 
 export function register(): void {

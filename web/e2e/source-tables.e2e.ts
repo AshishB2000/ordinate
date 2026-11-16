@@ -14,7 +14,8 @@
 //      dataset's Guide shows the doc's notes under "From the source table", read-only.
 //   5. The Assistant (phase D): an answer read straight from the table, in the dock, says it is a warehouse table and
 //      offers only Keep as a dataset; kept, it is drawn on the new Live dataset with Save as visual (dock-source-*.png);
-//      and the checked-link card of outcome E, laid on the conversation (dock-link-*.png).
+//      the checked-link card of outcome E, laid on the conversation (dock-link-*.png); and an SQL answer that read the
+//      table straight (F5), which offers Keep as a dataset where Verify would be (dock-source-sql-*.png).
 //   6. Explore (phase D): the table picked as if it were a dataset, its fields and a question answered Live through its
 //      view, every figure the Live dataset's own; a table on a connection not asked live says to copy it in and asks
 //      nothing; Keep as a dataset opens the new Live dataset with the same question (explore-source-*.png); and at
@@ -313,6 +314,32 @@ e2e('source tables: an editor answered straight from the table, then kept as a d
   await screensInPlace(page, 'dock-link');
   await checked.getByRole('button', { name: 'Cancel' }).click();
   await checked.waitFor({ state: 'detached' });
+  await page.unroute('**/api/rpc/copilot%3Ahistory');
+
+  // An SQL answer that read the table straight (docs/live-data/01-live-sql.md F5), as its turn carries it with its kept
+  // table (its server path is scripts/test-liveSqlSources.ts: this server has no model to write one): it says it is a
+  // warehouse table and offers Keep as a dataset where Verify would be (dock-source-sql-*.png).
+  const SQL = `SELECT region, count(*) AS orders FROM ${TABLE} GROUP BY region ORDER BY region`;
+  const sqlCard = {
+    ok: true, kind: 'sql', title: 'Orders by region', sql: SQL, datasets: [TABLE], columns: [{ name: 'region', type: 'text' }, { name: 'orders', type: 'number' }],
+    rows: [['East', 4], ['West', 3]], rowCount: 2, truncated: false, caption: '2 rows · 2 columns', bullets: [`Reads “${TABLE}”.`],
+    chart: { type: 'column', data: { labels: ['East', 'West'], series: [{ name: 'orders', values: [4, 3] }] } },
+    asOf: { at: '2026-11-15T10:00:02Z', mode: 'live' }, snapshot: { asOf: '2026-11-15T10:00:02Z', periods: [] },
+  };
+  await page.route('**/api/rpc/copilot%3Ahistory', async (r) => {
+    const body = (await (await r.fetch()).json()) as { turns?: unknown[] };
+    const turns = [...(body.turns ?? []), { id: 'q-sql', role: 'user', text: 'Orders by region, in SQL', createdAt: '2026-11-15T10:00:00Z' },
+      { id: 'a-sql', role: 'assistant', text: 'These are the orders by region.', createdAt: '2026-11-15T10:00:01Z', sql: { text: SQL, datasetIds: [docId], title: 'Orders by region', table: C }, card: sqlCard }];
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...body, turns }) });
+  });
+  await page.reload();
+  await settled(page);
+  const fromTable = dock.getByTestId('answer-sql').last();
+  await fromTable.getByText('Warehouse table, not a dataset', { exact: true }).waitFor();
+  await fromTable.getByTestId('answer-keep-table').waitFor();
+  assert.equal(await fromTable.getByRole('button', { name: 'Verify' }).count(), 0, 'a verified question names datasets: Keep first');
+  await fromTable.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'dock-source-sql');
   await page.unroute('**/api/rpc/copilot%3Ahistory');
 });
 

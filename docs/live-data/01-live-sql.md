@@ -441,6 +441,61 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   question names datasets: Keep (phase D's `sourceKeep`) before Verify, then this path as is. `checkLiveSql` and
   `runLiveSql` share `prepared`, where `targetsOf` is the one place a source view's target goes in.
 
+### F5 as built
+
+- **Files:** the lane (`src/ipc/answerSql.ts`: `picked`, `namesOf`, `sqlAnswer` inside the views), `src/ipc/sourceAnswers.ts`
+  (`inSqlTables`), `src/engine/sqlDatasets.ts` (`projectNames` takes the views), `src/ipc/answerSnapshots.ts`,
+  `src/ipc/sourceKeep.ts` (`keepSql`), `src/ai/copilot.ts` and `copilotRows.ts` (`replaceAnswer` re-points an SQL turn),
+  `src/ai/answerSql.ts` (`SqlTurn.table`), `src/ai/sourceTablesBlock.ts` (its framing: an `sql` line may name a table),
+  the web card (`AnswerSql.tsx`). No contract, sentence, setting or environment variable is new.
+- **How a table enters the lane.** The first call already sees phase D's SOURCE TABLES block (an editor's Home question,
+  `askSourceTables`). `picked` resolves each name the `sql` line gives as a dataset first (a dataset of the same name
+  wins, as the validator's rule); a name no dataset has is looked up among the ask's tables (`sourceVocabulary`: the same
+  step 3 picks, so only when a name misses: `test-askBudget` is unchanged). A table on a connection not asked live is
+  `copyRefusal`'s *Copy first* with `needs: 'copy'`, before the second call. The rest of the answer runs inside
+  `withSourceViews` with the picked tables' views, so every reader asks the view as a record: `closedWhy`, `liveCount`,
+  `SQL_PER_HOUR`'s connection, `tablesFor` (the facts' columns, typed by `liveColumns`, as a Live dataset's VISIBLE
+  columns), and F3's executor, where `liveTarget` reads the view and **`targetsOf` needed no change**: a table and a Live
+  dataset on one connection run as one statement; two connections are `sqlTwoConnections`, a copy beside it
+  `sqlMixedEngines`, as before. The daily limit counts the statement under the first table read's id, as phase D's.
+- **Names.** A view is named as a dataset of its name made now would be (`projectNames(projectId, views)`: the views
+  youngest in `assignViewNames`), so `ANALYTICS.RETURNS` is `analytics_returns` beside every dataset's own name. Kept, the
+  dataset is named as the table and takes the same names, so the stored text needs no rewrite.
+- **The turn** keeps `sql.table`, the connection, beside the doc ids in `datasetIds` (`AnswerSpec.table`'s convention).
+  Its snapshot, its delivery on reopen and Refresh run inside `inSqlTables` (the role first, then one docs read and one
+  connection read), so a caller who may not see source names gets no stored table, as for a chart answer from a table.
+- **Keep, then Verify.** The card says *Warehouse table, not a dataset* and offers **Keep as a dataset** (phase D's
+  `KeepTable`) where Verify would be. `answer:keepTable` on an SQL turn keeps each table it read (`keepView`:
+  `createLiveDataset` through the connection's own Live create) and re-points the turn: the kept ids in `datasetIds`, no
+  `table`, the text and title unchanged, the snapshot dropped (the provenance is the ask's, so it is not rewritten). A
+  second click makes nothing. Verify is then F4's path as is: the gate's lineage finds the kept datasets by the same names,
+  and the record keeps `sql: {text, datasetIds}` of them. Verify before Keep is refused by the gate (the table is no
+  dataset), never saved; the web does not offer it.
+- **Viewers** are unchanged: no table is offered (`askSourceTables`), looked up (`sourceVocabulary` asks the role before
+  any read) or read for them. A model that names one anyway gets the lane's *"…" is not the name of one dataset.*,
+  quoting its own word, with no table doc read, no second call and no statement.
+- **Left:** the second call is not told a table's required date filter (F3's rule for Live datasets stands); its line
+  says "the dataset" for a table; a Keep that fails on a second table leaves the first one made (a code `shortcut:`);
+  Verify before Keep says the gate's sentence, not *Keep this answer as a dataset first* (Verify sends the text only).
+- **Tests:** `test-liveSqlSources` — without a database 25 checks: the corpus over two tables through `copilot:ask`, the
+  admin as editor, `Object.is` to F2's reference (61/61), the first call's block typed from the facts, the second call's
+  columns, the turn's doc ids and connection (NEGATIVE CONTROL: against the reference locked to East it disagrees); one
+  counted statement under the view's id, then the cache, nothing hydrated, no dataset made (NEGATIVE CONTROL: a spent
+  daily limit refuses it, nothing sent); a table and a Live dataset on one connection ≡ the reference (6/6), two
+  connections refused before any SQL; *Copy first* with no second call and no statement; a viewer's prompts and replies
+  hold no table name, their answer reads a dataset (CONTROL: the editor's hold it), a model naming a table to them is
+  refused with no table doc read, and their Keep is refused; Keep makes one Live dataset per table and re-points the
+  turn, a second makes none, the kept answer ≡ the reference, Verify after it keeps the kept ids, and asked word for word
+  it runs with no model call ≡ the reference (CONTROL: Verify before Keep saves nothing). With `DATABASE_URL` the same 25
+  over real grants and the RPC route (a project editor and a project viewer; the corpus cut to 12 for `SQL_PER_HOUR`,
+  which counts in Postgres there; Keep 403). Vitest: `answerSql.test.tsx` (the note, Keep for an editor, neither for a
+  viewer, Verify once kept). e2e: `web/e2e/source-tables.e2e.ts` step 5, the card laid on the conversation in both themes
+  (`dock-source-sql`).
+- **What F6 needs from E8:** `team_tables` (the tables a viewer's teams were given) and the editor-written label. Then
+  `sourceVocabulary` and `inSqlTables` admit a viewer's given tables instead of asking `seesSourceNames`; the view is named
+  from the label, never the table (`namesOf` takes the label for a viewer); and the team-hidden columns become a column
+  rule the view's `withLockOf` already applies (the second call's facts and the view then drop them).
+
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15
 (43735675013) skipped both warehouses for want of them. They must be added (on

@@ -163,11 +163,14 @@ export type NameEntry = Pick<CatalogEntry, 'id' | 'name' | 'alias' | 'slug'>;
 /**
  * Every dataset's exposed names, off ONE listing of the project (../data/datasetNames), kept for a read memo's length
  * (one question): no dataset's record is read. The same names `projectCatalog` assigns (scripts/test-answerSql.ts holds
- * them equal), so compile() reads the records of only the datasets a statement names.
+ * them equal), so compile() reads the records of only the datasets a statement names. `views` (the SQL lane's source
+ * tables, docs/live-data/01-live-sql.md F5) are named as datasets of their names made now would be, so a statement
+ * written over one still reads it once it is kept as a dataset.
  */
-export async function projectNames(projectId: string): Promise<NameEntry[]> {
+export async function projectNames(projectId: string, views: ReadonlyArray<{ id: string; name: string }> = []): Promise<NameEntry[]> {
   if (!isValidId(projectId)) return [];
-  const list = await recordFs.memoRead(`sqlNames\0${projectId}`, () => listDatasetNames(projectId));
+  const listed = await recordFs.memoRead(`sqlNames\0${projectId}`, () => listDatasetNames(projectId));
+  const list = views.length ? [...listed, ...views.map((v) => ({ ...v, createdAt: '9999' }))] : listed; // younger than every dataset's ISO time
   const names = assignViewNames(list);
   return list.map((d) => {
     const n = names.get(d.id) || { alias: null, slug: slugify(d.name) };
