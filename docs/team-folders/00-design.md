@@ -370,15 +370,20 @@ index to the reference, now per caller.
   `test-nameSpelling` 8 holds the differential per caller on both paths (NEGATIVE CONTROL: without the WHERE the viewer is
   offered the closed dataset and the differential fails).
 - **The Assistant's history** (`src/ipc/turnsOpen.ts`): for a caller a folder restricts, an answer whose chart, "Did
-  you mean" option, SQL (any dataset of `sql.datasetIds`) or facts (any of `factsFrom`) is on a dataset they cannot open is dropped with the question it answered — from every reply that
+  you mean" option, SQL (any dataset of `sql.datasetIds`) or facts (any of `factsFrom`) is on a dataset they cannot open,
+  or that was asked about a dashboard they cannot open (`dashboardsFrom`), is dropped with the question it answered — from every reply that
   carries turns (`turnsForBrowser`: `copilot:history`, `copilot:ask`, `answer:rerun`, a verified hit), from the turns
   `copilot:ask` replays to the model and the chart a follow-up continues. A title taken from such a question reads
   *Conversation*; a renamed one is the caller's own words and stays. The list counts only the turns the caller is shown,
   and says whether its first question is one, in the page's one query (`copilotRows.listPage`): the same rule in SQL —
   a turn is hidden when it is an answer on a dataset outside `$open` (0039 `ordinate_turn_shows` reads them from its
-  body: 0034's `ordinate_turn_datasets` and `factsFrom`) or a question whose next turn is one, and the same query's WHERE
+  body: 0034's `ordinate_turn_datasets` and `factsFrom`) or on a dashboard outside it (0040 `ordinate_turn_dashboards`),
+  or a question whose next turn is one, and the same query's WHERE
   leaves out a conversation with turns and none shown (one made empty stays, as a new one); `copilot:history` answers
-  such a conversation, by id or as the latest, as for none (no turns, no id, no title). With no folder the count is
+  such a conversation, by id or as the latest, as for none (no turns, no id, no title), and `copilot:ask` naming it (or
+  with it the latest) starts a new conversation (`askThread`): none of its turns is replayed to the model, nor its agent
+  used, nor its id returned. `copilot:renameThread` returns the count shown, from the list's own SQL (`renameThread`, the
+  rename and the count one statement). With no folder the count is
   every turn and every conversation is listed, as before. Nothing is deleted: open the folder to them and the turns are back. A kept card on
   such a dataset could never be sent anyway (its record reads as missing, E2), and `answer:refresh` of it refuses at the
   door. **What the facts came from** (`factsFrom`, written by `copilot:ask` on its answer turn, server only:
@@ -386,9 +391,11 @@ index to the reference, now per caller.
   Home's 12 picks, a topic's), the linked ones (`askLinkedFacts`), the chart a follow-up continued, and what
   `buildFacts` reports as `datasetIds` where those are not its figures' — a dashboard's tiles' and Statistics tiles',
   a capture's, a Statistics panel's, a "Why did this change?" question's, and a scorecard's or scenario's metrics'
-  (memo hits). **Ceiling**: a turn stored before this release has no `factsFrom`, so a prose answer's words stay
-  (net section 6 proves both ways); the context an answer was asked in (a dashboard placed in a closed folder, not
-  its datasets) is still not recorded.
+  (memo hits). **What it was asked about** (`dashboardsFrom`, server only too): the dashboard page an ask's context
+  named, when the facts were that dashboard's, and the dashboard an alert explained (`explainEvent`) is on — so an
+  answer read off a dashboard in a closed folder leaves though every dataset it shows is open. `openTurns` reads the
+  dashboards' placements only when a turn names one. **Ceiling**: a turn stored before this release has no `factsFrom`
+  (or `dashboardsFrom`), so a prose answer's words stay (net section 6 proves both ways).
 - **The budget**: `test-askBudget`'s cases did not move (92 / 88 / 75 / 120 / 112 / 22; meaning on 106 / 97 / 84 / 137
   / 119). A new case asks as a viewer in team Ops with Orders in Ops and 50 datasets in a folder only admins open:
   132–138 queries (the bare viewer's 120, the datasets' placements, five records read one at a time), and the index
@@ -399,12 +406,18 @@ index to the reference, now per caller.
   opsLead and ed find nothing of Finance or HR by ⌘K, words, spelling (a typo sharing no word, and its "Did you mean"),
   meaning (a fake embedder), the counts, the verified lookup or their history, whose counts are of the turns they are
   shown — a prose answer on Finance's dataset leaves with its question (the one on Plain before it stays), and a
-  conversation of only such turns is not listed and reads as none by id; NEGATIVE CONTROLS: finViewer and padmin do; without the WHERE, opsViewer's ⌘K, words, spelling and meaning carry
+  conversation of only such turns is not listed and reads as none by id; so is an alert's explanation on Finance's
+  dataset, and an answer asked on a dashboard placed in Finance that shows no dataset; a rename is told the 2 turns
+  shown, not 4; an ask into a conversation of only hidden turns lands in a new one and replays the model none of them;
+  NEGATIVE CONTROLS: finViewer and padmin do (finViewer's ask lands in the one named, replaying its two turns; their
+  rename is told 4); the dashboard turn with its `dashboardsFrom` removed is listed and shown; the rename counted
+  without the folders says 4; without the WHERE, opsViewer's ⌘K, words, spelling and meaning carry
   Finance's, and their list would count the hidden turns and carry that conversation; the same turn with its `factsFrom` removed (an older release's) keeps its words; an anchor-less row is not returned to opsViewer but is to padmin; an anchor in another case is still
   filtered. `LATER` is empty: the sweep holds `search:query`, `copilot:history` and `copilot:threads` (NEGATIVE CONTROL:
   padmin's carry HR's canaries).
 - **Left for later**: reach (E5) needs nothing here — the indexes keep only folders the caller opens, so a reached
-  dataset is never searched (D9). E6's writes, and the context a prose turn was asked in (to drop it as well), remain.
+  dataset is never searched (D9). E6's writes remain. An `answer:rerun` naming a conversation of only hidden turns
+  still appends to it (it replays nothing to the model, and the hidden turns stay hidden).
 
 ### Writes, as built (E6)
 
@@ -1043,6 +1056,7 @@ row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids co
 | 0037 `dashboard_requests` (E9, as built) | `dashboard_requests (org_id, id, project_id, requester, title, note, charts jsonb, state, decided_by, decided_at, answer, dashboard_id, created_at)` with partial indexes for the open ones and the drafted ones by dashboard, and one by requester; `dashboard_request_inbox (org_id, user_email, request_id, project_id, role, created_at, seen_at)` → `dashboard_requests` ON DELETE CASCADE; forced RLS on both (`users.request_email` is 0033's, reused) |
 | 0038 `dashboard_requests_more` (E9, as built) | `dashboard_requests.state` CHECK widened to `withdrawn` (`NOT VALID`, no row changes); `target_id uuid` and `folder_id uuid`, nullable; `dashboard_requests_open_by (org_id, project_id, requester) WHERE state = 'open'` |
 | 0039 `turn_facts` (history, as built) | `ordinate_turn_shows(body)`: 0034's `ordinate_turn_datasets` and an answer's `factsFrom` (the datasets its facts were built from), for the conversation list's count of shown turns and its WHERE; 0034's function stays for an older pod |
+| 0040 `turn_dashboards` (history, as built) | `ordinate_turn_dashboards(body)`: an answer's `dashboardsFrom` (the dashboard it was asked about), for the conversation list's count and WHERE and the rename's count beside 0039's; 0039's stays for an older pod |
 
 `kind` in `folder_items` has no CHECK: the app validates it (`dataset`, `dashboard`), so a later
 placed kind needs no constraint change.

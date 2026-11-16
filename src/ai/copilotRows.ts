@@ -162,7 +162,8 @@ const CURSOR_RE = /^(-?\d{1,18})\.(\d{1,19})$/;
 /**
  * Shared folders (docs/team-folders, ../ipc/turnsOpen): for a caller restricted to the folders `$5` (NULL: nobody
  * restricts them, the count is every turn), each conversation's turns as they are shown — an answer on a dataset
- * outside `$5` (0039 `ordinate_turn_shows`: its chart's, options', SQL's and facts') is not, nor a question whose next
+ * outside `$5` (0039 `ordinate_turn_shows`: its chart's, options', SQL's and facts'), or asked about a dashboard outside
+ * it (0040 `ordinate_turn_dashboards`), is not, nor a question whose next
  * turn is one — how many it has, and its first question, with whether it is shown (a title taken from a hidden one reads
  * untitled). In the page's one query, whose WHERE leaves out a conversation with turns and none of them shown.
  */
@@ -171,8 +172,9 @@ const SHOWN = `LEFT JOIN LATERAL (
       (array_agg(x.text ORDER BY x.seq) FILTER (WHERE x.role = 'user' AND x.text ~ '\\S'))[1] AS first_q,
       (array_agg(x.next_closed ORDER BY x.seq) FILTER (WHERE x.role = 'user' AND x.text ~ '\\S'))[1] AS first_q_hidden
     FROM (SELECT u.seq, u.role, u.text, c.closed, coalesce(lead(c.closed) OVER (ORDER BY u.seq), false) AS next_closed
-            FROM assistant_turns u CROSS JOIN LATERAL (SELECT u.role = 'assistant' AND EXISTS (SELECT 1 FROM unnest(ordinate_turn_shows(u.body)) AS d(id)
-              WHERE ${folderOf("'dataset'", 'd.id', 'u.org_id', 'u.project_id')} <> ALL($5::uuid[])) AS closed) c
+            FROM assistant_turns u CROSS JOIN LATERAL (SELECT u.role = 'assistant' AND (EXISTS (SELECT 1 FROM unnest(ordinate_turn_shows(u.body)) AS d(id)
+              WHERE ${folderOf("'dataset'", 'd.id', 'u.org_id', 'u.project_id')} <> ALL($5::uuid[])) OR EXISTS (SELECT 1 FROM unnest(ordinate_turn_dashboards(u.body)) AS b(id)
+              WHERE ${folderOf("'dashboard'", 'b.id', 'u.org_id', 'u.project_id')} <> ALL($5::uuid[]))) AS closed) c
            WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) x) v ON $5::uuid[] IS NOT NULL`;
 
 export async function listPage(projectId: string, after?: string, open: readonly string[] | null = null): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
@@ -250,17 +252,19 @@ export async function appendTurn(projectId: string, record: CopilotTurn, threadI
   });
 }
 
-/** Not a touch: updated_at and `touched` stay. */
-export async function renameThread(projectId: string, threadId: string, title: string): Promise<CopilotThreadSummary | null> {
+/** Not a touch: updated_at and `touched` stay. `open`: as `listPage`'s, the count is of the turns the caller is shown. */
+export async function renameThread(projectId: string, threadId: string, title: string, open: readonly string[] | null = null): Promise<CopilotThreadSummary | null> {
   if (!copilot.isValidId(threadId)) return null;
   await moveFile(projectId);
-  const r = await tx(true, (c, org) => c.query<ThreadRow>(
-    `UPDATE assistant_threads t SET title = $5 WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND t.id = $4
-     RETURNING t.id::text, t.title, t.updated_at, t.agent_id::text,
-       (SELECT count(*)::int FROM assistant_turns u WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) AS turns`,
-    [org, projectId, me(), threadId, pgText(title)],
+  const r = await tx(true, (c, org) => c.query<ThreadRow & { shown: number | null }>(
+    `WITH t AS (UPDATE assistant_threads t SET title = $6 WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND t.id = $4 RETURNING t.*)
+     SELECT t.id::text, t.title, t.updated_at, t.agent_id::text, v.shown,
+       (SELECT count(*)::int FROM assistant_turns u WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) AS turns
+       FROM t ${SHOWN}`,
+    [org, projectId, me(), threadId, open, pgText(title)],
   ));
-  return r.rows[0] ? summaryOf(r.rows[0]) : null;
+  const row = r.rows[0];
+  return row ? summaryOf(open === null ? row : { ...row, turns: row.shown ?? 0 }) : null;
 }
 
 export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
