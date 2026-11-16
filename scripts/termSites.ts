@@ -150,6 +150,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/prepare/steps.ts': { count: 1, how: 'prepare' },
   // ignores: reads the shape only (a label, a diff). No crash on a term; skips it.
   'src/analysis/versionDiffParts.ts': { count: 1, how: 'ignores' },
+  // Add to dashboard's "already there" check compares two visuals' sanitized filters as a key; a term step is compared as stored
+  'src/ipc/answerDashboard.ts': { count: 1, how: 'ignores' },
   // a status pin (part 4) reads a plain filter's column; a term step is a dep, hashed by its own pin
   'src/analysis/statusPin.ts': { count: 1, how: 'ignores' },
   // a shaped bundle refuses a plain filter that stores a marked column's literal; a term step names its term, whose own rows are scanned in the term's record
