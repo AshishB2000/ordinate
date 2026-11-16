@@ -20,7 +20,10 @@
 //   6. KEEP, THEN VERIFY: Verify before Keep saves nothing; Keep makes one Live dataset per table read and re-points the
 //      turn (no `table`, the text unchanged); a second Keep makes none, nor does Keep of another turn over the same tables
 //      (re-pointed at the kept ones; NEGATIVE CONTROL: the two tables make two); Verify then saves the SQL against the kept
-//      datasets; asked word for word it runs with no model call, equal to the reference.
+//      datasets; asked word for word it runs with no model call, equal to the reference. ATOMIC: a Keep whose second table
+//      cannot be kept (gone from the warehouse) makes nothing: the first, made, is deleted for good (not left in the
+//      Trash), no schema sync started for it (one in flight wrote the record back over the undo), and the turn is unchanged
+//      (NEGATIVE CONTROL: the Keep after it, both tables there, makes two, re-points, and starts each one's sync).
 //
 //   npm run build:ts && [DATABASE_URL=… ORDINATE_EXPECT_PGVECTOR=1] node scripts/test-liveSqlSources.js
 
@@ -54,6 +57,9 @@ const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnect
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const corpus: typeof import('./liveSqlCorpus') = require('./liveSqlCorpus');
 const diff: typeof import('./liveSqlDiff') = require('./liveSqlDiff');
+const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+const trash: typeof import('../src/app/trash') = require('../src/app/trash');
+const syncJob: typeof import('../src/engine/live/schemaSyncJob') = require('../src/engine/live/schemaSyncJob');
 
 type Role = import('../src/server/context').Identity['user']['role'];
 type Table = import('./liveSqlDiff').Table;
@@ -96,6 +102,13 @@ let nextSql: Said = '';
 const docReads: string[] = [];
 const realDocs = store.readSourceDocs;
 (store as { readSourceDocs: unknown }).readSourceDocs = (...a: Parameters<typeof realDocs>) => { docReads.push(...a[1].map((r) => r.docId)); return realDocs(...a); };
+let liveSaves = 0; // Live records written: a Keep's made datasets
+const realSave = liveRecord.saveLiveRecord;
+(liveRecord as { saveLiveRecord: unknown }).saveLiveRecord = (...a: Parameters<typeof realSave>) => { liveSaves++; return realSave(...a); };
+// Schema syncs started: one in flight writes its record back over an undo, so a failed Keep must start none.
+const syncsFor: string[] = [];
+const realSync = syncJob.startSchemaSync;
+(syncJob as { startSchemaSync: unknown }).startSchemaSync = (...a: Parameters<typeof realSync>) => { syncsFor.push(a[1]); return realSync(...a); };
 let hydrated = 0;
 const realGet = datasets.getDataset;
 (datasets as { getDataset: unknown }).getDataset = (...a: Parameters<typeof realGet>) => { hydrated++; return realGet(...a); };
@@ -271,13 +284,33 @@ async function legs(b: Bench, s: Seeded): Promise<void> {
   const VQ = 'canary orders per region against their target';
   const early = (await call(E, 'verified:save', { projectId: b.P, input: { question: VQ, sql: KEEP } })).body;
   ok('6. Verify before Keep saves nothing: a verified question names datasets', early?.ok === false, show(early));
-  const n0 = await datasetCount();
+  // Atomic: the second table is gone from the warehouse when Keep runs.
+  const broken = await ask(E, [ORDERS_T, TARGETS_T], KEEP);
+  const history = async (t: typeof broken) => ((await call(E, 'copilot:history', { projectId: b.P, threadId: t.thread })).body?.turns ?? []).find((x: { id: string }) => x.id === t.turn.id);
+  const rename = (a: string, z: string) => b.as(b.admin, () => duck.execAsync(`ALTER TABLE "${a}" RENAME TO "${z}"`));
+  const [nb, saves0, syncs0] = [await datasetCount(), liveSaves, syncsFor.length];
+  await rename(TARGETS_T, `${TARGETS_T}_away`);
+  let failed: any; // any: the channel's reply
+  try {
+    failed = (await call(E, 'answer:keepTable', { projectId: b.P, threadId: broken.thread, turnId: broken.turn.id })).body;
+  } finally {
+    await rename(`${TARGETS_T}_away`, TARGETS_T);
+  }
+  const brokenSyncs = syncsFor.length - syncs0;
+  const still = await history(broken);
+  const binned = (await b.as(b.admin, () => trash.list(b.P))).filter((e) => e.type === 'dataset');
+  ok('6. ATOMIC KEEP: a second table that cannot be kept fails the Keep; the first, made, is deleted for good: zero datasets made, none in the Trash', failed?.ok === false && broken.turn?.sql?.datasetIds?.[1] === s.targetsDoc
+    && liveSaves - saves0 === 1 && (await datasetCount()) === nb && binned.length === 0, show({ failed, order: broken.turn?.sql?.datasetIds, saves: liveSaves - saves0, made: (await datasetCount()) - nb, binned }));
+  ok('6. …and the turn is not re-pointed: its table and its doc ids as they were', still?.sql?.table === s.conn && JSON.stringify(still.sql.datasetIds) === JSON.stringify(broken.turn.sql.datasetIds), show(still?.sql));
+  ok('6. …and no schema sync was started for the dataset it undid (one in flight would write it back)', brokenSyncs === 0, show(syncsFor.slice(syncs0)));
+  const [n0, syncs1] = [await datasetCount(), syncsFor.length];
   const kept = (await call(E, 'answer:keepTable', { projectId: b.P, threadId: asked.thread, turnId: asked.turn.id })).body;
   const repointed = (kept?.turns ?? []).find((t: { id: string }) => t.id === asked.turn.id);
   const keptIds: string[] = repointed?.sql?.datasetIds ?? [];
   ok('6. KEEP makes one Live dataset per table read, and re-points the turn: the kept ids, no table, the text unchanged', kept?.ok === true && (await datasetCount()) === n0 + 2 && keptIds.length === 2
     && keptIds.every((id) => ![s.ordersDoc, s.targetsDoc].includes(id)) && !repointed.sql.table && repointed.sql.text === KEEP, show({ kept, made: (await datasetCount()) - n0 }));
   ok('6. NEGATIVE CONTROL: a different table on the same connection makes a new one — two tables, two datasets', new Set(keptIds).size === 2);
+  ok('6. NEGATIVE CONTROL: …and once the turn is re-pointed, each made dataset\'s first schema sync starts', JSON.stringify(syncsFor.slice(syncs1).sort()) === JSON.stringify([...keptIds].sort()), show({ synced: syncsFor.slice(syncs1), keptIds }));
   const names = await b.as(b.admin, () => sqlDatasets.projectNames(b.P));
   ok('6. …each kept dataset takes the name its view had, so the same text reads it', [ORDERS_T, TARGETS_T].every((t) => names.some((e) => e.slug === t && keptIds.includes(e.id))), show(names.filter((e) => keptIds.includes(e.id))));
   const again = (await call(E, 'answer:keepTable', { projectId: b.P, threadId: asked.thread, turnId: asked.turn.id })).body;

@@ -39,7 +39,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
  * column is found BY NAME in the columns each source returns: a refresh between two reads can reorder or drop them,
  * so an index taken from an earlier read is never reused. Null: not counted (the column is gone from that source).
  */
-async function extractCounts(projectId: string, datasetId: string, key: string): Promise<KeyCheckCounts | null> {
+export async function extractCounts(projectId: string, datasetId: string, key: string): Promise<KeyCheckCounts | null> {
   const src = await datasets.residentSource(projectId, datasetId);
   if (src) {
     const index = src.columns.findIndex((c) => c.name === key);

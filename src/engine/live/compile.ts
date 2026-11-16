@@ -488,10 +488,11 @@ export function compileCaseMatches(column: string, keys: string[], env: CompileE
  * (`emptyOf`), else a number's finite value or the cell's text. The key is computed in a
  * derived table and grouped by its alias, because a bound value in the expression would not
  * match its twin in a `GROUP BY` (each marker becomes its own parameter). The three counts
- * are `SUM`s, NULL over no rows; `keyCheckFromRow` reads that as 0.
+ * are `SUM`s, NULL over no rows; `keyCheckFromRow` reads that as 0. `lock`: a row access lock (the Assistant's checked
+ * link counts the caller's rows only, ipc/answerLink).
  */
-export function compileKeyCheck(column: string, env: CompileEnv): Compiled {
-  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: [], order: 'natural', weekCal: null };
+export function compileKeyCheck(column: string, env: CompileEnv, lock: LiveFilter[] = []): Compiled {
+  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: lock, order: 'natural', weekCal: null };
   const p = prepare(probe, env);
   if (isRefusal(p)) return p;
   const { c } = p;

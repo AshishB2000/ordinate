@@ -7,8 +7,13 @@
 // share of FROM keys found in TO, and the full-table key statistics that say whether TO's key is unique, all computed by
 // the engine on our copies. An editor gets the card (`link`) with **Add link and answer**, which saves the link through
 // `relationship:save` (counted over the full tables again) and asks again; a viewer gets the sentence and the reason
-// `link` (Ask an editor), and no check runs for them. A Live dataset on either side gets the sentence too.
-// shortcut: no warehouse probe for a Live side (the check reads our copies only); add one through warehouse() when Live links are asked for.
+// `link` (Ask an editor), and no check runs for them. A pair with a Live side gets the same card: no engine holds both
+// tables, so the pairs are ranked by names and types (no sampled share found), and each key column is counted where it
+// lives (`keyCounts`, the table notes' key check: rows, empty keys, repeated keys): our engine on a copy, ONE bounded
+// warehouse statement on a Live dataset, under the caller's row lock, through liveLookup (warehouse(), the budget, the
+// cache).
+// shortcut: Approve (`relationship:save`) still counts matched rows over both tables, which a Live side refuses
+// (LiveDatasetError, the Relationships page leaves Live out, L2.6); upgrade with joins across a Live connection (L4).
 
 import * as datasets from '../data/datasets';
 import { isLive } from '../data/liveDataset';
@@ -18,6 +23,14 @@ import { resolveColumn } from '../ai/answerSpec';
 import { searchModel } from './assistantSearch';
 import { suggest } from './relationships';
 import * as say from '../ai/sourceAnswerMessages';
+import { rankKeys } from '../analysis/keySuggest';
+import { keyCheckFromRow } from '../analysis/keyCheck';
+import type { KeyCheckCounts } from '../analysis/keyCheck';
+import { compileKeyCheck } from '../engine/live/compile';
+import { liveLookup } from '../engine/live/liveQuery';
+import { adaptFilters } from '../engine/live/liveSpec';
+import { extractCounts } from './tableDocs';
+import { withLockOf } from './rowDoors';
 
 import type { AnswerLink } from '../ai/answerNeeds';
 export type { AnswerLink };
@@ -43,6 +56,46 @@ async function ownerOf(projectId: string, datasetId: string, said: string): Prom
   return null;
 }
 
+/**
+ * A key column's rows, empty keys and repeated keys: the extract's on our engine (./tableDocs `extractCounts`), a Live
+ * dataset's in ONE warehouse statement (`compileKeyCheck`) under the caller's lock. Null: it cannot be said (a refusal,
+ * a hidden column, a semantic layer) — the caller then offers no card, never a guessed one.
+ */
+export async function keyCounts(projectId: string, meta: datasets.DatasetMeta, column: string): Promise<KeyCheckCounts | null> {
+  if (!isLive(meta)) return extractCounts(projectId, meta.id, column);
+  try {
+    return await withLockOf(projectId, meta.id, async (lock) => {
+      const r = await liveLookup(projectId, meta.id, (t) => {
+        const f = adaptFilters(lock ? [...lock.steps] : [], t.columns, {});
+        return f.ok ? compileKeyCheck(column, t.env, f.filters) : f;
+      });
+      return r.ok ? keyCheckFromRow(r.rows[0]) : null;
+    }, [column]);
+  } catch {
+    return null; // a gate's refusal (a hidden column, a lock that cannot apply): no checks, so the plain sentence
+  }
+}
+
+type Checked = { from: string; to: string; cardinality: AnswerLink['cardinality'] | null; checks: AnswerLink['checks'] };
+
+/** The best key pair FROM → TO and its checks, or null: the Relationships page's `suggest` for two copies; with a Live side, `keyCounts` per side. */
+async function checkedPair(projectId: string, from: datasets.DatasetMeta, to: datasets.DatasetMeta): Promise<Checked | null> {
+  if (!isLive(from) && !isLive(to)) {
+    const s = await suggest(projectId, from.id, to.id);
+    const best = s?.ok ? s.best : null;
+    if (!best?.stats) return null;
+    const checks = { names: best.name === 1, types: best.typeMatch === true, foundPct: typeof best.ratePct === 'number' ? best.ratePct : null, unique: best.stats.toKeys === best.stats.toKeyed };
+    return { from: best.from, to: best.to, cardinality: best.cardinality, checks };
+  }
+  const [best] = await rankKeys(from.columns, to.columns, () => null);
+  const f = best ? await keyCounts(projectId, from, best.from) : null;
+  const t = f ? await keyCounts(projectId, to, best.to) : null;
+  if (!f || !t) return null;
+  // inferCardinality's rule, on the key check's counts: TO's keys unique, then FROM's say one-to-one.
+  const unique = (k: KeyCheckCounts): boolean => k.repeatedKeys === 0;
+  return { from: best.from, to: best.to, cardinality: unique(t) ? (unique(f) ? 'one_to_one' : 'many_to_one') : null, checks: { names: best.name === 1, types: best.typeMatch, foundPct: null, unique: unique(t) } };
+}
+
 /** The refusal of a spec on `datasetId` that said `said`, a column of an unlinked dataset; null when that is not the case. */
 export async function linkRefusal(projectId: string, datasetId: string, said: unknown): Promise<LinkRefusal | null> {
   if (typeof said !== 'string' || !said.trim()) return null;
@@ -53,17 +106,16 @@ export async function linkRefusal(projectId: string, datasetId: string, said: un
   // A relationship between them already (one this answer cannot follow): not a missing link, the other refusals stand.
   if ((await listRelationships(projectId)).some((r) => [r.from.datasetId, r.to.datasetId].sort().join() === [from.id, to.id].sort().join())) return null;
   const plain: LinkRefusal = { ok: false, reason: say.cannotCombine(), needs: 'link' };
-  if (!(await seesSourceNames(projectId)) || isLive(from) || isLive(to)) return plain;
-  const s = await suggest(projectId, from.id, to.id);
-  const best = s?.ok ? s.best : null;
-  if (!best || (best.cardinality !== 'many_to_one' && best.cardinality !== 'one_to_one') || !best.stats) return plain;
+  if (!(await seesSourceNames(projectId))) return plain;
+  const best = await checkedPair(projectId, from, to);
+  if (!best || (best.cardinality !== 'many_to_one' && best.cardinality !== 'one_to_one')) return plain;
   return {
     ok: false, needs: 'link', reason: say.linkProposed(from.name, to.name),
     link: {
       from: { datasetId: from.id, dataset: from.name, column: best.from },
       to: { datasetId: to.id, dataset: to.name, column: best.to },
       cardinality: best.cardinality,
-      checks: { names: best.name === 1, types: best.typeMatch === true, foundPct: typeof best.ratePct === 'number' ? best.ratePct : null, unique: best.stats.toKeys === best.stats.toKeyed },
+      checks: best.checks,
     },
   };
 }

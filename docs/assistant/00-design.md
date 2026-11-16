@@ -407,9 +407,19 @@ full-table key statistics, the cardinality the data supports), computed by the e
 card (`link` on the turn, `needs: 'link'`): *Link Shipments.country_id → Countries.country_id? Names match · Types match ·
 98% of sampled values found · Unique in Countries* with **Add link and answer**, which saves it through
 `relationship:save` (counted over the full tables again) and asks the question again, and **Cancel**. Only a
-many-to-one or one-to-one pair is proposed. A viewer (and a pair with a Live side: no warehouse probe yet) gets *These
-can't be combined yet.* with `needs: 'link'` and no check run. Once linked, the same answer gets the linked-column
-refusal (the form reads one dataset); joins in the form are outcome B.
+many-to-one or one-to-one pair is proposed. A viewer gets *These can't be combined yet.* with `needs: 'link'` and no
+check run. Once linked, the same answer gets the linked-column refusal (the form reads one dataset); joins in the form
+are outcome B.
+
+**A pair with a Live side** gets the same card. No engine holds both tables, so the pairs are ranked by names and types
+only and there is no sampled share found (`foundPct: null`, the card leaves that check out). Each key column is counted
+where it lives (`answerLink.keyCounts`, the table notes' key check: rows, empty keys, repeated keys): `extractCounts` on
+a copy, and on a Live dataset ONE bounded statement (`compileKeyCheck`, now taking the lock) through `liveLookup`, so
+`warehouse()`, the budget and the daily limit under its id, the `orgKey` cache, inside `withLockOf` (the column gate,
+then the caller's row lock as bound filters). TO's key unique gives many-to-one (one-to-one when FROM's is too). A gate's
+refusal, a semantic layer or a failed statement gives the plain sentence, never a guessed card. Shortcut: **Approve is
+still refused there**, typed (`live_dataset`): `relationship:save` counts matched rows over both tables, and the
+Relationships page leaves Live datasets out (L2.6); it waits on joins across a Live connection (L4).
 
 **The seam for Ask an editor (#525):** the stored turn carries `needs: 'link' | 'copy'` (`src/ai/answerNeeds.ts`, kept on
 every read and write as `suggest` is), the two reasons its contract has; its button attaches where `needs` is set.
@@ -427,9 +437,11 @@ follow-up refining it (its PREVIOUS ANSWER the table's, still read from it),
 NEGATIVE CONTROL a daily limit refusing it; `copy`; inside the view `getDataset` throws and a write is refused; keep
 makes exactly one Live dataset and re-points the turn, a second makes none, its figures are the table's; Save as visual
 and Verify refused before; the link card's pair and checks, kept on reload, Approve saving one relationship, after which
-it is no missing link. With Postgres: the viewer's prompt names no table and holds no column only the table's facts
+it is no missing link; with a Live side (§8) the card, its Live key counted in one statement counted under its id and
+cached on a second ask, its counts `Object.is` the extract's over the same rows (a unique key and a repeating one),
+Approve refused typed. With Postgres: the viewer's prompt names no table and holds no column only the table's facts
 have (NEGATIVE CONTROL: the editor's), a spec naming one answered as missing, keep and Approve 403, the viewer's link
-refusal plain (NEGATIVE CONTROL: the editor's card). Vitest: `web/src/features/assistant/sourceAnswer.test.tsx`. e2e:
+refusal plain (NEGATIVE CONTROL: the editor's card), with a Live side too and no statement sent. Vitest: `web/src/features/assistant/sourceAnswer.test.tsx`. e2e:
 `web/e2e/source-tables.e2e.ts` step 5, the table's answer in the dock, kept, and the link card, in both themes
 (`dock-source-table`, `dock-source-kept`, `dock-link`).
 
