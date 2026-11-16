@@ -59,7 +59,7 @@ import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk'
 import { keepReads } from './askMemo';
 import { snapshotFor, sqlSnapshotFor, turnsForBrowser } from './answerSnapshots';
 import { sqlAnswer } from './answerSql';
-import { openTitle, openTurns } from './turnsOpen';
+import { askThread, openTitle, openTurns } from './turnsOpen';
 import { indexFolders } from '../server/authz/folderGate';
 import { homeFacts } from './homeFacts';
 import { askSourceTables } from './sourceAnswers';
@@ -449,7 +449,7 @@ export function register() {
   // member's thread — so neither tells a caller what exists beyond their own list.
   ipcMain.handle('copilot:renameThread', async (_e, { projectId, threadId, title }: any = {}) => {
     try {
-      const thread = await copilot.renameThread(projectId, threadId, title);
+      const thread = await copilot.renameThread(projectId, threadId, title, (await indexFolders(projectId))?.open ?? null); // its count: the turns the caller is shown (./turnsOpen)
       return thread ? { ok: true, thread } : { ok: false, error: 'That conversation is no longer there' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to rename the conversation' };
@@ -517,7 +517,7 @@ export function register() {
       const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
       // The conversation this lands in decides who answers (docs/assistant-agents rule 11): the one named, else the
       // caller's latest; with none yet, the one this ask starts, with the agent asked for (./agentAsk.ts decides).
-      const into = await copilot.threadFor(projectId, tid); // the one named when it is the caller's, else their latest (one lookup: the list is paged)
+      const { into, stored } = await askThread(projectId, tid); // the one named when it is the caller's, else their latest; none when every turn of it is hidden from them (./turnsOpen)
       const named = !!tid && into?.id === tid;
       const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : agentId);
       // The agent the conversation is stored with, as the reply names it: none for a token or a share, which keep the Project assistant (rule 13).
@@ -534,7 +534,7 @@ export function register() {
       const hit = sharing || skipVerified === true ? null : await verifiedAsk(projectId, q, pin, { ...scope, only });
       if (hit) return { ...hit, agent: await agentRef(projectId, kept) };
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
-      const turns = withoutAnswer(await openTurns(projectId, await copilot.loadHistory(projectId, tid)), passed?.id); // replayed: never an answer on a closed folder's dataset
+      const turns = withoutAnswer(await openTurns(projectId, stored ?? await copilot.loadHistory(projectId, tid)), passed?.id); // replayed: never an answer on a closed folder's dataset
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, asked, emit, q, sharing);
       const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
@@ -627,6 +627,7 @@ export function register() {
           ...(answer && !answer.ok && 'needs' in answer ? { needs: answer.needs, link: answer.link } : {}),
           guidance: guided.used,
           factsFrom,
+          dashboardsFrom: asked.kind === 'analysis' && facts.provenance.kind === 'analysis' && asked.id ? [asked.id] : undefined, // the dashboard page it was read off (./turnsOpen)
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question
         // wanted (src/ai/suggestedAction.ts) — a whitelisted kind plus an intent

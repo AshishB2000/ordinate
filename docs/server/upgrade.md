@@ -999,6 +999,20 @@ for a connection whose read failed (its error redacted, never a secret). An org 
 pods run it. **Rolling back.** The older release leaves the rows unclaimed; they stay idle and are used again after the
 next upgrade.
 
+## The Assistant's history follows the dashboard an answer was asked about (`0040_turn_dashboards`)
+
+Each new Assistant answer asked on a dashboard's page, and each alert explanation for an alert on a dashboard, records
+that dashboard (`dashboardsFrom` in the stored turn; never sent to a browser), so it is hidden, with its question, from
+someone the dashboard's folder is closed to, though the datasets it shows are open to them. An ask into a conversation
+whose every turn is hidden from the asker starts a new one, and a rename's reply counts only the turns they are shown.
+Nothing changes for anyone without a folder besides Everyone, or without `DATABASE_URL`.
+
+**Rolling out.** The migration adds one function (`ordinate_turn_dashboards`, which the conversation list reads). It
+reads and rewrites no turn: an answer stored before this release records no dashboard, and stays as it was.
+
+**What a pod of an older release does:** it ignores `dashboardsFrom` (0039's function stays), so it shows such an answer
+as it did before (no new leak), and an answer it rewrites (a refresh, a save as visual) loses the record.
+
 ## Compose
 
 From a checkout:

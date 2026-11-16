@@ -52,7 +52,7 @@ import { openTurns } from './turnsOpen';
 import { viewHook } from '../data/sourceView';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
-export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot' | 'factsFrom'> & { card?: Record<string, unknown> };
+export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot' | 'factsFrom' | 'dashboardsFrom'> & { card?: Record<string, unknown> };
 
 /**
  * What decides the figures the caller may see on `datasetId`, as a sha256: their row lock's values (or why they
@@ -160,7 +160,7 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
     return sqlAccessPrint(projectId, ids).catch(() => null);
   };
   const out: BrowserTurn[] = [];
-  for (const { snapshot, factsFrom: _server, ...turn } of await openTurns(projectId, turns)) {
+  for (const { snapshot, factsFrom: _server, dashboardsFrom: _boards, ...turn } of await openTurns(projectId, turns)) {
     const sql = turn.sql;
     if (sql) {
       out.push(await inSqlTables(projectId, sql, async () => {

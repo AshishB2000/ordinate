@@ -91,6 +91,8 @@ export interface CopilotTurn {
    * hides its words, prose with no chart included, from a caller one is closed to. SERVER ONLY: `turnsForBrowser` drops it.
    */
   factsFrom?: string[];
+  /** The dashboards it was asked about (an ask on a dashboard page, an alert on one): closed to a caller, it hides as `factsFrom` does. SERVER ONLY. */
+  dashboardsFrom?: string[];
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -142,6 +144,7 @@ export interface NewCopilotTurn {
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
   factsFrom?: string[];
+  dashboardsFrom?: string[];
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -289,6 +292,8 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     if (role === 'assistant' && !answer) Object.assign(turn, sanitizeNeeds(t));
     const factsFrom = role === 'assistant' ? sanitizeIds(t.factsFrom) : undefined;
     if (factsFrom) turn.factsFrom = factsFrom;
+    const dashboardsFrom = role === 'assistant' ? sanitizeIds(t.dashboardsFrom) : undefined;
+    if (dashboardsFrom) turn.dashboardsFrom = dashboardsFrom;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -599,6 +604,8 @@ export async function appendTurn(
   if (role === 'assistant' && !answer) Object.assign(record, sanitizeNeeds(turn));
   const factsFrom = role === 'assistant' ? sanitizeIds(turn && turn.factsFrom) : undefined;
   if (factsFrom) record.factsFrom = factsFrom;
+  const dashboardsFrom = role === 'assistant' ? sanitizeIds(turn && turn.dashboardsFrom) : undefined;
+  if (dashboardsFrom) record.dashboardsFrom = dashboardsFrom;
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {
@@ -639,9 +646,10 @@ export async function appendTurn(
 // thread that is not the caller's, or a title with nothing in it.
 // ponytail: a thread renamed to exactly FALLBACK_TITLE is re-derived by its next
 // first user turn — a marker field if anyone wants "Conversation" to stick.
-export async function renameThread(projectId: string, threadId: string, title: string): Promise<CopilotThreadSummary | null> {
+// `open`: as listThreadsPage's (rows only), the count is then of the turns the caller is shown.
+export async function renameThread(projectId: string, threadId: string, title: string, open: readonly string[] | null = null): Promise<CopilotThreadSummary | null> {
   if (!isValidId(projectId) || typeof title !== 'string' || title.trim() === '') return null;
-  if (rows.on()) return rows.renameThread(projectId, threadId, clampTitle(title));
+  if (rows.on()) return rows.renameThread(projectId, threadId, clampTitle(title), open);
   return changeThreads(projectId, async (threads) => {
     const target = mine(threads).find((t) => t.id === threadId);
     if (!target) return null;

@@ -109,7 +109,8 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
       role: 'assistant',
       text: guardAnswer(res.text, facts.ledger).text,
       provenance: facts.provenance,
-      factsFrom: [event.datasetId], // its words leave history with the dataset (./turnsOpen)
+      factsFrom: [event.datasetId], // its words leave history with the dataset (./turnsOpen)…
+      dashboardsFrom: event.analysisId ? [event.analysisId] : undefined, // …and with the dashboard the alert is on (it follows that)
     }, thread.id);
     return thread.id;
   } catch (err: any) {
