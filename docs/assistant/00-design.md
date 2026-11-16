@@ -550,6 +550,26 @@ row rules (each manager sees only their region) becomes a dataset, where the rul
    folder). **Approve and publish**, **Edit**, **Decline with a note**.
 5. **Viewer gets it**: *Your dashboard Returns Q4 is ready*, with the link, or the editor's note.
 
+**As built (E9, [design](../team-folders/00-design.md#dashboard-requests-as-built-e9)).** Step 2 changed: nothing is
+made at request time, not even a draft (team folders D20). The request is a `dashboard_requests` row (0037) holding the
+answers' chart forms, never a figure; the dashboard and its visuals are made only when an editor approves.
+
+- **Viewer**: **Request a dashboard** on an answer card (`web/src/features/assistant/RequestDashboard.tsx`, viewers
+  only): the conversation's chart answers to tick (this one ticked), a name and a note. `request:create` (`read`,
+  audited) takes the caller's own turns only, on datasets they open; the same charts again the same day are *already
+  sent*, and a person may send 10 a day. Charts on a dataset only: a source table's or an SQL answer is refused with a
+  sentence, for now.
+- **Told**: editors and admins with Edit on every dataset the charts read (`openers`, intersected), through the path
+  Ask an editor uses: a bell row (**Dashboard requests**), a `requests:changed` push with no title or note, and an email
+  for those with **Email me about data asks and dashboard requests** on (`users.request_email`).
+- **Review** (`/requests/:projectId/:requestId`, `request:preview`): every chart computed now through the answer door
+  as the reviewer, the note, and exactly what approving makes (a visual per chart, the dashboard, its folder).
+  **Approve and publish** makes them (Save as visual's path, then a dashboard placed where E6 lands it, then Publish);
+  **Edit** makes the dashboard as a draft and opens the editor, and the viewer is told at its first Publish; **Decline**
+  needs a note. Exactly one dashboard per request, however many approve at once.
+- **Viewer told**: a bell row that opens the dashboard (or shows the note), a toast in their open tabs, and an email if
+  they turned the switch on. An editor's own *Add to dashboard* on an answer is not built yet.
+
 ## Ask an editor and Alert me, as built (phase G)
 
 **Ask an editor.** Where the Assistant tells a viewer the data isn't theirs yet, the reason and

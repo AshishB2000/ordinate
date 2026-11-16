@@ -1,5 +1,5 @@
 // @mentions on the web (docs/notifications/00-design.md §5.9-5.12): the caller's
-// "Mentioned you" list and viewers' asks (in the bell), their seen marks, and their email settings. Every figure-free
+// "Mentioned you" list, viewers' asks and dashboard requests (in the bell), their seen marks, and their email settings. Every figure-free
 // word here is the server's; the browser never derives a person's name.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,10 +31,31 @@ export interface AskRow {
   at: string;
   seen: boolean;
 }
+/** A dashboard request (src/server/requests/requests.ts `RequestRow`): the caller's own once decided, or one they may approve. */
+export interface RequestRow {
+  projectId: string;
+  id: string;
+  /** Who asked for it. */
+  by: string;
+  title: string;
+  note: string;
+  charts: number;
+  state: 'open' | 'drafted' | 'approved' | 'declined';
+  /** Who decided it ('' while open). */
+  decidedBy: string;
+  /** A decline's note. */
+  answer: string;
+  dashboardId: string | null;
+  at: string;
+  /** The caller asked for it; else they were asked to approve it. */
+  mine: boolean;
+  seen: boolean;
+}
 export interface MentionList {
   available: boolean;
   items: HomeMention[];
   asks: AskRow[];
+  requests: RequestRow[];
   /** The caller's unseen mentions and asks in the database (some may not be among `items` and `asks`). */
   unseen: number;
 }
@@ -42,7 +63,7 @@ export interface MentionPrefs {
   available: boolean;
   mail: boolean;
   emailMe: boolean;
-  /** "Email me when a viewer asks for data": off unless they turned it on. */
+  /** "Email me about data asks and dashboard requests": off unless they turned it on. */
   requestEmail: boolean;
 }
 
@@ -58,7 +79,8 @@ export function useMentions(enabled = true) {
       if (r && r.ok === false) throw new Error(r.error || 'Could not read your mentions.');
       const items = Array.isArray(r?.items) ? r.items : [];
       const asks = Array.isArray(r?.asks) ? r.asks : [];
-      return { available: r?.available === true, items, asks, unseen: typeof r?.unseen === 'number' ? r.unseen : [...items, ...asks].filter((m) => !m.seen).length };
+      const requests = Array.isArray(r?.requests) ? r.requests : [];
+      return { available: r?.available === true, items, asks, requests, unseen: typeof r?.unseen === 'number' ? r.unseen : [...items, ...asks, ...requests].filter((m) => !m.seen).length };
     },
   });
 }

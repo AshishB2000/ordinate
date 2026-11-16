@@ -671,4 +671,6 @@ export function registerHandlers(): void {
   (require('./mentions/rpc') as typeof import('./mentions/rpc')).register();
   // Shared folders (docs/team-folders): the bookmark check, folder:of.
   (require('../ipc/folders') as typeof import('../ipc/folders')).register();
+  // Dashboard requests (docs/team-folders, E9): a viewer asks, an editor approves.
+  (require('./requests/rpc') as typeof import('./requests/rpc')).register();
 }

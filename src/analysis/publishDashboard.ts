@@ -106,7 +106,10 @@ export async function publish(projectId: string, id: string, base?: unknown): Pr
     done = { ...draft, published: copy };
     return true;
   });
-  return done ? { analysis: done, status: statusOf(done) } : null;
+  if (!done) return null;
+  // A dashboard approved as a draft from a request (src/server/requests): its first Publish tells the requester.
+  await (require('../server/requests/requests') as typeof import('../server/requests/requests')).dashboardPublished(projectId, id); // lazy: it imports this module
+  return { analysis: done, status: statusOf(done) };
 }
 
 /** Off the Dashboards page for viewers; the draft stays as it is. Idempotent: a draft is left alone, unversioned. */

@@ -165,6 +165,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'reports:get': 'META',
   'reports:list': 'META',
   'reports:open': 'META',
+  'request:create': 'META', // the caller's own answers' chart forms to the editors; returns an id, no cell, label or figure
   'scenario:compare': 'NET',
   'scenario:compute': 'NET',
   'scenario:get': 'META',

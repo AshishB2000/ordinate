@@ -1,5 +1,5 @@
-// The top bar's bell: one inbox for the caller's mentions and viewers' asks, across every project
-// (MentionedYou.tsx, AskedYou.tsx), and the current project's alerts (legacy alertsInbox.ts),
+// The top bar's bell: one inbox for the caller's mentions, viewers' asks and dashboard requests, across every project
+// (MentionedYou.tsx, AskedYou.tsx, RequestsForYou.tsx), and the current project's alerts (legacy alertsInbox.ts),
 // with the alert rules page.
 // The badge is two server counts: the current project's unseen alerts and the
 // caller's unseen mentions (from /api/auth/me). A fired
@@ -34,6 +34,7 @@ import { useCurrentProject } from '../projects/current';
 import { ME_KEY, useMe } from '../auth/api';
 import { MentionedYou } from './MentionedYou';
 import { AskedYou, useAskNotice } from './AskedYou';
+import { RequestsForYou, useRequestNotice } from './RequestsForYou';
 import { useMentions, useMentionSeen } from './mentionsApi';
 import { reason, useAlerts, useAlertsLive, useAlertWrite, type AlertEvent, type AlertRule } from './api';
 import { usePausedNotice } from '../subscriptions/notices';
@@ -246,6 +247,8 @@ export function AlertsBell() {
   useMentionNotice();
   // …and where an editor hears that a viewer asked for data (./AskedYou).
   useAskNotice();
+  // …and where a dashboard request reaches its approvers, and its outcome the viewer who asked (./RequestsForYou).
+  useRequestNotice();
   // The bell asks the server only once it matters: opened, or an alert fired
   // (alerts:fired). A dashboard's KPI cards read the same list, so on a
   // dashboard the badge is there at once; every other page stays inside its
@@ -267,6 +270,7 @@ export function AlertsBell() {
   const seen = useMentionSeen();
   const items = mentions.data?.available ? mentions.data.items : [];
   const asks = mentions.data?.available ? mentions.data.asks : [];
+  const requests = mentions.data?.available ? mentions.data.requests : [];
   const alertsUnseen = q.data?.unseen ?? 0;
   const mentionsUnseen = !mentionsOn ? 0 : open && mentions.data ? mentions.data.unseen : (me.data?.mentionsUnseen ?? 0);
   // Two server counts side by side: the badge adds them and derives nothing else.
@@ -281,7 +285,7 @@ export function AlertsBell() {
   const markAll = () => {
     if (projectId && alertsUnseen > 0) write.mutate({ channel: 'alerts:markSeen', input: { projectId, ...shownThrough(q.data?.events ?? []) } });
     // Up to the newest mention or ask the bell showed: one that lands after that stays unseen.
-    const shown = [...items, ...asks];
+    const shown = [...items, ...asks, ...requests];
     if (mentionsUnseen > 0 && shown.length) seen.mutate({ through: shown.reduce((m, x) => (x.at > m ? x.at : m), shown[0].at) });
   };
   const alerts = q.data && q.data.events.length > 0 && projectId && (
@@ -316,7 +320,7 @@ export function AlertsBell() {
     );
   } else if (mentions.isPending || (projectId && q.isPending)) {
     body = <SkeletonRows rows={3} label="Loading notifications" />;
-  } else if (!mentions.isError && !q.isError && !items.length && !asks.length && !alerts) {
+  } else if (!mentions.isError && !q.isError && !items.length && !asks.length && !requests.length && !alerts) {
     body = (
       <EmptyState compact heading={3} icon="bell" title="Nothing here yet">
         {projectId
@@ -331,6 +335,7 @@ export function AlertsBell() {
           <ErrorState compact heading={3} title="Could not read your mentions" message={mentions.error.message} onRetry={() => void mentions.refetch()} />
         ) : (
           <>
+            {requests.length > 0 && <RequestsForYou items={requests} onOpened={close} />}
             {asks.length > 0 && <AskedYou items={asks} onOpened={close} />}
             {items.length > 0 && <MentionedYou items={items} onOpened={close} />}
           </>

@@ -151,6 +151,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'reports:get': 'META',
   'reports:list': 'META',
   'reports:open': 'META',
+  'request:create': 'META', // stores the caller's own answers' chart forms for the editors (src/server/requests); returns an id, never a row or figure
   'scenario:compare': 'NET',
   'scenario:compute': 'NET',
   'scenario:get': 'META',

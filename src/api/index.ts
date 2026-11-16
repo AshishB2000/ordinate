@@ -57,6 +57,7 @@ import { semantic } from './semantic';
 import { agents } from './agents';
 import { folders } from './folders';
 import { teamTables } from './teamTables';
+import { requests } from './requests';
 
 export const contracts = {
   ...projects,
@@ -115,6 +116,7 @@ export const contracts = {
   ...agents,
   ...folders,
   ...teamTables,
+  ...requests,
 } as const;
 
 export type Channel = keyof typeof contracts;

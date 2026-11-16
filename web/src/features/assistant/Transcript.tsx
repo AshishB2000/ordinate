@@ -98,6 +98,8 @@ export function Transcript({
   /** Ask a question again in this conversation: a checked link, once added, answers the question it was found for. */
   onAsk?: (question: string) => void;
 }) {
+  // The conversation's charts on a dataset: what a viewer's "Request a dashboard" may put on it (./RequestDashboard).
+  const answers = turns.flatMap((t) => (t.role === 'assistant' && t.answer && typeof t.answer.table !== 'string' ? [{ turnId: t.id, title: t.answer.title || 'Answer' }] : []));
   return (
     <>
       {turns.map((t, i) => (
@@ -116,6 +118,7 @@ export function Transcript({
               onFollowUp={onFollowUp}
               onNotThis={onNotThis && t.guidance?.verifiedId && turns[i - 1]?.role === 'user' ? () => onNotThis(turns[i - 1].text) : undefined}
               asking={!!pending}
+              answers={answers}
             />
           )}
           {t.role === 'assistant' && t.sql && (

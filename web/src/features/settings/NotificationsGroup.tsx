@@ -1,8 +1,8 @@
 // Settings → You → Notifications (docs/notifications/00-design.md §5.12): "Email
 // me when someone mentions me" — the signed-in person's own switch, on unless
 // they turn it off. A mention still reaches them in the bell and as a notice in their
-// open tabs either way, and the row says so. "Email me when a viewer asks for data" (src/server/mentions/asks.ts) is
-// off unless they turn it on. Not shown on a server without a user
+// open tabs either way, and the row says so. "Email me about data asks and dashboard requests" (src/server/mentions/asks.ts,
+// src/server/requests) is off unless they turn it on. Not shown on a server without a user
 // directory (no one can be mentioned there); disabled, and saying why, on one
 // that sends no email.
 
@@ -19,7 +19,7 @@ export function NotificationsGroup() {
   const set = useSetMentionPrefs();
   if (prefs.isSuccess && !prefs.data.available) return null;
   return (
-    <Group title="Notifications" desc="How Ordinate reaches you when someone mentions you in a comment, or a viewer asks for data.">
+    <Group title="Notifications" desc="How Ordinate reaches you when someone mentions you in a comment, or asks for data or a dashboard.">
       {prefs.isPending ? (
         <SkeletonRows rows={1} label="Loading your notification settings" />
       ) : prefs.isError ? (
@@ -40,11 +40,11 @@ export function NotificationsGroup() {
           />
           <Switch
             className={s.switchRow}
-            label="Email me when a viewer asks for data"
+            label="Email me about data asks and dashboard requests"
             hint={
               prefs.data.mail
-                ? 'For projects you edit. A viewer’s ask always reaches you in the bell; email is off unless you turn it on.'
-                : 'No email goes out from this server; a viewer’s ask still reaches you in the bell.'
+                ? 'A viewer’s ask for data or a dashboard you can approve, and the answer to a dashboard you asked for. They always reach you in the bell; email is off unless you turn it on.'
+                : 'No email goes out from this server; asks and dashboard requests still reach you in the bell.'
             }
             checked={prefs.data.mail && prefs.data.requestEmail}
             disabled={!prefs.data.mail || set.isPending}

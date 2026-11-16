@@ -924,6 +924,24 @@ returns a viewer row. It drops `label` when it saves a source table doc, which m
 again until an editor names it once more; its rebuilds of the search index carry the older version, so upgrading again
 rebuilds once.
 
+## Viewers can request a dashboard (`0037_dashboard_requests`)
+
+A viewer can ask for a dashboard of their Assistant answers (**Request a dashboard** on an answer card); the editors
+who can approve it see it in the bell, review it with today's figures, and approve, edit or decline it, and the viewer
+is told ([design](../team-folders/00-design.md#dashboard-requests-as-built-e9)). Nothing is made until an editor
+approves. The migration adds two tables, `dashboard_requests` (the request: the answers' chart forms, never a figure)
+and `dashboard_request_inbox` (who was told, the bell's rows), with row-level security as the other per-member tables.
+It reads no record and rewrites no table. The email switch is the one Ask an editor added (`users.request_email`, off
+by default), now labelled **Settings → You → Email me about data asks and dashboard requests**. Without
+`DATABASE_URL` nothing changes: there are no viewers, and a request says so.
+
+**Rolling out.** A pod of an older release still running ignores the tables: its bell lists no requests, and a
+dashboard approved as a draft and then published by that pod does not tell its requester (the request stays *being
+edited*; publishing it again from a new pod tells them).
+
+**Rolling back.** The older release ignores the tables; requests sent meanwhile stay in them and show again after the
+next upgrade.
+
 ## Compose
 
 From a checkout:

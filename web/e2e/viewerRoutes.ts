@@ -49,6 +49,7 @@ export const SKIP: Readonly<Record<string, string>> = {
   '/about': 'version and licences: nothing of the project’s',
   '/admin': 'org admins only: the server refuses its channels to anyone else',
   '/assistant': 'the dock’s conversation full width: its writes sit on answers, which need a model the walk’s server has none of',
+  '/requests/:projectId/:requestId': 'a dashboard request’s review: approvers only (an editor with Edit on its datasets), refused to a viewer by the server; walked by requests.e2e.ts',
 };
 
 /** The route patterns of routes.tsx's source that are neither walked nor skipped. */

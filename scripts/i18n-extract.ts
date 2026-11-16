@@ -411,6 +411,7 @@ export const MAIN_FILES = [
   'src/ai/answerSqlMessages.ts',
   'src/engine/liveSqlMessages.ts',
   'src/server/teamTableMessages.ts',
+  'src/server/requestMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

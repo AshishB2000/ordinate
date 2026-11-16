@@ -98,6 +98,8 @@ export const pages: RouteObject[] = [
   page('/model/:projectId', () => import('../features/model/DataModelPage')),
   // The Assistant full width: the dock's conversation given the page (the dock is not drawn beside it).
   page('/assistant', () => import('../features/assistant/AssistantPage')),
+  // A viewer's dashboard request, as its approver reviews it (docs/team-folders, "Dashboard requests").
+  page('/requests/:projectId/:requestId', () => import('../features/dashboards/requests/RequestReviewPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
