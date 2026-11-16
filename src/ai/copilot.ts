@@ -649,16 +649,18 @@ export async function markSaved(projectId: string, threadId: string, turnId: str
 }
 
 // A source table's answer re-pointed at the dataset kept from it (../ipc/sourceKeep), on one of the CALLER's threads,
-// on a turn whose stored answer is still `from`: its spec replaced and its card computed again on open. False: no change.
-export async function replaceAnswer(projectId: string, threadId: string, turnId: string, from: AnswerSpec, to: AnswerSpec, note: string): Promise<boolean> {
-  const next = sanitizeStoredSpec(to);
+// on a turn whose stored answer is still `from`: its spec (or an SQL answer's datasets, F5) replaced and its card
+// computed again on open. `note`: what a chart's figures are now. False: no change.
+export async function replaceAnswer(projectId: string, threadId: string, turnId: string, from: TurnAnswer, to: AnswerSpec | SqlTurn, note?: string): Promise<boolean> {
+  const next = 'text' in to ? sanitizeSqlTurn(to) : sanitizeStoredSpec(to);
   if (!isValidId(projectId) || !next) return false;
   if (rows.on()) return rows.replaceAnswer(projectId, threadId, turnId, from, next, note);
   return changeThreads(projectId, async (threads) => {
     const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
     if (!turn || !holds(turn, from)) return false;
-    turn.answer = next;
-    if (turn.provenance) turn.provenance = { ...turn.provenance, note }; // what the figures are now: a Live dataset's
+    if ('text' in next) turn.sql = next;
+    else turn.answer = next;
+    if (turn.provenance && note) turn.provenance = { ...turn.provenance, note }; // what the figures are now: a Live dataset's
     delete turn.snapshot;
     await writeThreads(projectId, threads);
     return true;

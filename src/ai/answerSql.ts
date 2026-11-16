@@ -121,8 +121,12 @@ export function sqlFromReply(raw: string | null | undefined): string {
 
 // ── The turn's stored SQL (./copilot) ───────────────────────────────────────
 
-/** What an SQL answer turn keeps: the statement, the datasets it read (the gate's deps, by id) and its title. */
-export interface SqlTurn { text: string; datasetIds: string[]; title: string }
+/**
+ * What an SQL answer turn keeps: the statement, the datasets it read (the gate's deps, by id) and its title. `table`: it
+ * read a source table (docs/live-data/01-live-sql.md F5), whose doc's id is in `datasetIds`, on this connection (one per
+ * statement, F-D9), as `AnswerSpec.table`.
+ */
+export interface SqlTurn { text: string; datasetIds: string[]; title: string; table?: string }
 
 /** A stored or new SQL turn, re-sanitized; undefined when it is not one. */
 export function sanitizeSqlTurn(raw: unknown): SqlTurn | undefined {
@@ -132,7 +136,7 @@ export function sanitizeSqlTurn(raw: unknown): SqlTurn | undefined {
   const ids = Array.isArray(o.datasetIds) ? [...new Set(o.datasetIds.filter((x): x is string => isValidId(x)))] : [];
   if (!text || text.length > MAX_SQL_TEXT || !ids.length || ids.length > MAX_SQL_DATASETS || ids.length !== (o.datasetIds as unknown[]).length) return undefined;
   const title = typeof o.title === 'string' ? o.title.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) : '';
-  return { text, datasetIds: ids, title: title || 'Answer' };
+  return { text, datasetIds: ids, title: title || 'Answer', ...(isValidId(o.table) ? { table: o.table } : {}) };
 }
 
 /** Same statement: whitespace aside. */

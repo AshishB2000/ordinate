@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AnswerSql, NOT_A_CHART, NOT_CHECKED, type SqlCard } from './AnswerSql';
+import { AnswerSql, NOT_A_CHART, NOT_CHECKED, type SqlCard, type SqlTurn } from './AnswerSql';
 
 vi.mock('../../charts/Chart', () => ({ Chart: ({ label }: { label?: string }) => <div role="img" aria-label={label ?? 'Chart'} /> }));
 const role = vi.hoisted(() => ({ editor: false }));
@@ -57,10 +57,10 @@ function serve(routes: Record<string, unknown>) {
   return calls;
 }
 
-const draw = (card?: SqlCard) =>
+const draw = (card?: SqlCard, sql: SqlTurn = STORED) =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <AnswerSql projectId={PID} turn={TURN} sql={STORED} card={card} question="Which customers ordered more than once?" />
+      <AnswerSql projectId={PID} turn={TURN} sql={sql} card={card} question="Which customers ordered more than once?" />
     </QueryClientProvider>,
   );
 
@@ -126,6 +126,28 @@ describe('AnswerSql', () => {
     const sent = calls.find((c) => c.channel === 'verified:save')!.payload as { input: Record<string, unknown> };
     expect(sent.input.sql).toBe(SQL);
     expect(Object.keys(sent.input).sort()).toEqual(['note', 'phrasings', 'question', 'sql']); // the datasets are the server's, never sent
+  });
+
+  it('one that read a warehouse table straight (F5) says so and offers an editor Keep as a dataset where Verify would be', async () => {
+    const FROM_TABLE: SqlTurn = { ...STORED, table: '55555555-5555-4555-8555-555555555555' };
+    const LIVE: SqlCard = { ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'live' } };
+    serve({});
+    draw(LIVE, FROM_TABLE);
+    expect(screen.getByText('Warehouse table, not a dataset')).toBeTruthy();
+    expect(screen.queryByTestId('answer-keep-table')).toBeNull(); // a viewer: neither
+    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull();
+    cleanup();
+    role.editor = true;
+    const calls = serve({ 'answer:keepTable': { ok: true, datasetId: DID } });
+    draw(LIVE, FROM_TABLE);
+    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull(); // a verified question names datasets: Keep first
+    fireEvent.click(screen.getByTestId('answer-keep-table'));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'answer:keepTable')).toBe(true));
+    expect(calls.find((c) => c.channel === 'answer:keepTable')!.payload).toEqual({ projectId: PID, ...TURN });
+    cleanup();
+    draw(LIVE); // kept: the turn names datasets, no table
+    expect(screen.queryByText('Warehouse table, not a dataset')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy();
   });
 
   it('a verified statement says who verified it, and is neither Not checked nor offered Verify', () => {

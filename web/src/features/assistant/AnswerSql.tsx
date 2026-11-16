@@ -9,6 +9,8 @@
 // Like ./AnswerCard, a conversation's answer brings the table it kept (`card`), dated with Refresh (./AnswerKept); one it
 // did not bring (too big to keep, or the person's access changed) runs again through `answer:refresh` and is kept. Over
 // Live datasets (docs/live-data/01-live-sql.md, F3) the warehouse answered it: a card not kept says so ("Live · 2:05 AM").
+// One that read a warehouse table straight (F5, `sql.table`) says so and offers Keep as a dataset (./KeepTable) where
+// Verify would be: a verified question names datasets, and once kept the same SQL reads them.
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -28,6 +30,7 @@ import { liveRefusalOf } from '../live/refusal';
 import { ACCESS_CHANGED, KeptAsOf } from './AnswerKept';
 import type { Card, Kept } from './AnswerCard';
 import { SaveAsVerified } from './SaveAsVerified';
+import { KeepTable } from './KeepTable';
 import { keepInConversation } from './api';
 import s from './AnswerCard.module.css';
 import q from './AnswerSql.module.css';
@@ -52,8 +55,8 @@ export interface SqlCard {
   asOf?: AsOf;
 }
 
-/** What an SQL answer turn stores (src/ai/answerSql.ts `SqlTurn`): the statement, the datasets it read, its title. */
-export interface SqlTurn { text: string; datasetIds: string[]; title: string }
+/** What an SQL answer turn stores (src/ai/answerSql.ts `SqlTurn`): the statement, the datasets it read, its title, and the connection of a source table it read. */
+export interface SqlTurn { text: string; datasetIds: string[]; title: string; table?: string }
 
 export const isSqlCard = (c: Card | SqlCard | undefined): c is SqlCard => !!c && 'kind' in c && c.kind === 'sql';
 
@@ -118,12 +121,14 @@ export function AnswerSql({ projectId, turn, sql, card: kept, question }: {
     );
   }
   const snap = card.snapshot;
+  const fromTable = typeof sql.table === 'string';
   return (
     <div className={s.card} data-testid="answer-sql">
       <div className={s.head}>
         <div className={s.title}>{card.title || sql.title}</div>
         <div className={s.meta}>
           <span className={s.dataset}>{card.datasets.join(', ')}</span>
+          {fromTable && <span className={s.tableNote}>Warehouse table, not a dataset</span>}
           {snap && <KeptAsOf projectId={projectId} turn={turn} kept={snap} />}
           {!snap?.asOf && <AsOfCaption asOf={card.asOf} className={s.asOf} />}
           {card.verified ? (
@@ -178,7 +183,7 @@ export function AnswerSql({ projectId, turn, sql, card: kept, question }: {
               {table ? 'Hide table' : 'Show table'}
             </Button>
           )}
-          {!card.verified && <SaveAsVerified projectId={projectId} sql={card.sql} question={question ?? ''} label="Verify" />}
+          {fromTable ? <KeepTable projectId={projectId} turn={turn} /> : !card.verified && <SaveAsVerified projectId={projectId} sql={card.sql} question={question ?? ''} label="Verify" />}
           <span className={q.notChart}>{NOT_A_CHART}</span>
         </div>
       </div>

@@ -104,6 +104,18 @@ export async function inSourceTable<T>(projectId: string, spec: Pick<AnswerSpec,
 }
 
 /**
+ * `fn` inside the views of the source tables an SQL answer read (docs/live-data/01-live-sql.md F5: `sql.table` their one
+ * connection, their docs' ids among `sql.datasetIds`), or `fn` as it is. Docs in one read, the connection once. For a
+ * caller who may not see source names, `fn` outside any view, where a table's id is no dataset.
+ */
+export async function inSqlTables<T>(projectId: string, sql: { datasetIds: readonly string[]; table?: string } | undefined, fn: () => Promise<T>): Promise<T> {
+  const connId = sql?.table;
+  if (!connId || !(await seesSourceNames(projectId))) return fn();
+  const views = (await tablesOf(projectId, sql.datasetIds.map((docId) => ({ connId, docId })))).flatMap((t) => (t.view ? [t.view] : []));
+  return views.length ? withSourceViews(projectId, views, fn) : fn();
+}
+
+/**
  * A channel's call on a source table target (Explore, phase D): `table` names the connection and `datasetId` the table's
  * doc, as `AnswerSpec.table` does. `fn` runs inside the table's view, so every door it reaches answers the view as a Live
  * dataset; with no `table`, `fn` as it is. A table that cannot be answered from is `{ ok: false, error }` and `fn` never

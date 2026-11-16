@@ -19,7 +19,8 @@ export interface SourceTableEntry {
 // No digit here: the frame adds nothing to the ledger.
 const FRAMING = [
   'SOURCE TABLES — warehouse tables on the project\'s connections that no dataset is made from. An answer may name one as',
-  'its "dataset", exactly as written here: the app asks the warehouse live and creates nothing. Prefer a dataset above',
+  'its "dataset" (an "sql" line among its "datasets"), exactly as written here: the app asks the warehouse live and',
+  'creates nothing. Prefer a dataset above',
   'that has the columns. A table marked "copy first" is not asked live: answering from it means copying it into Ordinate.',
 ].join('\n');
 

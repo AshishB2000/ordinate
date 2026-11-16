@@ -579,7 +579,7 @@ export function register() {
         // full details, and the Query tab's gate runs it. Its figures are DuckDB's; the turn's words stay this call's sentence.
         if (!sharing && action.kind === 'sql') {
           emit({ kind: 'model', label: 'Asked the model to write SQL' });
-          answer = await sqlAnswer(projectId, action, q, scope.only ?? undefined, scope.agent?.model);
+          answer = await sqlAnswer(projectId, action, q, scope.only ?? undefined, scope.agent?.model, asked); // an editor's Home question may name its source tables
           if (answer.ok) emit({ kind: 'compute', label: 'Ran the SQL through the Query tab\'s checks' });
         }
 
