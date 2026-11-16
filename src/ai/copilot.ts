@@ -86,6 +86,11 @@ export interface CopilotTurn {
   /** What a refused answer needs an editor to add (./answerNeeds): Ask an editor's reason, and outcome E's checked link. Never beside `answer`. */
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
+  /**
+   * The datasets this answer's facts were built from (copilot:ask; a turn stored before it has none), so ../ipc/turnsOpen
+   * hides its words, prose with no chart included, from a caller one is closed to. SERVER ONLY: `turnsForBrowser` drops it.
+   */
+  factsFrom?: string[];
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -136,6 +141,7 @@ export interface NewCopilotTurn {
   outside?: { dataset: string };
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
+  factsFrom?: string[];
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -153,6 +159,8 @@ export interface CopilotFacts {
    * runtime guard only.
    */
   ledger: LedgerEntry[];
+  /** The datasets its figures were read from, where the ask's own (../ipc/askTableFacts `askDatasets`) are not them: a dashboard's, a capture's. */
+  datasetIds?: string[];
 }
 
 // Ring-cap so one conversation can't grow unbounded.
@@ -241,6 +249,12 @@ function sanitizeOutside(raw: unknown): { dataset: string } | undefined {
   return dataset ? { dataset } : undefined;
 }
 
+/** A turn's `factsFrom`: its dataset ids, once each. */
+function sanitizeIds(raw: unknown): string[] | undefined {
+  const ids = Array.isArray(raw) ? [...new Set(raw.filter(isValidId))] : [];
+  return ids.length ? ids : undefined;
+}
+
 // Re-sanitize a stored turn list (drop non-object turns, clamp role, coerce text
 // to string, keep/repair id + createdAt, whitelist provenance), then ring-cap.
 export function normalizeTurns(raw: any): CopilotTurn[] {
@@ -273,6 +287,8 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     const outside = role === 'assistant' && !answer ? sanitizeOutside(t.outside) : undefined;
     if (outside) turn.outside = outside;
     if (role === 'assistant' && !answer) Object.assign(turn, sanitizeNeeds(t));
+    const factsFrom = role === 'assistant' ? sanitizeIds(t.factsFrom) : undefined;
+    if (factsFrom) turn.factsFrom = factsFrom;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -581,6 +597,8 @@ export async function appendTurn(
   const outside = role === 'assistant' && !answer ? sanitizeOutside(turn && turn.outside) : undefined;
   if (outside) record.outside = outside;
   if (role === 'assistant' && !answer) Object.assign(record, sanitizeNeeds(turn));
+  const factsFrom = role === 'assistant' ? sanitizeIds(turn && turn.factsFrom) : undefined;
+  if (factsFrom) record.factsFrom = factsFrom;
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {

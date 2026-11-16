@@ -162,15 +162,16 @@ const CURSOR_RE = /^(-?\d{1,18})\.(\d{1,19})$/;
 /**
  * Shared folders (docs/team-folders, ../ipc/turnsOpen): for a caller restricted to the folders `$5` (NULL: nobody
  * restricts them, the count is every turn), each conversation's turns as they are shown — an answer on a dataset
- * outside `$5` (0034 `ordinate_turn_datasets`) is not, nor a question whose next turn is one — and its first question,
- * with whether it is shown (a title taken from a hidden one reads untitled). In the page's one query.
+ * outside `$5` (0039 `ordinate_turn_shows`: its chart's, options', SQL's and facts') is not, nor a question whose next
+ * turn is one — how many it has, and its first question, with whether it is shown (a title taken from a hidden one reads
+ * untitled). In the page's one query, whose WHERE leaves out a conversation with turns and none of them shown.
  */
 const SHOWN = `LEFT JOIN LATERAL (
-    SELECT count(*) FILTER (WHERE NOT x.closed AND NOT (x.role = 'user' AND x.next_closed))::int AS shown,
+    SELECT count(*) FILTER (WHERE NOT x.closed AND NOT (x.role = 'user' AND x.next_closed))::int AS shown, count(*)::int AS stored,
       (array_agg(x.text ORDER BY x.seq) FILTER (WHERE x.role = 'user' AND x.text ~ '\\S'))[1] AS first_q,
       (array_agg(x.next_closed ORDER BY x.seq) FILTER (WHERE x.role = 'user' AND x.text ~ '\\S'))[1] AS first_q_hidden
     FROM (SELECT u.seq, u.role, u.text, c.closed, coalesce(lead(c.closed) OVER (ORDER BY u.seq), false) AS next_closed
-            FROM assistant_turns u CROSS JOIN LATERAL (SELECT u.role = 'assistant' AND EXISTS (SELECT 1 FROM unnest(ordinate_turn_datasets(u.body)) AS d(id)
+            FROM assistant_turns u CROSS JOIN LATERAL (SELECT u.role = 'assistant' AND EXISTS (SELECT 1 FROM unnest(ordinate_turn_shows(u.body)) AS d(id)
               WHERE ${folderOf("'dataset'", 'd.id', 'u.org_id', 'u.project_id')} <> ALL($5::uuid[])) AS closed) c
            WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) x) v ON $5::uuid[] IS NOT NULL`;
 
@@ -181,7 +182,7 @@ export async function listPage(projectId: string, after?: string, open: readonly
   const page = copilot.THREAD_PAGE;
   const r = await tx(false, (c, org) => c.query<ThreadRow & { shown: number | null; first_q: string | null; first_q_hidden: boolean | null }>(
     `${SUMMARY.replace(' FROM assistant_threads t', `, v.shown, v.first_q, v.first_q_hidden FROM assistant_threads t ${SHOWN}`)}
-      WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
+      WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND ($5::uuid[] IS NULL OR v.shown > 0 OR v.stored = 0)
        ${from ? `AND (t.updated_at, t.touched) < (timestamptz 'epoch' + $6::bigint * interval '1 microsecond', $7::bigint)` : ''}
      ${RECENT} LIMIT $4`,
     [org, projectId, me(), page + 1, open, ...(from ? [from[1], from[2]] : [])],

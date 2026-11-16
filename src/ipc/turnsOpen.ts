@@ -1,6 +1,6 @@
 // A conversation as a caller a shared folder restricts may see it (docs/team-folders/00-design.md, "The Assistant's
 // history, as built") — MAIN PROCESS. An answer about a dataset they cannot open (its chart's, a "Did you mean"
-// option's, or any its SQL answer read) is gone, with the question just before it: from every reply that carries turns (./answerSnapshots
+// option's, any its SQL answer read, or any its facts were built from: `factsFrom`, a prose answer's too) is gone, with the question just before it: from every reply that carries turns (./answerSnapshots
 // `turnsForBrowser`: copilot:history, copilot:ask, answer:rerun, a verified hit), from the turns the model is replayed
 // (copilot:ask), and from the chart a follow-up continues. A title taken from such a question reads as an untitled
 // conversation's. Nothing is deleted: open the folder to them again and the turns are back.
@@ -14,10 +14,12 @@
 import { levelsOf } from '../server/authz/folderGate';
 import * as copilot from '../ai/copilot';
 
-type Turn = Pick<copilot.CopilotTurn, 'role' | 'text' | 'answer' | 'suggest' | 'sql'>;
+type Turn = Pick<copilot.CopilotTurn, 'role' | 'text' | 'answer' | 'suggest' | 'sql' | 'factsFrom'>;
 
-/** The datasets an assistant turn shows: its chart's, its "Did you mean" options' and every one its SQL answer read. */
-const shows = (t: Turn): string[] => [...(t.answer ? [t.answer.datasetId] : []), ...(t.suggest?.options ?? []).map((o) => o.spec.datasetId), ...(t.sql?.datasetIds ?? [])];
+/** The datasets an assistant turn shows: its chart's, its "Did you mean" options', every one its SQL answer read and its facts' (0039 `ordinate_turn_shows`). */
+const shows = (t: Turn): string[] => [
+  ...(t.answer ? [t.answer.datasetId] : []), ...(t.suggest?.options ?? []).map((o) => o.spec.datasetId), ...(t.sql?.datasetIds ?? []), ...(t.factsFrom ?? []),
+];
 
 /** `turns` without each answer on a dataset the caller cannot open, and a question just before one. The same array when nothing restricts. */
 export async function openTurns<T extends Turn>(projectId: string, turns: readonly T[]): Promise<T[]> {

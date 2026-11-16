@@ -202,10 +202,10 @@ export async function statsPanelFacts(projectId: string, raw: unknown): Promise<
   const meta = await datasets.getDatasetMeta(projectId, spec.datasetId);
   if (!meta) return null;
   const hidden = await withheld(projectId, spec);
-  if (hidden) return withheldFacts(spec, hidden, meta.name);
+  if (hidden) return { ...withheldFacts(spec, hidden, meta.name), datasetIds: [spec.datasetId] };
   const out = await compute<StatsResult>(projectId, spec);
   if (!out.ok) return null;
-  return statsFacts([{ spec, result: out.value }], out.datasetName);
+  return { ...statsFacts([{ spec, result: out.value }], out.datasetName), datasetIds: [spec.datasetId] };
 }
 
 /** Append the facts of every "stats" tile on a dashboard's sheets to its facts — each under `filters`, the sheet's, as `stats:tile` computes it. */
@@ -222,7 +222,7 @@ export async function withStatsTiles(projectId: string, pages: dashboards.Page[]
   }
   if (!items.length) return base;
   const extra = statsFacts(items, name);
-  return { ...base, text: base.text + '\n\nStatistics tiles on this dashboard:\n' + extra.text, ledger: [...base.ledger, ...extra.ledger] };
+  return { ...base, text: base.text + '\n\nStatistics tiles on this dashboard:\n' + extra.text, ledger: [...base.ledger, ...extra.ledger], datasetIds: [...(base.datasetIds ?? []), ...items.map((i) => i.spec.datasetId)] };
 }
 
 /** Append a "stats" card (6×6) under everything on the last sheet of a dashboard, or of a new one. */

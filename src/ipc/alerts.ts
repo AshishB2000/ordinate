@@ -109,6 +109,7 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
       role: 'assistant',
       text: guardAnswer(res.text, facts.ledger).text,
       provenance: facts.provenance,
+      factsFrom: [event.datasetId], // its words leave history with the dataset (./turnsOpen)
     }, thread.id);
     return thread.id;
   } catch (err: any) {
