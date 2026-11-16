@@ -141,14 +141,22 @@ characters of tables. `test-askBudget`: 12 more record reads on Home and 10 for 
 hits, no query. A doc with no facts, a dataset that is not Live, or a report's narrative (its words
 leave the app) adds nothing.
 
-**Refreshed without a click.** There is no schedule per connection: the scheduled job that reads a
-connection's catalog is a Live dataset's daily schema sync, so the facts ride it, on the same visit
-to the warehouse (`src/ipc/sourceFactsRefresh.ts`). After a scheduled sync lands, its documented
-source tables whose facts are 12 hours old or were never read are read again, stalest first, at
-most 4 per sync, through the click's own door (`readFacts` → `src/connectors/tableFactsRun.ts`: the
-SSRF guard, timeouts, redaction) and its 60-an-hour count per connection. A failed read keeps the
-stored facts and never fails the sync; a sync on demand reads none. Extracts' tables are still read
-only on a click. Tested in `test-tableFactsPrompt` (and `test-askNoProjectLists`).
+**Refreshed without a click (as built).** Two ways, both through the click's own door (`readFacts` →
+`src/connectors/tableFactsRun.ts`: the SSRF guard, timeouts, redaction) and its 60-an-hour count per connection, in
+`src/ipc/sourceFactsRefresh.ts`. A failed read keeps the stored facts.
+
+- **On a Live dataset's daily schema sync**, which reads the connection's catalog anyway, so its facts ride the same
+  visit to the warehouse. After a scheduled sync lands, its documented source tables whose facts are 12 hours old or
+  were never read are read again, stalest first, at most 4 per sync; a failure never fails the sync, and a sync on
+  demand reads none. Tested in `test-tableFactsPrompt` (and `test-askNoProjectLists`).
+- **The `sourceTable:facts` job**, one row per org in the jobs table (any pod claims it, `FOR UPDATE SKIP LOCKED` under
+  the runner's lease, so never two pods on one org), hourly, with Postgres only. Every documented table of the org, of
+  any connection whose connector reads facts (extract or Live: facts are metadata), whose facts are older than
+  `TABLE_FACTS_MAX_AGE_HOURS` (24) or were never read, stalest first, at most 20 reads a run (a failed one counts), none
+  started past the runner's deadline. The stamp is the click's: `readAt` now, `readBy` the jobs identity
+  (`jobs@system`). A connection whose read fails is logged in one line (the door's `safeError`, no secret) and its other
+  tables wait for the next run, which tries again. No documented table: nothing is read. Tested in
+  `test-tableFactsRefresh` (the lease, with Postgres) and counted in `test-jobs-pods`.
 
 ### Step 4: outcomes
 

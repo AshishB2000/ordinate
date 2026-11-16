@@ -271,6 +271,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   publicOrigin(src.ORDINATE_PUBLIC_URL);
   // FRESH_ON_ASK_WAIT_MS (live data, L3.1): read by src/data/freshOnAsk.ts at each ask; a typo stops startup here.
   freshOnAskWaitMs(src.FRESH_ON_ASK_WAIT_MS);
+  // TABLE_FACTS_MAX_AGE_HOURS: read by the `sourceTable:facts` job (src/ipc/sourceFactsRefresh.ts) at each run, the same way.
+  tableFactsMaxAgeMs(src.TABLE_FACTS_MAX_AGE_HOURS);
   const duckdb = parseDuck(src);
   const limits = Object.freeze({
     loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
@@ -417,6 +419,11 @@ export function freshOnAskWaitMs(raw: string | undefined): number {
     throw new EnvError(`FRESH_ON_ASK_WAIT_MS must be a whole number of milliseconds 0-${MAX_FRESH_ON_ASK_WAIT_MS}, got ${JSON.stringify(raw)}`);
   }
   return Number(raw);
+}
+
+/** TABLE_FACTS_MAX_AGE_HOURS: a documented source table's facts older than this are read again by its org's job. Pure. */
+export function tableFactsMaxAgeMs(raw: string | undefined): number {
+  return positiveInt('TABLE_FACTS_MAX_AGE_HOURS', raw, 24) * 3_600_000;
 }
 
 function positiveInt(name: string, raw: string | undefined, dflt: number): number {

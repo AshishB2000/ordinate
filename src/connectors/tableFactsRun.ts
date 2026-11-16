@@ -1,12 +1,12 @@
 // The facts door — MAIN PROCESS ONLY (docs/semantic-layer/02-source-tables.md, D6, D15).
 //
 // The ONE way the app reads a warehouse table's comments, keys and partitions: `readFacts`
-// (src/ipc/sourceTableRead.ts) calls it on an editor's click and on a Live dataset's daily schema
-// sync, and nothing else does. It is built like `describeTable` in
-// connectionRun: the bounded context, the SSRF guard, every error through safeError. It takes the
-// connector's `tableFacts` when it has one and `describeTable` otherwise (never both), then redacts
-// every string in the answer and cuts it to the whitelist, because a warehouse can store a
-// password in a comment as readily as it can echo one in an error.
+// (src/ipc/sourceTableRead.ts) calls it on an editor's click, on a Live dataset's daily schema
+// sync and in the `sourceTable:facts` job (src/ipc/sourceFactsRefresh.ts), and nothing else does.
+// It is built like `describeTable` in connectionRun: the bounded context, the SSRF guard, every
+// error through safeError. It takes the connector's `tableFacts` when it has one and `describeTable`
+// otherwise (never both), then redacts every string in the answer and cuts it to the whitelist,
+// because a warehouse can store a password in a comment as readily as it can echo one in an error.
 //
 // It is not a Live statement: no `warehouse()`, no `live_usage`, no `runBound` (test-liveUsage).
 
@@ -14,7 +14,7 @@ import { buildContext, guardHost, unknownConnector } from './connectionRun';
 import { noFactColumns } from './connectorMessages';
 import { getConnector } from './index';
 import { FACTS_ROWS, sanitizeFacts, type TableFacts } from './tableFacts';
-import { redactSecrets, safeError } from './types';
+import { redactSecrets, safeError, type ConnectorDef } from './types';
 
 export { FACTS_ROWS }; // defined beside the sanitizer so a family's reader can read it without importing the registry
 
@@ -26,7 +26,10 @@ function redacted<T>(v: T, secrets: Record<string, string>): T {
   return v;
 }
 
-/** null: this connector can read neither facts nor columns (SaaS, Trino, Presto, Elasticsearch, OpenSearch, Druid). */
+/** This connector reads a table's facts, or at least its columns; not SaaS, Trino, Presto, Elasticsearch, OpenSearch, Druid. */
+export const canReadFacts = (def: ConnectorDef | null | undefined): boolean => typeof def?.tableFacts === 'function' || typeof def?.describeTable === 'function';
+
+/** null: this connector can read neither facts nor columns (`canReadFacts`). */
 export async function readTableFacts(
   connectorId: unknown,
   values: Record<string, unknown>,
@@ -35,7 +38,7 @@ export async function readTableFacts(
 ): Promise<{ ok: true; facts: TableFacts } | { ok: false; error: string } | null> {
   const def = getConnector(connectorId);
   if (!def) return { ok: false, error: unknownConnector(connectorId) };
-  if (typeof def.tableFacts !== 'function' && typeof def.describeTable !== 'function') return null;
+  if (!canReadFacts(def)) return null;
   const ctx = buildContext(values, secrets, { rowLimit: FACTS_ROWS });
   const refused = await guardHost(def, ctx);
   if (refused) return { ok: false, error: refused };
