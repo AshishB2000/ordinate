@@ -255,8 +255,9 @@ async function fileLeg(): Promise<void> {
   const stored = JSON.parse(await as(ADMIN, 'admin', () => recordFs.readFile(path.join(recordKinds.projectDir(P), 'verified', `${vid}.json`), 'utf8')));
   ok('5. the record: the statement and the gate\'s datasets, no spec, no figure', stored.sql?.text === JAN_NOT_FEB && stored.sql.datasetIds.join() === orders && !('spec' in stored) && !JSON.stringify(stored).includes('Globex'), show(stored));
   ok('5. a chart reader (an older pod\'s) skips it; the SQL reader reads it', vRules.sanitizeVerified(stored) === null && (await as(ADMIN, 'admin', () => vStore.listTagged(P))).length === 0 && (await as(ADMIN, 'admin', () => vStore.listBoth(P))).sql.length === 1);
-  ok('5. the index describes it under its first dataset (VERIFIED_INDEX_VERSION 3 rebuilds an older pod\'s build)', vIndex.VERIFIED_INDEX_VERSION === 3
-    && JSON.stringify(vLookup.describeVerified(P, vid, JSON.stringify(stored)).map((r) => [r.ord, r.datasetId])) === JSON.stringify([[0, orders]]));
+  // VERIFIED_INDEX_VERSION 3 (this lane) and 4 (shared folders' `reads`, 0034: every dataset it reads) rebuild an older pod's build.
+  ok('5. the index describes it under its first dataset, with every one it reads', vIndex.VERIFIED_INDEX_VERSION >= 3
+    && JSON.stringify(vLookup.describeVerified(P, vid, JSON.stringify(stored)).map((r) => [r.ord, r.datasetId, r.reads])) === JSON.stringify([[0, orders, [orders]]]));
   const taken = await call(ADMIN, 'verified:save', { projectId: P, input: { question: 'customers who bought in january, but not february?', spec: { datasetId: orders, category: 'customer', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'column' } } });
   ok('5. its words are taken, for a chart\'s question too', taken.ok === false && taken.error === vMsg.verifiedTaken('customers who bought in january, but not february?'), show(taken));
   ok('5. a write statement is never verified', (await call(ADMIN, 'verified:save', { projectId: P, input: { question: 'Wipe', sql: 'DROP TABLE orders' } })).ok === false);

@@ -332,6 +332,70 @@ The read-everything reference paths filter through the same caller-aware stores,
 differential tests (`test-searchIndex`, `test-assistantSearch`, `test-verifiedIndex`) keep holding the
 index to the reference, now per caller.
 
+### Indexes, as built (E4)
+
+- **One condition, in each query's WHERE** (`src/server/authz/folderSql.ts`, pure SQL text, as recordFs imports the
+  index modules): `folderOf(kind, id)` is the item's folder read from `folder_items` inside the query (the project id,
+  Everyone, when never moved; ids compared lowercased), `opensDataset(col, $open)` is "that folder is one the caller
+  opens, or the row has no dataset", and `searchRowShown` is ⌘K's. `$open` (and ⌘K's `$edit`) come from the resolver
+  (`folderGate.indexFolders`): its `open` set, NULL when nothing restricts the caller (an admin, a `wholeProject` walk, a
+  published page, a project with no folder besides Everyone), and then the planner folds the condition away. It is a
+  positive test (`folderOf(…) = ANY($open)`) rather than the table's anti-join: it is the same rows, and a caller with
+  no project role opens nothing. A seam (`setIndexWhereForTest`) drops it alone, for the negative controls.
+- **⌘K** (0034): `describeRecord` anchors each row — a dataset to itself; a visual and a metric to their dataset; a
+  dashboard and its saved views to the dashboard; an alert rule to its dashboard when it was made from one, else its
+  dataset; a report to its dashboard, else `many`; a connection to `project`. `query` and `countKinds` keep a dataset's
+  rows when it is open, a dashboard's draft row where the caller edits its folder and its published row elsewhere (D8; a
+  caller who reads every dashboard as published edits none), and what follows a dashboard at either level. Only a
+  restricted caller's `many` rows (a report from a scorecard) are checked after ranking, by id through
+  `reportSpec.getReport`, a page at a time. A `NULL` anchor never reaches a restricted caller. `unbuilt` reads in the
+  same statement whether the project has a folder: without one the resolver never runs, so ⌘K makes exactly the
+  statements it made before (the net's section 0: 17 and 18 for an editor and a viewer, with the folder code on and
+  off; NEGATIVE CONTROL: resolving without asking reads a tree). With folders on P it reads P's tree once (20 and 21).
+  `INDEX_VERSION` 3 rebuilds each source once.
+- **The Assistant's search** (no migration: rows carry `dataset_id`): `opensDataset` in `rankedPage` (the prefilter of
+  items, before the grouping, the order and the LIMIT), `nearestPage` (the allowed items, before any distance or LIMIT:
+  meaning search), `foundItems` (the counts), `keyedItems` (the names an answer says) and `newestItems` (Home's
+  datasets); `RankOptions.open`. Source tables (no dataset) as before, until E8. `hidingDatasets` is a security walk and
+  sees the whole project (D14).
+- **The verified lookup**: `keyHits`, `datasetHits`, `rankedIds` and `nearestIds` carry it, on the question's dataset and
+  on every dataset it reads (`verified_keys.reads`, 0034, `opensAll`): a verified SQL question (#528) is indexed under the
+  first dataset it reads, and is found only by a caller who opens all of them, as `listBoth` lists it.
+  `verifiedSqlNamed`'s by-id read keeps the same rule (`sqlOpen`). MCP's by-id lookup
+  (`indexedNamed`) also reads the question named by its id, so that read goes through `openOnly`, as `getVerified` does.
+  A question on a dataset the stores read as missing does not run either, so the verified paths have two guards.
+- **Spelling** (#526's "Did you mean" by pg_trgm, 0031): `speltPage`'s `findable` condition carries `opensDataset` on
+  `b.dataset_id`, from `RankOptions.open`, in both its queries — the pg_trgm one, before its similarity order and LIMIT,
+  and the fallback that reads the names for the reference to rank — so `answerCheck`'s candidates are the caller's.
+  `test-nameSpelling` 8 holds the differential per caller on both paths (NEGATIVE CONTROL: without the WHERE the viewer is
+  offered the closed dataset and the differential fails).
+- **The Assistant's history** (`src/ipc/turnsOpen.ts`): for a caller a folder restricts, an answer whose chart, "Did
+  you mean" option or SQL (any dataset of `sql.datasetIds`) is on a dataset they cannot open is dropped with the question it answered — from every reply that
+  carries turns (`turnsForBrowser`: `copilot:history`, `copilot:ask`, `answer:rerun`, a verified hit), from the turns
+  `copilot:ask` replays to the model and the chart a follow-up continues. A title taken from such a question reads
+  *Conversation*; a renamed one is the caller's own words and stays. The list counts only the turns the caller is shown,
+  and says whether its first question is one, in the page's one query (`copilotRows.listPage`): the same rule in SQL —
+  a turn is hidden when it is an answer on a dataset outside `$open` (0034 `ordinate_turn_datasets` reads them from its
+  body) or a question whose next turn is one; with no folder the count is every turn, as before. Nothing is deleted: open the folder to them and the turns are back. A kept card on
+  such a dataset could never be sent anyway (its record reads as missing, E2), and `answer:refresh` of it refuses at the
+  door. **Ceiling**: a turn stored without a chart (a prose answer from a dataset's facts) names no id, so its words
+  stay.
+- **The budget**: `test-askBudget`'s cases did not move (92 / 88 / 75 / 120 / 112 / 22; meaning on 106 / 97 / 84 / 137
+  / 119). A new case asks as a viewer in team Ops with Orders in Ops and 50 datasets in a folder only admins open:
+  132–138 queries (the bare viewer's 120, the datasets' placements, five records read one at a time), and the index
+  statements are as many with the WHERE as without it (10 and 10). `test-askNoProjectLists` asks as that Ops viewer: no
+  whole-project list, and Finance's dataset never in the facts (NEGATIVE CONTROL: without the WHERE it is).
+- **The net**: section 6 (`scripts/folderNetIndexes.ts`) on Finance's canaries, made in Everyone, talked about there by
+  opsViewer and finViewer, then placed in Finance: for five people every index answer is the reference's, and opsViewer,
+  opsLead and ed find nothing of Finance or HR by ⌘K, words, spelling (a typo sharing no word, and its "Did you mean"),
+  meaning (a fake embedder), the counts, the verified lookup or their history, whose counts are of the turns they are
+  shown; NEGATIVE CONTROLS: finViewer and padmin do; without the WHERE, opsViewer's ⌘K, words, spelling and meaning carry
+  Finance's, and their list would count the hidden turns; an anchor-less row is not returned to opsViewer but is to padmin; an anchor in another case is still
+  filtered. `LATER` is empty: the sweep holds `search:query`, `copilot:history` and `copilot:threads` (NEGATIVE CONTROL:
+  padmin's carry HR's canaries).
+- **Left for later**: reach (E5) needs nothing here — the indexes keep only folders the caller opens, so a reached
+  dataset is never searched (D9). E6's writes, and the context a prose turn was asked in (to drop it as well), remain.
+
 ### Pushes, mentions and recipients (D17)
 
 - `toReaders` gains an anchor: `alerts:fired` and quality pushes go to `openerEmails(anchor)`;
@@ -566,14 +630,15 @@ the dashboard from Home.
 ## Migrations
 
 Numbers are the next free ones when each PR lands: 0029 was the last on `develop` and 0030–0031 went to
-other open PRs, so E1 took 0032 and the rows after it are provisional. All additive, forced
+other open PRs, so E1 took 0032. 0033 went to an open PR (#525, `editor_asks`) and 0031 to the spelling PR (#526), so E4
+took 0034 and every row after it moved on by one; they stay provisional. All additive, forced
 row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids compared in "C".
 
 | Migration | What |
 |---|---|
 | 0032 `folders` (E1, as built) | `folders (org_id, project_id, id, parent_id NULL, name, share_figures bool default true, created_by, created_at)`, `id <> project_id`, names 1–120 characters, and a generated `parent_folder` (= `NULLIF(parent_id, project_id)`) with a foreign key to the parent, so a parent in another project and deleting a folder that has subfolders are refused (a whole subtree goes in one statement); a unique index on `(org_id, project_id, coalesce(parent_id, <the zero uuid>), lower(name))`; `folder_grants (org_id, project_id, folder_id, team_id, level CHECK IN ('view','edit'))`, PK `(org_id, project_id, folder_id, team_id)`, an index by team, with `(team_id, org_id)` → `teams` ON DELETE CASCADE and → `folders` ON DELETE CASCADE; `folder_items (org_id, project_id, kind, item_id text, folder_id, moved_by, moved_at)`, PK `(org_id, project_id, kind, item_id)`, `item_id` lowercase-checked, → `folders` ON DELETE RESTRICT; an index on `(org_id, project_id, folder_id)` |
 | 0033 `editor_asks` (Ask an editor, as built) | `editor_asks (org_id, user_email, id, project_id, asker, question, reason, note, created_at, seen_at)`, forced RLS; `users.request_email boolean NOT NULL DEFAULT false` ("Email me when a viewer asks for data"; dashboard requests reuse it) |
-| 0034 `search_anchors` | `search_entries.anchor_kind`, `anchor_id` (nullable, no default rewrite) |
+| 0034 `search_anchors` (E4, as built) | `ordinate_turn_datasets(body)` (an Assistant turn's chart, "Did you mean" and SQL answer datasets, `{}` for a body that is no JSON: the conversation list's count of shown turns); `search_entries.anchor_kind`, `anchor_id` (nullable, no table rewrite, `COLLATE "C"`); `verified_keys.reads` (every dataset a verified question reads: an SQL question's all); `search_anchors_stale()` and the trigger `records_search_anchors_written` (INSERT or UPDATE on `records`): a write whose transaction does not set `ordinate.search_anchors` = 'on' drops that ⌘K source's marker, or the project's verified one, 0030's pattern. No DELETE trigger: an older pod's delete removes its rows as this release would |
 | 0035 `dashboard_reads` | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; the trigger on `records` for writers without `ordinate.folders` |
 | 0036 `team_tables` | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, team → `teams` ON DELETE CASCADE |
 | 0037 `dashboard_requests` | the table above with indexes for an approver's open list and a requester's own (`users.request_email`, off by default, is already there: Ask an editor's 0033 made it, and requests use the same switch) |

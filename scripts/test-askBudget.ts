@@ -27,6 +27,9 @@
 //   6. Q8: the facts of one Home question, built alone (no model call), timed and printed with their parts.
 //   5. SAME REPLY: in every case, memo on and off, the model is sent the same facts, and the reply's answer, chart,
 //      provenance, action, ledger, audit and guidance are the same, with Object.is.
+//   8. SHARED FOLDERS (docs/team-folders E4): case (d) again with Orders in a folder Ops the viewer's team opens and 50
+//      datasets in one only admins open: it answers, under its ceiling, and the indexes' WHERE condition (D13) costs no
+//      statement — the same ask with it off makes as many (NEGATIVE CONTROL: off, the index hands the viewer a closed dataset).
 //   7. MEANING ON (PR 7c; pgvector, ORDINATE_EXPECT_PGVECTOR=1 fails without it): a fake fingerprint model, every item
 //      fingerprinted by the job, then cases (a) to (e) again: ONE embed call each, and their own ceilings; (d) once more
 //      with every batched record read 200 ms late (a slow run's interleaving): no more statements than at full speed.
@@ -76,12 +79,20 @@ const rowDoors: Record<string, unknown> = require('../src/ipc/rowDoors');
 const liveAnswers: Record<string, unknown> = require('../src/ipc/liveAnswers');
 const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
 const { logger }: typeof import('../src/app/logger') = require('../src/app/logger');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+import { clearFolders, plantFolder } from './folderFixture';
 
 type Role = import('../src/server/context').Identity['user']['role'];
 const HR_TEAM = '11111111-1111-4111-8111-111111111111';
 let req = 0;
+/** The project rank the RPC route seeds from `authorize` for a non-admin (8 only: the other cases' viewer has none). */
+let seeded: { P: string; rank: number } | null = null;
 const as = <T>(role: Role, fn: () => Promise<T>, org = 'acme'): Promise<T> =>
-  context.runInContext({ user: { email: `${role}@${org}.test`, role }, org: { id: org } }, `b${++req}`, fn);
+  context.runInContext({ user: { email: `${role}@${org}.test`, role }, org: { id: org } }, `b${++req}`, async () => {
+    if (seeded && role !== 'admin') caller.seedRank(seeded.P, seeded.rank);
+    return fn();
+  });
 
 const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 };
 
@@ -112,6 +123,10 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // and the records of Orders only. Before, the gate and the second call's facts each read every dataset's record
   // (projectCatalog): 151 queries (the list's pages fill the read memo) and 4,164 record reads, 4,125 getDatasetMeta calls.
   sql: at(151, 165),
+  // E4: case (d) in a project with folders (8), measured 132–138 here. Over the bare viewer's 120: the datasets' placements
+  // (E2, one transaction: 3 statements) and five records read one at a time (5 transactions: 15); the indexes' folder
+  // WHERE none (8 counts their statements with it and without). No other case moved with E4 (E3: 92 / 88 / 75 / 120 / 112 / 22).
+  opsViewer: at(138, 7_139),
 };
 // PR 7c, meaning search ON (a fake fingerprint model, all 19,998 items and questions fingerprinted): ONE embed call a
 // question; per search one nearest-items query beside the words one, and the examples' nearest questions; once an ask,
@@ -363,7 +378,44 @@ async function dbLeg(pool: Pool): Promise<void> {
     !Object.is(factsOf.get('home'), factsOf.get('dataset')) && !Object.is(factsOf.get('home'), factsOf.get('agent')));
   await reopenCase(w, fresh, line);
   await sqlCase(w, fresh, line); // before meaningOn, which leaves its fake model on
+  await foldersCase(pool, w, once, line);
   await meaningOn(cases, once, line);
+}
+
+/** 8. Case (d) with folders: Orders in Ops (the viewer's team: view), 50 clones in Finance (admins only). The WHERE costs nothing. */
+async function foldersCase(pool: Pool, w: World, once: (role: Role, extra: object, agentId: string | undefined) => Promise<{ queries: number; reads: number; tables: number; ms: number; out: any; sqls: string[] }>,
+  line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
+  const clones = (await pool.query<{ id: string }>(`SELECT substring(path from '([0-9a-f-]{36})\\.json$') AS id FROM records WHERE org_id = 'acme' AND path LIKE $1 AND path NOT LIKE $2 ORDER BY path LIMIT 50`,
+    [`projects/${w.P}/datasets/%.json`, `%${w.orders}%`])).rows.map((r) => r.id);
+  await plantFolder(pool, w.P, { name: 'Ops', members: ['viewer@acme.test'], items: [['dataset', w.orders]] });
+  await plantFolder(pool, w.P, { name: 'Finance', items: clones.map((id): ['dataset', string] => ['dataset', id]) });
+  seeded = { P: w.P, rank: 1 }; // a project viewer, as the route seeds it: a folder level is capped by the project role (D5)
+  try {
+    const on = await once('viewer', {}, undefined);
+    line('opsViewer', on);
+    ok(`opsViewer (folders): the ask answers with the chart on Orders, ${on.queries} queries ≤ ${CEILING.opsViewer.queries} and ${on.reads} record reads ≤ ${CEILING.opsViewer.reads}`,
+      on.out.ok === true && on.out.turns.at(-1)?.answer?.datasetId === w.orders && on.queries <= CEILING.opsViewer.queries && on.reads <= CEILING.opsViewer.reads, JSON.stringify(on.out).slice(0, 400));
+    if (on.queries * 1.1 > CEILING.opsViewer.queries || process.env.ORDINATE_BUDGET_SQL) histogram('opsViewer', on.sqls);
+    const closed = new Set(clones);
+    const found = async () => as('viewer', async () => (await searchMod.searchModel(w.P, 'clone', { limit: 60, kinds: ['dataset'] })).filter((h) => closed.has(h.id)).length);
+    // The WHERE rides inside the index's own statements: as many of them with it as without. (The ask's total moves with
+    // what it finds: without the WHERE the top datasets are closed ones, whose records the stores never read.)
+    const indexed = (sqls: readonly string[]): number => sqls.filter((q) => /\b(FROM|JOIN)\s+(assistant_search|assistant_search_vectors|verified_keys|search_entries)\b/i.test(q)).length;
+    gate.setIndexWhereForTest(false);
+    let off: Awaited<ReturnType<typeof once>>;
+    try {
+      off = await once('viewer', {}, undefined);
+      line('opsViewer (no WHERE)', off);
+      ok('NEGATIVE CONTROL: without it the index hands the viewer a dataset of the closed folder', (await found()) > 0);
+    } finally {
+      gate.setIndexWhereForTest(true);
+    }
+    ok(`opsViewer: the indexes' folder WHERE adds no statement (${indexed(on.sqls)} index statements with it, ${indexed(off.sqls)} without)`, indexed(on.sqls) === indexed(off.sqls) && indexed(on.sqls) > 0);
+    ok('…with it, none', (await found()) === 0);
+  } finally {
+    seeded = null;
+    await clearFolders(pool, w.P);
+  }
 }
 
 /** The cases again with meaning search on: a fake model (no network), every item fingerprinted by the job first. */

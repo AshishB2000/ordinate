@@ -3,7 +3,9 @@
 // (src/server/authz/folders.ts `foldersRestrict`), and only those run the resolver. Counted as scripts/test-askBudget.ts
 // counts: every pg Client query while the call runs, each the least of three runs (a settings read once a second, say).
 // Run by ./folderNet: `bare` in section 0 (no folder anywhere), `foldered` in section 9 (folders on P and one more).
-// Not a test file itself (no `test-` prefix).
+// And ⌘K (E4): `bareSearch` in section 0 — `search:query` makes exactly the statements it makes with no folder code, as
+// whether the project has a folder is read in the index's own marker statement (src/server/searchIndex.ts `unbuilt`);
+// `folderedSearch` in section 6 — then it reads P's tree once. Not a test file itself (no `test-` prefix).
 
 import { Client } from 'pg';
 import { ok } from './selfcheck';
@@ -11,12 +13,13 @@ import type * as H from './folderHarness';
 
 const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
 const folders: typeof import('../src/server/authz/folders') = require('../src/server/authz/folders');
+const searchIndex: typeof import('../src/server/searchIndex') = require('../src/server/searchIndex');
 
 const WHO: H.Person[] = ['opsLead', 'opsViewer'];
 type Cost = { statements: number; trees: number };
 
-/** The least cost of three `projects:overview` calls by `who`: statements, and how many read a project's folder tree. */
-async function cost(W: H.World, who: H.Person): Promise<Cost> {
+/** The least cost of three calls (`projects:overview` unless named) by `who`: statements, and how many read a project's folder tree. */
+async function cost(W: H.World, who: H.Person, call: () => Promise<unknown> = () => W.call(who, 'projects:overview')): Promise<Cost> {
   const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown };
   const query = proto.query;
   let best: Cost | null = null;
@@ -28,7 +31,7 @@ async function cost(W: H.World, who: H.Person): Promise<Cost> {
       return query.apply(this, a);
     };
     try {
-      await W.call(who, 'projects:overview');
+      await call();
     } finally {
       proto.query = query;
     }
@@ -38,10 +41,10 @@ async function cost(W: H.World, who: H.Person): Promise<Cost> {
 }
 
 /** With the folder checks off: no folder code runs at all, the E2 tree's cost for an editor (less for a viewer). */
-async function baseline(W: H.World, who: H.Person): Promise<Cost> {
+async function baseline(W: H.World, who: H.Person, call?: () => Promise<unknown>): Promise<Cost> {
   gate.setFolderChecksForTest(false);
   try {
-    return await cost(W, who);
+    return await cost(W, who, call);
   } finally {
     gate.setFolderChecksForTest(true);
   }
@@ -84,5 +87,32 @@ export async function foldered(W: H.World, extra: string[]): Promise<void> {
     const [on, each] = [await cost(W, who), await perProject(W, who)];
     ok(`cost: with folders on 2 of ${extra.length + 1} projects, ${who}'s projects:overview reads 2 trees (${on.statements} statements)`, on.trees === 2, JSON.stringify(on));
     ok(`NEGATIVE CONTROL: without the batch it reads every project's (${each.trees}, ${each.statements} statements)`, each.trees === extra.length + 1 && each.statements > on.statements, JSON.stringify(each));
+  }
+}
+
+const palette = (W: H.World, who: H.Person) => () => W.call(who, 'search:query', { projectId: W.P, query: 'ops' });
+
+/** Section 0: ⌘K with no folder — exactly the statements with no folder code, no tree read. */
+export async function bareSearch(W: H.World): Promise<void> {
+  for (const who of WHO) {
+    const [on, off] = [await cost(W, who, palette(W, who)), await baseline(W, who, palette(W, who))];
+    ok(`inert in cost: ⌘K with no folder, for ${who}: ${on.statements} statements = ${off.statements} with no folder code, no tree read`, on.statements === off.statements && on.trees === 0, JSON.stringify({ on, off }));
+  }
+  const real = searchIndex.unbuilt;
+  (searchIndex as { unbuilt: unknown }).unbuilt = async (p: string) => { const u = await real(p); return u && { ...u, foldered: true }; };
+  try {
+    const each = await cost(W, 'opsViewer', palette(W, 'opsViewer'));
+    const off = await baseline(W, 'opsViewer', palette(W, 'opsViewer'));
+    ok(`NEGATIVE CONTROL: resolving the caller's folders without asking first, opsViewer's ⌘K reads a tree (${each.statements} statements)`, each.trees === 1 && each.statements > off.statements, JSON.stringify(each));
+  } finally {
+    (searchIndex as { unbuilt: unknown }).unbuilt = real;
+  }
+}
+
+/** Section 6: with folders on P, ⌘K reads P's tree once for a caller they restrict. */
+export async function folderedSearch(W: H.World): Promise<void> {
+  for (const who of WHO) {
+    const on = await cost(W, who, palette(W, who));
+    ok(`cost: with folders on P, ${who}'s ⌘K reads P's tree once (${on.statements} statements)`, on.trees === 1, JSON.stringify(on));
   }
 }

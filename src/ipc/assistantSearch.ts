@@ -3,8 +3,9 @@
 // (../app/assistantSearchRank: what is found and in what order). Names, "also called" names and descriptions only:
 // no row value, no dataset origin. Two ways that must agree, field by field (scripts/test-assistantSearch.ts):
 //
-//   INDEXED    with a database: ../server/assistantSearchIndex ranks inside one query, the caller's audience in its
-//              WHERE (a viewer never matches a source table), and reads no record once built.
+//   INDEXED    with a database: ../server/assistantSearchIndex ranks inside one query, the caller's audience and the
+//              folders they open in its WHERE (a viewer never matches a source table; nobody matches an item in a folder
+//              they cannot open, docs/team-folders D13), and reads no record once built.
 //   REFERENCE  every store read, each record turned into parts by the SAME mapping below, ranked in JS. Without a
 //              database this is the path, and with one it answers whenever the index fails.
 //
@@ -44,6 +45,7 @@ import { metricHidden, termHidden } from '../analysis/columnHidden';
 import { searchWords, searchWordsOf } from '../ai/modelWords';
 import { MEANING_K, MODEL_KINDS, findableBases, foundItems, fusedHead, itemKey, itemTexts, keyedItems, nearItems, newestItems, noCounts, phrase, rankParts, speltItems, withMeaning } from '../app/assistantSearchRank';
 import { meaningOf, nearOrWords } from './meaning';
+import { indexFolders } from '../server/authz/folderGate';
 import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions, SpeltHit } from '../app/assistantSearchRank';
 
 export type { KeyedItem, ModelCounts, ModelHit, ModelKind, SpeltHit } from '../app/assistantSearchRank';
@@ -204,8 +206,12 @@ async function rankOptions(projectId: string, o: SearchOptions): Promise<RankOpt
     ...(o.kinds ? { kinds: MODEL_KINDS.filter((k) => o.kinds?.includes(k)) } : {}),
     ...(o.datasetIds ? { datasetIds: [...new Set(o.datasetIds.filter((d) => typeof d === 'string'))] } : {}),
     ...(o.exceptDatasetIds ? { exceptDatasetIds: [...new Set(o.exceptDatasetIds.filter((d) => typeof d === 'string'))] } : {}),
+    open: await openFolders(projectId),
   };
 }
+
+/** The folders the caller opens, for the index's WHERE (null: nothing restricts them). The reference reads the caller-aware stores. */
+const openFolders = async (projectId: string): Promise<string[] | null> => (await indexFolders(projectId))?.open ?? null;
 
 const limitOf = (o: Pick<SearchOptions, 'limit'>): number => Math.max(1, Math.min(MAX_LIMIT, Math.floor(Number(o.limit) || 0)));
 
@@ -326,7 +332,7 @@ export async function referenceCount(projectId: string): Promise<ModelCounts> {
 export async function indexedCount(projectId: string): Promise<ModelCounts | null> {
   if (!useIndex || !orgDb() || projectId !== projectId.toLowerCase()) return null;
   if (!isValidId(projectId)) return noCounts();
-  const items = await index.foundItems(projectId, await audiencesOf(projectId), recordFs.rowsUnder);
+  const items = await index.foundItems(projectId, await audiencesOf(projectId), recordFs.rowsUnder, await openFolders(projectId));
   return items && tally(projectId, items);
 }
 
@@ -382,7 +388,7 @@ export function countModel(projectId: string): Promise<ModelCounts> {
   return indexedOr(() => indexedCount(projectId), () => referenceCount(projectId));
 }
 
-// ── Exact lookups: no word ranking, no access check (a name or a dataset's members, as the stores list them) ──
+// ── Exact lookups: no word ranking, no access check but the folders (a name or a dataset's members, as the stores list them) ──
 // INDEXED only: null without a database, or (logged once) when the query fails, and the caller takes its own reference
 // path, the whole list it read before. The REFERENCE of each is here for the differential (scripts/test-askIndex.ts).
 
@@ -404,14 +410,14 @@ async function onIndex<T>(projectId: string, fn: () => Promise<T | null>): Promi
  * dataset of `onKey`, by item key; retired ones too, as the stores list them. CANDIDATES: the caller reads the records.
  */
 export function keyedModel(projectId: string, kind: KeyedKind, keys: readonly string[]): Promise<KeyedItem[] | null> {
-  return onIndex(projectId, async () => (keys.length ? index.keyedItems(projectId, kind, [...new Set(keys)], recordFs.rowsUnder) : []));
+  return onIndex(projectId, async () => (keys.length ? index.keyedItems(projectId, kind, [...new Set(keys)], recordFs.rowsUnder, await openFolders(projectId)) : []));
 }
 export const keyedReference = async (projectId: string, kind: KeyedKind, keys: readonly string[]): Promise<KeyedItem[]> => keyedItems(await storeParts(projectId), kind, keys);
 
 const capped = (limit: number): number => Math.max(1, Math.min(MAX_LIMIT, Math.floor(limit) || 1));
 /** The `limit` newest items of `kind` (by their record's updatedAt, then key); a retired one left out unless `retired`. */
 export function newestModel(projectId: string, kind: KeyedKind, limit: number, retired = false): Promise<KeyedItem[] | null> {
-  return onIndex(projectId, () => index.newestItems(projectId, kind, capped(limit), retired, recordFs.rowsUnder));
+  return onIndex(projectId, async () => index.newestItems(projectId, kind, capped(limit), retired, recordFs.rowsUnder, await openFolders(projectId)));
 }
 export const newestReference = async (projectId: string, kind: KeyedKind, limit: number, retired = false): Promise<KeyedItem[]> => newestItems(await storeParts(projectId), kind, capped(limit), retired);
 

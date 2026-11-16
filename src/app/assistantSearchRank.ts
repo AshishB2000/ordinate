@@ -48,7 +48,8 @@ export interface Part {
 
 export interface ModelHit { kind: ModelKind; id: string; datasetId?: string; connId?: string; name: string; score: number }
 /** `exceptDatasetIds`: a part on one of these datasets finds nothing (an agent's outside-the-topic check). */
-export interface RankOptions { kinds?: readonly ModelKind[]; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[]; audiences: readonly Audience[] }
+/** `open`: the caller's open folders, for the index's WHERE only (docs/team-folders D13); the reference reads the stores, which already leave the rest out. */
+export interface RankOptions { kinds?: readonly ModelKind[]; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[]; audiences: readonly Audience[]; open?: readonly string[] | null }
 
 export const kindOrd = (k: ModelKind): number => MODEL_KINDS.indexOf(k);
 export const allWords = (p: Pick<Part, 'nameWords' | 'aliasWords' | 'textWords'>): string[] => [...new Set([...p.nameWords, ...p.aliasWords, ...p.textWords])];

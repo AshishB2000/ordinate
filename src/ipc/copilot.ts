@@ -58,6 +58,8 @@ import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk'
 import { keepReads } from './askMemo';
 import { snapshotFor, sqlSnapshotFor, turnsForBrowser } from './answerSnapshots';
 import { sqlAnswer } from './answerSql';
+import { openTitle, openTurns } from './turnsOpen';
+import { indexFolders } from '../server/authz/folderGate';
 import { homeFacts } from './homeFacts';
 import { askSourceTables } from './sourceAnswers';
 
@@ -382,7 +384,8 @@ export function register() {
   ipcMain.handle('copilot:history', keepReads(async (_e, { projectId, threadId }: any = {}) => {
     try {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
-      const turns = await turnsForBrowser(projectId, await copilot.loadHistory(projectId, tid));
+      const stored = await copilot.loadHistory(projectId, tid);
+      const turns = await turnsForBrowser(projectId, stored); // without the answers on a dataset in a folder the caller cannot open (./turnsOpen)
       // Which thread the turns actually CAME from: an absent or stale id resolves
       // to the most recent thread, so the renderer learns what it is now looking
       // at instead of guessing. Its title too: a renamed conversation's name is
@@ -390,7 +393,7 @@ export function register() {
       // never the list: the list is paged.
       const shown = await copilot.threadFor(projectId, tid);
       // …and the Assistant agent it is with (null: the Project assistant), by name even once it is in the Trash.
-      return { ok: true, turns, threadId: shown?.id ?? null, title: shown?.title ?? null, agent: await agentRef(projectId, shown?.agentId ?? null) };
+      return { ok: true, turns, threadId: shown?.id ?? null, title: shown ? await openTitle(projectId, shown.title, stored.slice(0, 2)) : null, agent: await agentRef(projectId, shown?.agentId ?? null) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to load Copilot history' };
     }
@@ -401,7 +404,8 @@ export function register() {
   // (null: the last). Empty list is a normal answer (no history yet), never an error.
   ipcMain.handle('copilot:threads', async (_e, { projectId, cursor }: any = {}) => {
     try {
-      const page = await copilot.listThreadsPage(projectId, typeof cursor === 'string' ? cursor : undefined);
+      // Shared folders: each count and title is of the turns the caller is shown (./turnsOpen), in the page's one query.
+      const page = await copilot.listThreadsPage(projectId, typeof cursor === 'string' ? cursor : undefined, (await indexFolders(projectId))?.open ?? null);
       const names = await agentNames(projectId, page.threads.flatMap((t) => (t.agentId ? [t.agentId] : [])));
       // Which agent each was with, for History, by name; one deleted (in the Trash, or gone from it) is marked so.
       const named = (t: copilot.CopilotThreadSummary) => {
@@ -520,7 +524,7 @@ export function register() {
       const hit = sharing || skipVerified === true ? null : await verifiedAsk(projectId, q, pin, { ...scope, only });
       if (hit) return { ...hit, agent: await agentRef(projectId, kept) };
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
-      const turns = withoutAnswer(await copilot.loadHistory(projectId, tid), passed?.id);
+      const turns = withoutAnswer(await openTurns(projectId, await copilot.loadHistory(projectId, tid)), passed?.id); // replayed: never an answer on a closed folder's dataset
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, asked, emit, q, sharing);
       const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;

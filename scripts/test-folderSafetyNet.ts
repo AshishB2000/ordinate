@@ -11,6 +11,8 @@
 //    net; the security walks — scripts/folderNet.ts, each with its negative control.
 // 9–10 (E3, with DATABASE_URL): pushes, sends, mentions and counts; MCP and the model's prompts —
 //    scripts/folderNetSends.ts, each with its negative control.
+// 6 (E4, with DATABASE_URL): the indexes — ⌘K, the Assistant's search by words and meaning, the counts, the verified
+//    lookup and the history — per person against their references, on Finance's canaries (scripts/folderNetIndexes.ts).
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-folderSafetyNet.js
 
@@ -80,7 +82,7 @@ const rankPool = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) 
   ok('NEGATIVE CONTROL: the same contract at `write` is reached at rank 2', (await decide(as('editor'), scoped(planted), 2)).ok);
   ok('rank 3 opens every folder: the resolver answers { all: true }, whatever the folders', folders.accessFrom(pid, 3, [{ id: '6b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', parentId: null, shareFigures: false, grant: null }]).all === true);
 
-  await databaseSections(); // 0, 2–5 and 7 (E2), 9–10 (E3), with DATABASE_URL
+  await databaseSections(); // 0, 2–5 and 7 (E2), 9–10 (E3), 6 (E4), with DATABASE_URL
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
   .finally(() => {

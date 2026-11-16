@@ -67,12 +67,12 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'connections:list': 'PROJECT', // p2-01 still decides what a viewer reads of a connection
   'connectors:catalog': 'PROJECT',
   'connectors:logos': 'PROJECT',
-  'copilot:ask': 'ASK',
+  'copilot:ask': 'ASK', // E4: the indexes' folder WHERE; the turns it replays leave closed answers out (src/ipc/turnsOpen.ts)
   'copilot:deleteThread': 'OWN',
-  'copilot:history': 'ASK',
+  'copilot:history': 'ASK', // E4: an answer on a closed dataset and its question are not sent (src/ipc/turnsOpen.ts)
   'copilot:newThread': 'OWN',
   'copilot:renameThread': 'OWN',
-  'copilot:threads': 'OWN',
+  'copilot:threads': 'OWN', // E4: a title taken from such a question reads untitled
   'dashboard:asOfStamps': 'FIGURE',
   'dashboard:exportHtml': 'EXPORT',
   'dashboard:metric': 'FIGURE',
@@ -178,7 +178,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'scorecard:detail': 'FIGURE',
   'scorecard:get': 'ITEM',
   'scorecard:list': 'LIST',
-  'search:query': 'INDEX',
+  'search:query': 'INDEX', // E4: each row's anchor in the WHERE (0034, src/server/authz/folderSql.ts)
   'segments:features': 'OPEN',
   'segments:fit': 'OPEN',
   'segments:rfm': 'OPEN',

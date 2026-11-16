@@ -9,21 +9,26 @@
 //
 // What a record's rows ARE comes from `describe`, registered by src/ipc/verifiedLookup.ts (the store's own
 // parser: this module may not import it, as recordFs imports this one). Without it, a write drops the marker.
+//
+// SHARED FOLDERS (docs/team-folders D13): every lookup keeps only questions whose dataset sits in a folder the caller
+// opens (`open`, ./authz/folderSql opensDataset; null: nothing restricts them), in its WHERE, before the order and LIMIT.
 
 import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from './db/inOrg';
 import { logger } from '../app/logger';
 import type { NearTo } from './vectorStore';
+import { opensAll, opensDataset } from './authz/folderSql';
 
 /** Bump when what a record describes to changes (`questionKey`, `words`): every marker is then stale, and each project rebuilds once.
  *  2: ord 0's text, the question as written (0030). 3: verified SQL questions are described too (under the first dataset
  *  they read); a build by an older pod left them out. */
-export const VERIFIED_INDEX_VERSION = 3;
+export const VERIFIED_INDEX_VERSION = 4; // 4: every dataset a question reads (`reads`, 0034), for the folders' WHERE
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 
 /** One wording of a question: ord 0 the question (with its `words`, and its `text` as written: what is fingerprinted), 1.. its phrasings (neither). */
-export interface KeyRow { ord: number; key: string; datasetId: string; updated: string; words: string[]; text: string }
+/** `reads`: every dataset the question reads (an SQL question's all, a chart's its one): the folders' WHERE (0034). */
+export interface KeyRow { ord: number; key: string; datasetId: string; reads: string[]; updated: string; words: string[]; text: string }
 /** The rows of the record at projects/<projectId>/verified/<id>.json; none for a body that is no question of that id. */
 export type DescribeVerified = (projectId: string, id: string, body: string) => KeyRow[];
 export type RowsUnder = (c: PoolClient, org: string, rel: string, after: string, limit: number, maxBytes: number) => Promise<Array<{ rel: string; body: string | null }>>;
@@ -70,11 +75,12 @@ async function guarded(c: PoolClient, fn: () => Promise<void>): Promise<boolean>
 async function insertRows(c: PoolClient, org: string, projectId: string, rows: ReadonlyArray<KeyRow & { id: string }>): Promise<void> {
   if (!rows.length) return;
   await c.query(
-    `INSERT INTO verified_keys (org_id, project_id, id, ord, key, dataset_id, updated, words, text)
-     SELECT $1, $2, u.id, u.ord, u.key, u.dataset_id, u.updated, CASE WHEN u.words = '' THEN '{}'::text[] ELSE string_to_array(u.words, ' ') END, u.text
-     FROM unnest($3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[]) AS u(id, ord, key, dataset_id, updated, words, text)`,
+    `INSERT INTO verified_keys (org_id, project_id, id, ord, key, dataset_id, updated, words, text, reads)
+     SELECT $1, $2, u.id, u.ord, u.key, u.dataset_id, u.updated, CASE WHEN u.words = '' THEN '{}'::text[] ELSE string_to_array(u.words, ' ') END, u.text,
+       ARRAY(SELECT jsonb_array_elements_text(u.reads::jsonb))
+     FROM unnest($3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[]) AS u(id, ord, key, dataset_id, updated, words, text, reads)`,
     [org, projectId, rows.map((r) => r.id), rows.map((r) => r.ord), rows.map((r) => r.key), rows.map((r) => r.datasetId), rows.map((r) => r.updated),
-      rows.map((r) => r.words.join(' ')), rows.map((r) => r.text)], // `words` splits on anything but letters, marks and digits: none holds a space
+      rows.map((r) => r.words.join(' ')), rows.map((r) => r.text), rows.map((r) => JSON.stringify(r.reads))], // `words` splits on anything but letters, marks and digits: none holds a space
   );
 }
 
@@ -147,31 +153,36 @@ async function built<T>(projectId: string, rowsUnder: RowsUnder, fn: (c: PoolCli
   return inOrg(fn);
 }
 
-/** The ids of the questions one of whose wordings has `key`, on `datasets` (null = any), newest first: the reference's order. */
-export function keyHits(projectId: string, key: string, datasets: readonly string[] | null, rowsUnder: RowsUnder): Promise<string[] | null> {
+// The question's dataset and every one it reads (`reads`, 0034: an SQL question's) in the folders `open`.
+const OPENS = (open: string, t = 'verified_keys'): string =>
+  `${opensDataset(`${t}.dataset_id`, open, `${t}.org_id`, `${t}.project_id`)} AND ${opensAll(`${t}.reads`, open, `${t}.org_id`, `${t}.project_id`)}`;
+
+/** The ids of the questions one of whose wordings has `key`, on `datasets` (null = any) in the folders `open`, newest first: the reference's order. */
+export function keyHits(projectId: string, key: string, datasets: readonly string[] | null, rowsUnder: RowsUnder, open: readonly string[] | null = null): Promise<string[] | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
       `SELECT DISTINCT ON (updated, id) id FROM verified_keys
-       WHERE org_id = $1 AND project_id = $2 AND key = $3 AND ($4::text[] IS NULL OR dataset_id = ANY($4::text[]))
+       WHERE org_id = $1 AND project_id = $2 AND key = $3 AND ($4::text[] IS NULL OR dataset_id = ANY($4::text[])) AND ${OPENS('$5')}
        ORDER BY updated DESC, id`,
-      [org, projectId, key, datasets],
+      [org, projectId, key, datasets, open],
     );
     return r.rows.map((x: { id: string }) => x.id);
   });
 }
 
-/** The ids of the questions on `datasetId`, newest first: the reference's order (`listTagged`). */
-export function datasetHits(projectId: string, datasetId: string, rowsUnder: RowsUnder): Promise<string[] | null> {
+/** The ids of the questions on `datasetId` when it is in the folders `open`, newest first: the reference's order (`listTagged`). */
+export function datasetHits(projectId: string, datasetId: string, rowsUnder: RowsUnder, open: readonly string[] | null = null): Promise<string[] | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
-      'SELECT id FROM verified_keys WHERE org_id = $1 AND project_id = $2 AND ord = 0 AND dataset_id = $3 ORDER BY updated DESC, id',
-      [org, projectId, datasetId],
+      `SELECT id FROM verified_keys WHERE org_id = $1 AND project_id = $2 AND ord = 0 AND dataset_id = $3 AND ${OPENS('$4')} ORDER BY updated DESC, id`,
+      [org, projectId, datasetId, open],
     );
     return r.rows.map((x: { id: string }) => x.id);
   });
 }
 
-export interface ExampleOrder { asked: readonly string[]; datasetId?: string; first?: readonly string[] }
+/** `open`: the caller's open folders (null: nothing restricts them). */
+export interface ExampleOrder { asked: readonly string[]; datasetId?: string; first?: readonly string[]; open?: readonly string[] | null }
 
 /**
  * The ids of `projectId`'s questions in ../ai/verifiedPick `exampleOrder`: the context's dataset, an agent's topic,
@@ -182,11 +193,11 @@ export function rankedIds(projectId: string, o: ExampleOrder, offset: number, li
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
       `SELECT id, dataset_id FROM verified_keys
-       WHERE org_id = $1 AND project_id = $2 AND ord = 0
+       WHERE org_id = $1 AND project_id = $2 AND ord = 0 AND ${OPENS('$8')}
        ORDER BY CASE WHEN dataset_id = $3 THEN 0 WHEN dataset_id = ANY($4::text[]) THEN 1 ELSE 2 END,
          (SELECT count(*) FROM unnest(words) AS w WHERE w = ANY($5::text[])) DESC, updated DESC, id
        LIMIT $6 OFFSET $7`,
-      [org, projectId, o.datasetId ?? null, o.first ?? [], o.asked, limit, offset],
+      [org, projectId, o.datasetId ?? null, o.first ?? [], o.asked, limit, offset, o.open ?? null],
     );
     return r.rows.map((x: { id: string; dataset_id: string }) => ({ id: x.id, datasetId: x.dataset_id }));
   });
@@ -199,19 +210,19 @@ export interface Ranked { id: string; datasetId: string }
 export const verifiedItem = (id: string): string => `verified:${id}`;
 
 /**
- * The `k` questions whose fingerprint (`to.model`'s) is nearest the question's by cosine, no farther than
- * `to.maxDistance`, nearest first, then by key.
+ * The `k` questions in the folders `open` whose fingerprint (`to.model`'s) is nearest the question's by cosine, no farther
+ * than `to.maxDistance`, nearest first, then by key.
  * Null without a database. Exact within the project, as ./assistantSearchIndex nearestPage (and why).
  */
-export function nearestIds(projectId: string, to: NearTo, k: number, rowsUnder: RowsUnder): Promise<Ranked[] | null> {
+export function nearestIds(projectId: string, to: NearTo, k: number, rowsUnder: RowsUnder, open: readonly string[] | null = null): Promise<Ranked[] | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
       `WITH d AS MATERIALIZED (
          SELECT v.item, v.embedding ${to.place.op} $3::${to.place.type} AS d FROM assistant_search_vectors v
          WHERE v.org_id = $1 AND v.project_id = $2 AND v.model = $4 AND v.item >= 'verified:' AND v.item < 'verified;')
        SELECT k.id, k.dataset_id FROM d JOIN verified_keys k ON k.org_id = $1 AND k.project_id = $2 AND k.id = substr(d.item, 10) AND k.ord = 0
-       WHERE d.d <= $6 ORDER BY d.d, d.item LIMIT $5`,
-      [org, projectId, to.literal, to.model, k, to.maxDistance],
+       WHERE d.d <= $6 AND ${OPENS('$7', 'k')} ORDER BY d.d, d.item LIMIT $5`,
+      [org, projectId, to.literal, to.model, k, to.maxDistance, open],
     );
     return r.rows.map((x: { id: string; dataset_id: string }) => ({ id: x.id, datasetId: x.dataset_id }));
   });

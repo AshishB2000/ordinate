@@ -27,6 +27,7 @@ import { logger } from '../app/logger';
 import { recordNotSaved, recordUnreadable } from '../app/recordLockMessages';
 import { ctx, serverDataDir } from '../server/context';
 import { inOrg, orgDb } from '../server/db/inOrg';
+import { folderOf } from '../server/authz/folderSql';
 import type { AnswerSpec } from './answerSpec';
 import type { AnswerSnapshot } from './answerSnapshot';
 // A cycle (./copilot imports this module): only used inside functions, never at load.
@@ -157,20 +158,40 @@ const CURSOR_RE = /^(-?\d{1,18})\.(\d{1,19})$/;
  * (updated_at, touched), never OFFSET: a page costs the same however deep, and a conversation touched
  * between two pages moves to the top instead of shifting what the next page shows.
  */
-export async function listPage(projectId: string, after?: string): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
+/**
+ * Shared folders (docs/team-folders, ../ipc/turnsOpen): for a caller restricted to the folders `$5` (NULL: nobody
+ * restricts them, the count is every turn), each conversation's turns as they are shown — an answer on a dataset
+ * outside `$5` (0034 `ordinate_turn_datasets`) is not, nor a question whose next turn is one — and its first question,
+ * with whether it is shown (a title taken from a hidden one reads untitled). In the page's one query.
+ */
+const SHOWN = `LEFT JOIN LATERAL (
+    SELECT count(*) FILTER (WHERE NOT x.closed AND NOT (x.role = 'user' AND x.next_closed))::int AS shown,
+      (array_agg(x.text ORDER BY x.seq) FILTER (WHERE x.role = 'user' AND x.text ~ '\\S'))[1] AS first_q,
+      (array_agg(x.next_closed ORDER BY x.seq) FILTER (WHERE x.role = 'user' AND x.text ~ '\\S'))[1] AS first_q_hidden
+    FROM (SELECT u.seq, u.role, u.text, c.closed, coalesce(lead(c.closed) OVER (ORDER BY u.seq), false) AS next_closed
+            FROM assistant_turns u CROSS JOIN LATERAL (SELECT u.role = 'assistant' AND EXISTS (SELECT 1 FROM unnest(ordinate_turn_datasets(u.body)) AS d(id)
+              WHERE ${folderOf("'dataset'", 'd.id', 'u.org_id', 'u.project_id')} <> ALL($5::uuid[])) AS closed) c
+           WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) x) v ON $5::uuid[] IS NOT NULL`;
+
+export async function listPage(projectId: string, after?: string, open: readonly string[] | null = null): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
   const from = after === undefined ? null : CURSOR_RE.exec(after);
   if (after !== undefined && !from) return { threads: [], next: null };
   await moveFile(projectId);
   const page = copilot.THREAD_PAGE;
-  const r = await tx(false, (c, org) => c.query<ThreadRow>(
-    `${SUMMARY} WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
-       ${from ? `AND (t.updated_at, t.touched) < (timestamptz 'epoch' + $5::bigint * interval '1 microsecond', $6::bigint)` : ''}
+  const r = await tx(false, (c, org) => c.query<ThreadRow & { shown: number | null; first_q: string | null; first_q_hidden: boolean | null }>(
+    `${SUMMARY.replace(' FROM assistant_threads t', `, v.shown, v.first_q, v.first_q_hidden FROM assistant_threads t ${SHOWN}`)}
+      WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
+       ${from ? `AND (t.updated_at, t.touched) < (timestamptz 'epoch' + $6::bigint * interval '1 microsecond', $7::bigint)` : ''}
      ${RECENT} LIMIT $4`,
-    [org, projectId, me(), page + 1, ...(from ? [from[1], from[2]] : [])],
+    [org, projectId, me(), page + 1, open, ...(from ? [from[1], from[2]] : [])],
   ));
   const rows = r.rows.slice(0, page);
   const last = rows.at(-1);
-  return { threads: rows.map(summaryOf), next: r.rows.length > page && last ? `${last.at_us}.${last.touched}` : null };
+  const shownOf = (x: (typeof rows)[number]): ThreadRow => (open === null ? x : {
+    ...x, turns: x.shown ?? 0,
+    title: x.first_q_hidden && x.first_q !== null && x.title === copilot.titleFromTurns([{ role: 'user', text: x.first_q } as CopilotTurn]) ? copilot.FALLBACK_TITLE : x.title,
+  });
+  return { threads: rows.map((x) => summaryOf(shownOf(x))), next: r.rows.length > page && last ? `${last.at_us}.${last.touched}` : null };
 }
 
 export async function threadFor(projectId: string, threadId?: string): Promise<copilot.ThreadRef | null> {

@@ -18,6 +18,8 @@
 //      a linked dataset, read by id with relationships.json, one record (../src/ipc/askLinks.ts). An answer from Home read
 //      straight from a documented table, no dataset (phase D, ../src/ipc/sourceAnswers.ts): its doc and connection by id.
 //      Each reply is checked too.
+//      And an Ops viewer (docs/team-folders E4): a project viewer in team Ops, Orders in folder Ops (their team: view) and
+//      Returns in Finance (admins only), from Home: the folders' checks are in the index's WHERE and the placements, no list.
 //   2. NEGATIVE CONTROL: the same asks with the index off (assistantSearch._setIndexed(false), the reference paths) DO
 //      call them, each case; the formula's figure through metricsByName.
 //
@@ -61,10 +63,18 @@ const connections: typeof import('../src/connectors/connections') = require('../
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
 const sourceDocs: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+import { clearFolders, plantFolder } from './folderFixture';
 
 type Role = import('../src/server/context').Identity['user']['role'];
 let req = 0;
-const as = <T>(role: Role, fn: () => Promise<T>): Promise<T> => context.runInContext({ user: { email: `${role}@acme.test`, role }, org: { id: 'acme' } }, `n${++req}`, fn);
+/** The project rank the RPC route seeds from `authorize` for a non-admin (the Ops viewer's case only: the other viewer has none). */
+let seeded: { P: string; rank: number } | null = null;
+const as = <T>(role: Role, fn: () => Promise<T>): Promise<T> => context.runInContext({ user: { email: `${role}@acme.test`, role }, org: { id: 'acme' } }, `n${++req}`, async () => {
+  if (seeded && role !== 'admin') caller.seedRank(seeded.P, seeded.rank);
+  return fn();
+});
 
 interface World { P: string; orders: string; returns: string; agent: string; board: string; live: string; conn: string; whDoc: string }
 
@@ -154,7 +164,7 @@ async function listed<T>(P: string, fn: () => Promise<T>): Promise<{ out: T; cal
   }
 }
 
-async function dbLeg(): Promise<void> {
+async function dbLeg(pool: Pool): Promise<void> {
   const w = await world();
   require('../src/ipc/copilot').register();
   assistantSearch.register(); // what src/server/app.ts registers at startup: the two indexes' describers
@@ -180,7 +190,7 @@ async function dbLeg(): Promise<void> {
   };
   ok('fixture: an ask from Home answers with the chart, from the model', !!(await started()));
 
-  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role; formula?: true; prompted?: string };
+  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role; formula?: true; prompted?: string; folders?: true };
   const shared = /Order share\b[^\n]*\b5\b/; // its figure in the facts: Revenue (15) / 3
   const FACTS_LINE = '- sales_live (source table of "Sales live" · ~5.0K rows)';
   const cases: Case[] = [
@@ -199,14 +209,29 @@ async function dbLeg(): Promise<void> {
       right: (r) => r.turns.at(-1)?.answer?.datasetId === w.whDoc && r.turns.at(-1)?.answer?.table === w.conn && r.turns.at(-1)?.card?.ok === true,
     },
     { name: 'viewer, a hidden column', who: 'viewer', reply: answer(onOrders), ask: async () => ({ threadId: await thread(undefined, 'viewer'), context: {}, question: 'order share by region' }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    // Returns is in Finance: the facts never name it or its metric.
+    { name: 'Ops viewer, with folders', who: 'viewer', folders: true, reply: answer(onOrders), ask: async () => ({ threadId: await thread(undefined, 'viewer'), context: {}, question: 'revenue and refunds by region' }),
+      right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders && !/Returns|Refund total/.test(facts) },
   ];
   ok('fixture: the viewer is restricted, and Orders\' cost is hidden from them', (await as('viewer', async () => [...await rowAccess.hiddenAnywhere(w.P)])).join() === 'cost');
   const run = async (c: Case) => {
-    replies.length = 0;
-    const payload = await c.ask();
-    replies.length = 0;
-    replies.push(structuredClone(c.reply));
-    return listed(w.P, () => call('copilot:ask', payload, c.who));
+    if (c.folders) {
+      await plantFolder(pool, w.P, { name: 'Ops', members: ['viewer@acme.test'], items: [['dataset', w.orders]] });
+      await plantFolder(pool, w.P, { name: 'Finance', items: [['dataset', w.returns]] });
+      seeded = { P: w.P, rank: 1 }; // a project viewer, as the route seeds it
+    }
+    try {
+      replies.length = 0;
+      const payload = await c.ask();
+      replies.length = 0;
+      replies.push(structuredClone(c.reply));
+      return await listed(w.P, () => call('copilot:ask', payload, c.who));
+    } finally {
+      if (c.folders) {
+        seeded = null;
+        await clearFolders(pool, w.P);
+      }
+    }
   };
   for (const c of cases) {
     const r = await run(c);
@@ -214,6 +239,14 @@ async function dbLeg(): Promise<void> {
     ok(`${c.name}: no whole-project list (${r.calls.length})`, r.calls.length === 0, r.calls.join(', '));
     if (c.formula) ok(`${c.name}: …and the formula metric was computed: Order share's figure is in the facts`, shared.test(facts), facts.split('\n').filter((l) => l.includes('Order share')).join(' | ') || facts.slice(0, 300));
     if (c.prompted) ok(`${c.name}: the facts read by id are in the prompt (table facts, a linked dataset)`, facts.includes(c.prompted), facts.slice(-600));
+  }
+  const opsCase = cases.find((c) => c.folders)!;
+  gate.setIndexWhereForTest(false);
+  try {
+    await run(opsCase);
+    ok('NEGATIVE CONTROL: the Ops viewer without the index\'s folder WHERE: the facts name Finance\'s Returns', /Returns|Refund total/.test(facts), facts.slice(0, 300));
+  } finally {
+    gate.setIndexWhereForTest(true);
   }
   assistantSearch._setIndexed(false);
   try {
@@ -247,7 +280,7 @@ async function dbLeg(): Promise<void> {
     await mig.migrate(pool);
     recordFs.useRecordDb(pool);
     inOrg.useOrgDb(pool);
-    await dbLeg();
+    await dbLeg(pool);
   } finally {
     recordFs.useRecordDb(null);
     inOrg.useOrgDb(null);

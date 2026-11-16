@@ -21,6 +21,10 @@
 // access on EVERY dataset the statement read (`sqlAccessPrint`), and Refresh runs the SQL again through the gate. Over Live
 // datasets (docs/live-data/01-live-sql.md, F3) it is kept as of when the warehouse answered (a cached or stale table's
 // own time), and Refresh is one counted statement unless the cache holds it.
+//
+// SHARED FOLDERS: an answer on a dataset the caller cannot open (a chart's, a "Did you mean" option's, any an SQL answer
+// read), and the question it answered, are not sent at all (./turnsOpen); a kept card on a dataset since moved into such a
+// folder could never pass THE CHECK anyway (its record reads as missing to them), and `answer:refresh` of it refuses.
 
 import { createHash } from 'crypto';
 import { ipcMain } from './bus';
@@ -43,6 +47,7 @@ import { sqlCardFor } from './answerSql';
 import { verifiedSqlOn } from './verifiedLookup';
 import type { AnswerCard, Built, CardLearn, Failure } from './answers';
 import { inSourceTable } from './sourceAnswers';
+import { openTurns } from './turnsOpen';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
 export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot'> & { card?: Record<string, unknown> };
@@ -150,7 +155,7 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
     return sqlAccessPrint(projectId, ids).catch(() => null);
   };
   const out: BrowserTurn[] = [];
-  for (const { snapshot, ...turn } of turns) {
+  for (const { snapshot, ...turn } of await openTurns(projectId, turns)) {
     if (turn.sql) {
       const kept = snapshot && (await sqlAccessNow(turn.sql.datasetIds)) === snapshot.access ? cardOf(snapshot) : null;
       out.push(kept && snapshot ? { ...turn, card: await sqlDelivered(projectId, kept, turn.sql, keptView(snapshot, snapshot.firstAsked, [])) } : turn);
