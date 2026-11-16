@@ -6,21 +6,28 @@
 //   - On Data, the rail appears; Move to… on the sample dataset shows the warning first (who loses access, the sample
 //     dashboard that keeps showing its charts), then moves it. Under Finance the list holds it, and its page wears the
 //     chip "In Finance · Finance can view". The Publish dialog on the sample dashboard (in Everyone, reading that dataset)
-//     says it shows data from folders 1 person can't open.
+//     says it shows data from folders 1 person can't open, and so does a published link's Embed… dialog.
 //   - Vera, a project viewer in team Ops analysts, no longer sees it: not in Data, and its page says it is in a folder
 //     she can't open. The admin gives Ops analysts Can view in Admin → Teams → Folders; she sees it again.
 //   - At phone width the rail is a row of pills above the list.
 //   - Share → Folders → Move everything to Everyone: the warning, then no folder holds anything.
 //
-//   - Dashboards: the rail beside the grid; the sample dashboard moves into Finance by Move to…; on Data the dataset
-//     goes back by a drag onto Everyone in the rail (the Move dialog opens with it picked).
+//   - Dashboards: the rail beside the grid; the sample dashboard moves into Finance by Move to…; with Ops analysts taken
+//     off Finance, a new subscription to it by an email list holding Vera says 1 recipient can't open it; on Data the
+//     dataset goes back by a drag onto Everyone in the rail (the Move dialog opens with it picked).
 //
-// Screens: web/e2e/__screens__/folders-{share-empty,share,move,data,chip,publish,viewer,team,phone,dashboards,everything}-{light,dark}.png.
+// Screens: web/e2e/__screens__/folders-{share-empty,share,move,data,chip,publish,embed,viewer,team,phone,dashboards,subscribe,everything}-{light,dark}.png.
+// The setting off: folders-off.e2e.ts.
 // Needs Postgres: without DATABASE_URL this spec prints one skip line. The server runs with ORDINATE_FOLDERS=on.
 
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import pg from 'pg';
+
+interface FakeRelay { port: number; close(): Promise<void> }
+const { startFake } = createRequire(import.meta.url)('../../scripts/smtpFake.js') as { startFake: (o: { mode: 'none' }) => Promise<FakeRelay> };
 
 const ADMIN = 'admin@acme.test';
 const VERA = 'vera@acme.test';
@@ -38,12 +45,17 @@ if (!adminUrl) {
   await root.query(`CREATE DATABASE ${dbName}`);
 
   const { e2e, settled, screens, screensInPlace, configureServer, failOnConsoleError, rpcBudget } = await import('./fixtures.ts');
+  const relay = await startFake({ mode: 'none' }); // email lists exist only where email is set up (nothing is sent here)
   configureServer({
     // Folders on (ORDINATE_FOLDERS, off by default until every pod has the folder readers).
-    env: { DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN, ORDINATE_FOLDERS: 'on' },
+    env: {
+      DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN, ORDINATE_FOLDERS: 'on',
+      SMTP_HOST: '127.0.0.1', SMTP_PORT: String(relay.port), SMTP_SECURITY: 'plaintext', SMTP_FROM: 'Acme Analytics <bi@acme.test>', ORDINATE_MASTER_KEY: randomBytes(32).toString('base64'),
+    },
     headers: { 'x-forwarded-email': ADMIN },
   });
   after(async () => {
+    await relay.close();
     await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
     await root.end();
   });
@@ -68,7 +80,7 @@ if (!adminUrl) {
       assert.equal((await rpc(ADMIN, 'project:share', { projectId: pid, member: { teamId: id }, role: 'viewer' })).ok, true);
       return id;
     };
-    await team('Ops analysts', VERA);
+    const opsAnalysts = await team('Ops analysts', VERA);
     await team('Finance', FIN);
 
     // ── Share → Folders: make Finance, give it to team Finance ───────────
@@ -137,6 +149,20 @@ if (!adminUrl) {
     await screensInPlace(page, 'folders-publish');
     await page.keyboard.press('Escape');
 
+    // ── Embed: a published link of it says the same ──────────────────────
+    const run = await rpc(ADMIN, 'publish:run', { projectId: pid, dashboardIds: [sampleBoard] });
+    assert.equal(run.ok, true, JSON.stringify(run).slice(0, 200));
+    await page.goto(`/dashboards?project=${pid}&tab=links`);
+    await settled(page);
+    await page.getByRole('list', { name: 'Published links' }).getByRole('button', { name: /options$/ }).first().click();
+    await page.getByRole('menuitem', { name: 'Embed…' }).click();
+    const emb = page.getByRole('dialog', { name: /^Embed · / });
+    const embOutside = emb.getByRole('note').filter({ hasText: 'Shows data from folders' });
+    await embOutside.waitFor();
+    assert.equal((await embOutside.textContent())?.trim(), 'Shows data from folders 1 person can’t open.');
+    await screensInPlace(page, 'folders-embed');
+    await page.keyboard.press('Escape');
+
     // ── Vera, outside Finance ────────────────────────────────────────────
     const vctx = await page.context().browser()!.newContext({ baseURL: server.base, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', extraHTTPHeaders: { 'x-forwarded-email': VERA } });
     const vpage = await vctx.newPage();
@@ -199,6 +225,25 @@ if (!adminUrl) {
     await brail.getByRole('button', { name: /^Finance \(1\)/ }).click();
     await page.getByRole('link', { name: new RegExp(boardName) }).first().waitFor();
     await screens(page, 'folders-dashboards');
+
+    // ── Subscribe: Ops analysts off Finance, an email list holding Vera — she can't open it and won't get it ──
+    const financeId: string = (await rpc(ADMIN, 'folder:tree', { projectId: pid })).folders.find((f: { name: string }) => f.name === 'Finance').id;
+    assert.equal((await rpc(ADMIN, 'folder:grant', { projectId: pid, folderId: financeId, teamId: opsAnalysts, level: null })).ok, true);
+    const veraId = ((await rpc(ADMIN, 'admin:users')) as { id: string; email: string }[]).find((u) => u.email === VERA)!.id;
+    assert.equal((await rpc(ADMIN, 'channel:save', { name: 'Ops list', kind: 'email', to: { userIds: [veraId], teamIds: [] } })).ok, true);
+    await page.goto(`/reports?project=${pid}&tab=subscriptions`);
+    await settled(page);
+    await page.getByRole('button', { name: 'New subscription' }).first().click();
+    const sub = page.getByRole('dialog', { name: 'New subscription' });
+    await sub.getByRole('combobox', { name: 'Dashboard' }).click();
+    await page.getByRole('option', { name: boardName }).click();
+    await sub.getByRole('button', { name: /^Where/ }).click();
+    await sub.getByRole('checkbox', { name: 'Ops list' }).check();
+    const closed = sub.getByRole('note').filter({ hasText: 'can’t open this dashboard' });
+    await closed.waitFor({ timeout: 30_000 });
+    assert.equal((await closed.textContent())?.trim(), '1 recipient can’t open this dashboard and won’t get it.');
+    await screensInPlace(page, 'folders-subscribe');
+    await page.keyboard.press('Escape');
 
     // ── Data: drag the dataset back onto Everyone; the Move dialog opens with it picked ──
     await page.goto(`/data/${pid}`);

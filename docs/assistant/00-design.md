@@ -592,16 +592,26 @@ is left out (D18), for the Statistics and Metric tree pickers too. Then the card
   is refused below Edit there. The visual still needs Edit on its dataset (the visual store's own check). `CREATE` in
   `scripts/folderReaders.ts`. It is a `write`, so it is not in the row or column readers' lists, which hold `read`
   contracts. It joins `test-liveSafetyNet` (routed: a Live dataset's card is the warehouse's).
-- **Not offered:** to a viewer (Request a dashboard is theirs; the server refuses one 403); on a source table's answer,
-  which is Keep as a dataset first (`keepFirst`); on an SQL answer, which has no chart form (*Only a chart answer can be
-  added to a dashboard.*). The "What you will see" line where Add to dashboard also makes the Live dataset is not built:
-  Keep first, then add.
-- The turn does not record it: after a reload the button is offered again, and a second click adds a second tile.
+- **A source table's answer** goes on in one click: the table is kept first, in the same call, through Keep as a
+  dataset's own make (`sourceKeep.keepView`: its checks, and a table already kept is that dataset), landing where Keep
+  lands it, and its turn is re-pointed at it as Keep does. The dialog says so (*The warehouse table is kept as a Live
+  dataset, and the answer is …*).
+- **Not offered:** to a viewer (Request a dashboard is theirs; the server refuses one 403); on an SQL answer, which has
+  no chart form (*Only a chart answer can be added to a dashboard.*).
+- **Not twice:** a dashboard already holding the answer's tile — of the visual its turn keeps, or of a visual drawing
+  what Save as visual would save for the card (dataset, chart type, encoding and filters, sanitized) — answers that
+  tile with `already: true` and adds nothing; a kept table is found again rather than made twice. Named (`threadId` +
+  `turnId`), the turn keeps the visual and the dashboard (`markSaved`, `dashboardId`), and a visual it already keeps
+  (Save as visual's) is the one put on. Its card reply carries `onDashboard` (`liveBits`: the dashboard, while the caller
+  opens it and it still holds that visual), so after a reload the card says *On Sales board · Open*, with no call.
 
-Tested in `test-answerAddToDashboard`, both modes: one visual and one draft tile more, no other dashboard. The tile's
+Tested in `test-answerAddToDashboard`, both modes: one visual and one draft tile more, no other dashboard. Twice on the
+same dashboard is `already`, nothing more (NEGATIVE CONTROL: another dashboard gets a second); a turn's card says where
+after a reload (NEGATIVE CONTROL: another turn's says nothing); a table's answer makes one Live dataset and one tile, and
+a second click neither. The tile's
 figures through `analysis:tiles` are the card's (`Object.is`; NEGATIVE CONTROL: another answer's card differs). The
 published copy is byte-identical. A new dashboard is named as asked, else by the card. A viewer, an SQL answer, a
-source table's and a missing dashboard are refused, writing nothing (NEGATIVE CONTROL: the editor's chart answer goes).
+source table that is not there and a missing dashboard are refused, writing nothing (NEGATIVE CONTROL: the editor's chart answer goes).
 With Postgres: the picker per person, `edit` and `closed` on the Ops board (NEGATIVE CONTROLS: the Ops lead adds to it,
 and the view-only editor adds to a board in Everyone), and a new dashboard landing in Ops. Also in the folder safety
 net's section 8, and in the dock e2e (a new dashboard from the Explain card, both themes).

@@ -128,3 +128,8 @@ export function requestDeclined(title: string): string {
 export function requestEmailReason(): string {
   return t('requestMessages.you_get_this_email_because_you');
 }
+
+/** Under a chart on the review page: a row rule holds the requester to other rows than the reviewer on its dataset. */
+export function seesFewerRows(name: string): string {
+  return t('requestMessages.sees_fewer_rows_here_row_access', { name });
+}

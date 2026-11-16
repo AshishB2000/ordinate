@@ -795,6 +795,7 @@
   "requestMessages.only_answers_drawn_as_a_chart": "Pour l’instant, seules les réponses tracées en graphique à partir d’un jeu de données peuvent aller sur un tableau de bord.",
   "requestMessages.pick_a_folder_you_edit_and": "Choisissez un dossier que vous modifiez et que {by} peut ouvrir.",
   "requestMessages.requested_by": "Demandé par {by}",
+  "requestMessages.sees_fewer_rows_here_row_access": "{name} voit moins de lignes ici (règles d’accès aux lignes)",
   "requestMessages.someone_is_approving_this_request_right": "Quelqu’un est en train d’approuver cette demande.",
   "requestMessages.that_answer_is_not_in_one": "Cette réponse n’est plus dans aucune de vos conversations.",
   "requestMessages.that_dashboard_is_not_one_you": "Vous ne pouvez pas ouvrir ce tableau de bord.",

@@ -28,8 +28,8 @@ import type { AnswerCard } from './answers';
 
 export type SavedAnswer = { ok: true; visual: { id: string; name: string } } | { ok: false; reason: string };
 
-/** The card as a saved Visual, through the door every new visual takes (./visuals `saveNewVisual`). A Live dataset saves as any other does. */
-export async function saveCardAsVisual(projectId: string, card: AnswerCard): Promise<SavedAnswer> {
+/** What the card saves as: the visual `saveCardAsVisual` makes, before it is made (Add to dashboard finds one already on a board by it). */
+export async function visualOfCard(projectId: string, card: AnswerCard): Promise<Parameters<typeof saveNewVisual>[1]> {
   const { spec } = card;
   const encoding: VizEncoding = { category: spec.category, values: spec.measures };
   if (spec.series) encoding.series = spec.series;
@@ -50,13 +50,18 @@ export async function saveCardAsVisual(projectId: string, card: AnswerCard): Pro
     filters.push({ type: 'filter', column: spec.category, op: 'in', values: kept });
   }
 
-  const saved = await saveNewVisual(projectId, {
+  return {
     name: card.title,
     datasetId: spec.datasetId,
     chartType: card.chartType,
     encoding,
     overrides: axis === 'date' ? {} : { sort: 'desc' },
     filters,
-  });
+  };
+}
+
+/** The card as a saved Visual, through the door every new visual takes (./visuals `saveNewVisual`). A Live dataset saves as any other does. */
+export async function saveCardAsVisual(projectId: string, card: AnswerCard): Promise<SavedAnswer> {
+  const saved = await saveNewVisual(projectId, await visualOfCard(projectId, card));
   return saved ? { ok: true, visual: { id: saved.id, name: saved.name } } : { ok: false, reason: answerNotSaved() };
 }

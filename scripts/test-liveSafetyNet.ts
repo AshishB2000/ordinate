@@ -584,6 +584,19 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     const r = await post(channel, payload);
     ok(`7. Source table → ${channel} ${answers ? 'ANSWERS from its Live view' : 'refuses, typed (a view has no sample)'}`, answers ? r.status === 200 && answered(r.value) : isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
   }
+  // Add to dashboard on a table's answer keeps the table first (Keep as a dataset's make): here the Live dataset already
+  // over it ("Orders live", so none is made: the count below), and its tile's card is the warehouse's, never a hydrated table.
+  const getNow = datasets.getDataset;
+  let hydrated7 = 0;
+  (datasets as { getDataset: unknown }).getDataset = (...a: Parameters<typeof getNow>) => { hydrated7++; return getNow(...a); };
+  try {
+    const added = await post('answer:addToDashboard', { projectId: P, spec: { ...onTable, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } });
+    const v = added.value?.ok ? (await post('visual:get', { projectId: P, id: (added.value.visual as { id: string }).id })).value : null;
+    ok('7. Source table → answer:addToDashboard keeps it as the Live dataset already over it and adds that dataset\'s tile, getDataset never called',
+      added.status === 200 && added.value?.ok === true && v?.datasetId === seed.live && hydrated7 === 0, `${hydrated7} ${added.status} ${added.body.slice(0, 240)}`);
+  } finally {
+    (datasets as { getDataset: unknown }).getDataset = getNow;
+  }
 
   // getDataset itself: throws on Live, a typed error; the metadata read does not.
   await context.runInContext(ADMIN, 'direct', async () => {

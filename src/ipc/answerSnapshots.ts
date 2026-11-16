@@ -49,6 +49,7 @@ import { verifiedSqlOn } from './verifiedLookup';
 import type { AnswerCard, Built, CardLearn, Failure } from './answers';
 import { inSourceTable, inSqlTables } from './sourceAnswers';
 import { openTurns } from './turnsOpen';
+import { onDashboard } from './answerDashboard';
 import { viewHook } from '../data/sourceView';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
@@ -63,18 +64,26 @@ export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot' | 'factsFrom'> & 
  * (team folders E8), so a column hidden since is never shown from a kept card. Reads the dataset's record only, never a row.
  */
 export async function accessPrint(projectId: string, datasetId: string): Promise<string> {
-  let lock: unknown;
-  try {
-    const held = await rowLockFor(projectId, datasetId);
-    const sorted = (v: readonly unknown[]): string[] => v.map((x) => JSON.stringify(x)).sort();
-    lock = held ? Object.fromEntries(Object.entries(held.values).map(([c, v]) => [c, sorted(v)])) : null;
-  } catch (err) {
-    if (!isRowPolicyError(err)) throw err;
-    lock = { refused: err.reason };
-  }
+  const lock = await lockPrint(projectId, datasetId);
   const hidden = [...(await hiddenColumnsFor(projectId, datasetId))].sort();
   const view = viewHook(projectId, datasetId);
   return createHash('sha256').update(stableStringify({ v: 1, lock, hidden, ...(view ? { columns: view.columns.map((c) => c.name).sort() } : {}) })).digest('hex');
+}
+
+/**
+ * The row half of `accessPrint`: the caller's row lock on `datasetId` (its values sorted, or why they are refused one),
+ * or null when no row rule applies to them. Two people with equal prints see the same rows (a dashboard request's
+ * "sees fewer rows", ../server/requests). Reads the dataset's record only, never a row.
+ */
+export async function lockPrint(projectId: string, datasetId: string): Promise<unknown> {
+  try {
+    const held = await rowLockFor(projectId, datasetId);
+    const sorted = (v: readonly unknown[]): string[] => v.map((x) => JSON.stringify(x)).sort();
+    return held ? Object.fromEntries(Object.entries(held.values).map(([c, v]) => [c, sorted(v)])) : null;
+  } catch (err) {
+    if (!isRowPolicyError(err)) throw err;
+    return { refused: err.reason };
+  }
 }
 
 /** `accessPrint` of every dataset an SQL answer read, as one sha256: a change on any of them, and its table is computed again. */
@@ -129,11 +138,13 @@ export async function learnState(projectId: string, datasetId: string, learn: An
 }
 
 /** What a card says that is not a figure, worked out now for the turn it draws (as `answer:card` does). */
-async function liveBits(projectId: string, spec: AnswerSpec, turn: Pick<copilot.CopilotTurn, 'learn' | 'savedVisualId' | 'guidance'>): Promise<Record<string, unknown>> {
+async function liveBits(projectId: string, spec: AnswerSpec, turn: Pick<copilot.CopilotTurn, 'learn' | 'savedVisualId' | 'dashboardId' | 'guidance'>): Promise<Record<string, unknown>> {
   const said = sanitizeLearn(turn.learn, spec);
   const taught = said ? await learnState(projectId, spec.datasetId, said) : undefined;
   const saved = turn.savedVisualId && (await visuals.getVisual(projectId, turn.savedVisualId)) ? turn.savedVisualId : undefined;
-  return { ...(taught ? { learn: taught } : {}), ...(saved ? { savedVisualId: saved } : {}), ...(await verifiedMark(projectId, spec, turn.guidance)), ...(await answeredFrom(projectId, spec.datasetId)) };
+  // Add to dashboard's: where it went, while that dashboard still holds the visual (./answerDashboard).
+  const on = saved && turn.dashboardId ? await onDashboard(projectId, turn.dashboardId, saved) : undefined;
+  return { ...(taught ? { learn: taught } : {}), ...(saved ? { savedVisualId: saved } : {}), ...(on ? { onDashboard: on } : {}), ...(await verifiedMark(projectId, spec, turn.guidance)), ...(await answeredFrom(projectId, spec.datasetId)) };
 }
 
 const delivered = async (projectId: string, card: object, spec: AnswerSpec, turn: copilot.CopilotTurn, view: KeptView) =>

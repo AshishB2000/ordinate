@@ -46,9 +46,9 @@ async function keptAlready(projectId: string, connId: string, table: string, nam
 
 /**
  * The table's Live dataset: one already kept (`keptAlready`), else made through the connection's own Live create; or why
- * not. Never a viewer's, even one given the table (E8, F6).
+ * not. Never a viewer's, even one given the table (E8, F6). Add to dashboard keeps a table's answer through it too (./answerDashboard).
  */
-async function keepView(projectId: string, connId: string, docId: string, named = false): Promise<{ ok: true; datasetId: string } | { ok: false; reason: string; needs?: 'copy' }> {
+export async function keepView(projectId: string, connId: string, docId: string, named = false): Promise<{ ok: true; datasetId: string } | { ok: false; reason: string; needs?: 'copy' }> {
   if (!(await seesSourceNames(projectId))) return { ok: false, reason: liveDatasetMissing() }; // the route's `write` refuses them first
   const v = await sourceView(projectId, connId, docId);
   if (!v.ok) return v;

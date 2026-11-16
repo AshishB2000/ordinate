@@ -235,7 +235,7 @@ if (!dbUrl) {
     }
     const adds = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/answer:addToDashboard');
     await adding.getByRole('button', { name: 'Add', exact: true }).click();
-    assert.deepEqual(Object.keys(((await adds).postDataJSON() as { args: [Record<string, unknown>] }).args[0]), ['projectId', 'spec', 'name'], 'the spec and the new name — nothing else');
+    assert.deepEqual(Object.keys(((await adds).postDataJSON() as { args: [Record<string, unknown>] }).args[0]), ['projectId', 'spec', 'name', 'threadId', 'turnId'], 'the spec, the new name and its turn (which keeps where it went) — nothing else');
     await card.getByTestId('answer-added').getByText('Added to From the dock').waitFor();
     const boardHref = (await card.getByRole('link', { name: 'Open', exact: true }).getAttribute('href')) ?? '';
     assert.match(boardHref, new RegExp(`^/analyses/${pid}/[0-9a-f-]{36}$`));
@@ -244,8 +244,11 @@ if (!dbUrl) {
     const made = (await call('analysis:open', { projectId: pid, id: boardId })) as { status: string; analysis: { name: string; sheets: Array<{ cards: Array<{ type: string; visualId?: string }> }> } };
     const tiles = made.analysis.sheets.flatMap((sh) => sh.cards);
     assert.deepEqual([made.analysis.name, made.status, tiles.length, tiles[0]?.type], ['From the dock', 'draft', 1, 'visual'], 'one tile on a draft, never published');
-    await call('analysis:delete', { projectId: pid, id: boardId }); // the sample as it was: the dashboard and its chart go
-    await call('visual:delete', { projectId: pid, id: tiles[0].visualId });
+    assert.equal(tiles[0].visualId, href.split('/').pop(), 'the visual its turn keeps (Save as visual\'s) is the tile: no second visual');
+    await page.reload(); // after a reload the card says where it went, from the turn, with no call of its own
+    await settled(page);
+    await card.getByTestId('answer-added').getByText('On From the dock').waitFor();
+    await call('analysis:delete', { projectId: pid, id: boardId }); // the sample as it was: the dashboard goes (its chart is the saved visual)
     await open.click();
     await page.waitForURL(`**${href}`);
     await page.waitForFunction(() => document.querySelector('[data-chart-type] canvas')); // its own page draws it
