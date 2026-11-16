@@ -17,6 +17,8 @@
 // as a dataset that does not exist: for a viewer given nothing, before any doc, connection or warehouse is read; for
 // one given some, after the doc alone. A table on a connection that is not asked live (`isLiveOffered`) is offered
 // marked "copy first", and an answer naming it is refused with `needs: 'copy'` (the reason Ask an editor carries).
+// The SQL lane reads the same views (docs/live-data/01-live-sql.md F5, F6: `sourceVocabulary`, `inSqlTables`), so a
+// viewer's statement names a given table by its label's slug and sees only the columns the view declares.
 
 import * as connections from '../connectors/connections';
 import type { Connection } from '../connectors/connections';
@@ -135,12 +137,13 @@ export async function inSourceTable<T>(projectId: string, spec: Pick<AnswerSpec,
 
 /**
  * `fn` inside the views of the source tables an SQL answer read (docs/live-data/01-live-sql.md F5: `sql.table` their one
- * connection, their docs' ids among `sql.datasetIds`), or `fn` as it is. Docs in one read, the connection once. For a
- * caller who may not see source names, `fn` outside any view, where a table's id is no dataset.
+ * connection, their docs' ids among `sql.datasetIds`), or `fn` as it is. Docs in one read, the connection once. A
+ * viewer's are the tables still given to their teams and labelled, as `sourceView` builds them for them (F6); any
+ * other is left out, so `fn` meets its id as no dataset — for a viewer given nothing, before any doc is read.
  */
 export async function inSqlTables<T>(projectId: string, sql: { datasetIds: readonly string[]; table?: string } | undefined, fn: () => Promise<T>): Promise<T> {
   const connId = sql?.table;
-  if (!connId || !(await seesSourceNames(projectId))) return fn();
+  if (!connId) return fn();
   const views = (await tablesOf(projectId, sql.datasetIds.map((docId) => ({ connId, docId })), await readerOf(projectId))).flatMap((t) => (t.view ? [t.view] : []));
   return views.length ? withSourceViews(projectId, views, fn) : fn();
 }

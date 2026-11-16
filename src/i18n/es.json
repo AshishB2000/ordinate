@@ -541,6 +541,7 @@
   "liveSqlMessages.this_number_is_too_large_to": "Este número es demasiado grande para compararlo con exactitud en un almacén de datos.",
   "liveSqlMessages.this_statement_doesn_t_add_up": "Esta instrucción no cuadra, así que no se envió al almacén de datos: {detail}",
   "liveSqlMessages.this_statement_is_nested_too_deeply": "Esta instrucción está anidada a demasiada profundidad para comprobarla.",
+  "liveSqlMessages.this_statement_names_a_table_that": "Esta instrucción nombra una tabla que no es un conjunto de datos que esta pregunta pueda leer.",
   "liveSqlMessages.this_statement_reads_no_dataset": "Esta instrucción no lee ningún conjunto de datos.",
   "liveSqlMessages.you_have_had_sql_answers_from": "Has recibido {limit} respuestas SQL de esta conexión en la última hora, el máximo por persona. Vuelve a intentarlo en {minutes} min o pide un gráfico.",
   "mentionMessages.a_comment_or_reply_can_mention": null,

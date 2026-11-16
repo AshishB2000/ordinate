@@ -17,7 +17,9 @@
 // block), and the first call may name one where no dataset has the name. Its in-memory Live view (../data/sourceView) is
 // then read like a Live dataset for the rest of the answer: the facts' columns in the second call, under the names a
 // dataset of its name would take now (so Keep, then Verify, reads the same text), and phase F's executor. A table on a
-// connection not asked live is Copy first (`needs: 'copy'`). Viewers get no table: none is offered or looked up for them.
+// connection not asked live is Copy first (`needs: 'copy'`). A viewer (F6) is offered only the tables their teams were
+// given and an editor labelled (team folders E8), each view named by its label and declaring only the columns their
+// teams leave visible; a viewer given nothing is offered and looked up none. Keep and Verify are editors' (`write`).
 
 import * as analyze from '../ai/analyze';
 import * as sqlDatasets from '../engine/sqlDatasets';

@@ -69,7 +69,8 @@ import { liveTarget, type LiveTarget } from './liveTarget';
 import { LiveCallError, dialectOf, failed, opOf, timeoutMs, warehouse } from './liveWarehouse';
 import type { LiveSqlIR, Ty } from './sql/ir';
 import { LIVE_SQL_ROWS, printLiveSql } from './sql/print';
-import { parseSql, translate, type SqlEnv } from './sql/tree';
+import { parseSql, translate, type SqlEnv, type SqlRefusal } from './sql/tree';
+import { seesSourceNames } from '../../data/sourceNames';
 
 /** Live SQL answers one member may have from one connection in an hour (open question 1: a guess, not a measurement). */
 export const SQL_PER_HOUR = 30;
@@ -210,7 +211,7 @@ async function prepared(projectId: string, text: string, tables: readonly LiveSq
     today: utcDay(), // F-D4: the UTC day, as the warehouse's session and the reference read it
   };
   const tr = translate(await parseSql(text), env);
-  if (!tr.ok) return refused(op, tr.message);
+  if (!tr.ok) return refused(op, await sentenceOf(projectId, tr));
   const bind = await unbound(text, env);
   if (bind) return refused(op, bind);
   const ir = tr.ir;
@@ -220,6 +221,14 @@ async function prepared(projectId: string, text: string, tables: readonly LiveSq
     if (gone) return refused(op, gone.message);
   }
   return { ir, views };
+}
+
+/**
+ * The translator's sentence for the caller. A table name outside their vocabulary is told to a viewer without it (F6):
+ * a warehouse name, its schema or an ungiven table's label is never echoed back, whoever wrote it.
+ */
+async function sentenceOf(projectId: string, r: SqlRefusal): Promise<string> {
+  return (r.code === 'table' || r.code === 'qualified') && !(await seesSourceNames(projectId)) ? msg.sqlUnknownName() : r.message;
 }
 
 /** Every table read under its own lock (F-D10), nested: `body` runs inside all of them with their locks, in `ir.views` order. */

@@ -30,6 +30,11 @@ export function sqlUnknownTable(name: string): string {
   return t('liveSqlMessages.is_not_a_dataset_this_question', { name });
 }
 
+/** A table name that is not one of the caller's, to a caller who may not see source names: never their word back (F6). */
+export function sqlUnknownName(): string {
+  return t('liveSqlMessages.this_statement_names_a_table_that');
+}
+
 /** A schema- or catalog-qualified table name. */
 export function sqlQualified(name: string): string {
   return t('liveSqlMessages.name_a_dataset_by_its_name', { name });

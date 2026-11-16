@@ -541,6 +541,7 @@
   "liveSqlMessages.this_number_is_too_large_to": "Ce nombre est trop grand pour être comparé exactement dans un entrepôt de données.",
   "liveSqlMessages.this_statement_doesn_t_add_up": "Cette instruction ne tient pas debout, elle n’a donc pas été envoyée à l’entrepôt : {detail}",
   "liveSqlMessages.this_statement_is_nested_too_deeply": "Cette instruction est trop profondément imbriquée pour être vérifiée.",
+  "liveSqlMessages.this_statement_names_a_table_that": "Cette instruction nomme une table qui n’est pas un jeu de données que cette question peut lire.",
   "liveSqlMessages.this_statement_reads_no_dataset": "Cette instruction ne lit aucun jeu de données.",
   "liveSqlMessages.you_have_had_sql_answers_from": "Vous avez reçu {limit} réponses SQL de cette connexion au cours de la dernière heure, le maximum par personne. Réessayez dans {minutes} min, ou demandez un graphique.",
   "mentionMessages.a_comment_or_reply_can_mention": null,

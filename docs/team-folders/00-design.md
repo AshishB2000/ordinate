@@ -771,7 +771,8 @@ merged, E8 ships the rows, the screen and the index filter; the viewer answer pa
   statement names tables by their **labels** (the only names they have), which the gate resolves to warehouse names
   server side, refusing any name that is not a given, labelled table as unknown (never echoing it); the columns it may
   name are the view's declared ones (hidden columns refused, `*` expanded to those alone), the required date range as
-  the view's; and the SQL text, which carries warehouse names once resolved, never goes back to the viewer.
+  the view's; and the SQL text, which carries warehouse names once resolved, never goes back to the viewer. Built as F6
+  (docs/live-data/01-live-sql.md, "F6 as built").
 
 ## Dashboard requests
 

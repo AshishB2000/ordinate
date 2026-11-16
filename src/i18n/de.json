@@ -541,6 +541,7 @@
   "liveSqlMessages.this_number_is_too_large_to": "Diese Zahl ist zu groß, um sie in einem Data Warehouse exakt zu vergleichen.",
   "liveSqlMessages.this_statement_doesn_t_add_up": "Diese Anweisung geht nicht auf und wurde daher nicht an das Data Warehouse gesendet: {detail}",
   "liveSqlMessages.this_statement_is_nested_too_deeply": "Diese Anweisung ist zu tief verschachtelt, um sie zu prüfen.",
+  "liveSqlMessages.this_statement_names_a_table_that": "Diese Anweisung nennt eine Tabelle, die kein Datensatz ist, den diese Frage lesen kann.",
   "liveSqlMessages.this_statement_reads_no_dataset": "Diese Anweisung liest keinen Datensatz.",
   "liveSqlMessages.you_have_had_sql_answers_from": "Sie haben in der letzten Stunde {limit} SQL-Antworten von dieser Verbindung erhalten, das Maximum pro Person. Versuchen Sie es in {minutes} Min. erneut oder fragen Sie nach einem Diagramm.",
   "mentionMessages.a_comment_or_reply_can_mention": null,

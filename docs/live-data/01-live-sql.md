@@ -540,6 +540,46 @@ agree is lifted by deleting its entry from `OFF_CLICKHOUSE` and `DIALECT_PINS`, 
 corpus run, citing that run. One with a disagreement stays refused; the line names the case and the
 first difference (an unknown `lag`, a frame read differently).
 
+### F6 as built
+
+- **Files:** `src/ipc/sourceAnswers.ts` (`inSqlTables` asks who reads, not `seesSourceNames`), `src/engine/live/liveSql.ts`
+  (`sentenceOf`), `src/ipc/sourceKeep.ts` (`keepView` refuses a viewer itself), one sentence in `src/engine/liveSqlMessages.ts`
+  translated in the four drafts, the lane's header in `src/ipc/answerSql.ts`. No contract, setting, migration or web change:
+  the card already shows a viewer *Warehouse table, not a dataset* with neither Keep nor Verify (F5's Vitest).
+- **How a viewer's table enters the lane.** Nothing new on the way in: since E8, `sourceVocabulary` reads the tables through
+  the same `readerOf` as every table reader, so a viewer's Home question offers only the tables their teams were given and an
+  editor labelled (step 3's index, `givenSql`), each `sourceView`'s view for them: named by the label, declaring the columns
+  less the team-hidden ones (a required partition column kept). `picked` resolves the first call's name against those views,
+  `namesOf` gives each the slug its label takes (`Orders` is `orders`), and F3's executor translates over the view's declared
+  columns, so a hidden column is in no SOURCE TABLES line, no second-call facts, no vocabulary and no `SELECT *`, and a
+  statement naming it is refused as a made-up name (`"tier" is not a column here.`), never sent. The gap was after the ask:
+  `inSqlTables` (the snapshot's fingerprint, its delivery on reopen, Refresh) ran a viewer's turn outside any view, so their
+  card was never delivered and Refresh fell to the extract gate. It now builds the caller's views like `sourceView`: a table
+  unticked or unlabelled since is left out, and its turn brings no card and refreshes to a refusal.
+- **What a viewer never sees.** Show SQL is the model's text over label slugs. The printed statement, the warehouse table,
+  its schema and the connection's name stay on the server. A table name the statement writes outside their vocabulary (an
+  unticked table's label, a warehouse name, a qualified one, an editor's slug) is told to a viewer as *This statement names a
+  table that is not a dataset this question can read.*, never their word back (`sentenceOf`: the translator's `table` and
+  `qualified` codes for a caller who does not see source names; an editor's keeps the quote). The first call's *"…" is not the
+  name of one dataset.* still quotes the model's word (F5), with no doc of the table read. Keep and Verify are `write`; and
+  `keepView` now refuses a caller who does not see source names before any catalog read, since E8 opened `sourceView` to
+  viewers (off the route, a viewer's Keep would have made a dataset named by the warehouse table).
+- **Tests:** `test-liveSqlViewers` (new: `test-teamTables` needs Postgres for every viewer section, and this runs both
+  modes; without a database the viewer's teams' rows are `givenFrom` over fixture rows, only `givenOn`'s read stubbed) — 20
+  checks in each mode: the corpus over two given tables by their labels, the viewer's table `Object.is` to the editor's by
+  the warehouse names and to F2's reference (55/55), the six statements naming the hidden column refused with nothing sent
+  where the editor's answer; the turn's doc ids and connection, the card's labels, Show SQL; both prompts without the hidden
+  column (NEGATIVE CONTROL: the editor's hold it and the warehouse names); `SELECT *` printed with no hidden column and equal
+  to the editor's visible columns (CONTROL: unhidden, printed and returned); an unticked table refused at the first call with
+  no doc read (CONTROL: ticked, it answers), and in a statement as an unticked label, a warehouse name, a qualified one and an
+  editor's slug, the name never echoed and nothing sent (NEGATIVE CONTROL: the editor's qualified name quoted, their slug
+  answers); Keep and Verify refused, nothing made or saved; reopen brings the kept table and Refresh runs it (CONTROL:
+  unticked, neither sends a figure); the canary over 290 viewer replies and prompts (NEGATIVE CONTROL: the editor's).
+  Mutations checked: with F5's `inSqlTables` the viewer's cards and Refresh fail; without `sentenceOf` the four names are
+  echoed and the canary fails; without `keepView`'s refusal the viewer's Keep reaches the warehouse's catalog.
+- **Left:** a 2-part column reference whose qualifier is no table (`f6_orders_canary.region`) still quotes the model's
+  words in `"…" is not a column here.`; a log line is no viewer's to read, so the canary greps replies and prompts only.
+
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15
 (43735675013) skipped both warehouses for want of them. They must be added (on
