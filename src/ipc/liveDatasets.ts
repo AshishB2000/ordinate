@@ -116,13 +116,17 @@ export async function readLiveSchema(projectId: string, connId: string, sel: Sel
  * the create answers at once, the sample lands a moment later. Lazy, because
  * the sync reads its columns through this module.
  */
-function queueSync(projectId: string, id: string): void {
+export function queueSync(projectId: string, id: string): void {
   const job = require('../engine/live/schemaSyncJob') as typeof import('../engine/live/schemaSyncJob');
   void job.startSchemaSync(projectId, id).catch(() => undefined);
 }
 
-/** `connection:import` with `mode: 'live'` — the schema stored, no rows fetched. */
-export async function createLiveDataset(p: Record<string, unknown>) {
+/**
+ * `connection:import` with `mode: 'live'` — the schema stored, no rows fetched. `sync: false`: the caller queues the
+ * first schema sync itself (`queueSync`) once the dataset is surely kept (./sourceKeep), since a sync in flight writes
+ * the record back over a delete.
+ */
+export async function createLiveDataset(p: Record<string, unknown>, opts: { sync?: boolean } = {}) {
   const projectId = str(p.projectId);
   const connId = str(p.connId);
   const sql = str(p.sql);
@@ -136,7 +140,7 @@ export async function createLiveDataset(p: Record<string, unknown>) {
   if (sql && str(p.queryId)) origin.queryId = str(p.queryId);
   const ds = await saveLiveRecord(projectId, { name: str(p.name) || table || 'Connection data', columns: schema.columns, origin, maxCacheAgeSec });
   if (!ds) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-  queueSync(projectId, ds.id);
+  if (opts.sync !== false) queueSync(projectId, ds.id);
   return { ok: true, dataset: { ...header(ds), mode: 'live' as const } };
 }
 

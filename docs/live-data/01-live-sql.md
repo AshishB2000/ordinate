@@ -632,10 +632,12 @@ first difference (an unknown `lag`, a frame read differently).
   `test-sourceAnswers` §5, a chart turn's Keep re-points at the twin.
 - **Keeping several tables is all or nothing** (`keepSql`). `keepView` says which datasets it made; on any failure after
   one (a table that cannot be kept, the turn gone, a throw), those are deleted for good through the Trash's own path
-  (`trashRecord`, then `purge`: placements and versions forgotten) and the failure is returned; the turn is not
-  re-pointed. `test-liveSqlSources` §6, both modes: a Keep whose second table is gone from the warehouse fails, one Live
-  record was written and none is left, none in the Trash, the turn's table and doc ids unchanged (NEGATIVE CONTROL: the
-  Keep after it, both tables there, makes two and re-points).
+  (`trashRecord`, then `purge`: placements and versions forgotten; a step that fails is logged through `safeError`, never
+  silent) and the failure is returned; the turn is not re-pointed. Their first schema syncs are queued only once the turn
+  is re-pointed (`createLiveDataset(…, {sync: false})`, then `queueSync`): a sync in flight did a locked
+  read-modify-write that landed after the undo and wrote the record back (about 1 run in 2 with Postgres). `test-liveSqlSources` §6, both modes: a Keep whose second table is gone from the warehouse fails, one Live
+  record was written and none is left, none in the Trash, no schema sync started for it, the turn's table and doc ids
+  unchanged (NEGATIVE CONTROL: the Keep after it, both tables there, makes two, re-points, and starts each one's sync).
 
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15

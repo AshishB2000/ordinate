@@ -21,7 +21,9 @@ import type { SqlTurn } from '../ai/answerSql';
 import { sourceView } from './sourceAnswers';
 import { seesSourceNames } from '../data/sourceNames';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
-import { createLiveDataset } from './liveDatasets';
+import { createLiveDataset, queueSync } from './liveDatasets';
+import { logger } from '../app/logger';
+import { safeError } from '../connectors/types';
 import { answerNotThere } from '../ai/answerSnapshotMessages';
 import { notFromTable } from '../ai/sourceAnswerMessages';
 import { turnsForBrowser } from './answerSnapshots';
@@ -49,14 +51,15 @@ async function keptAlready(projectId: string, connId: string, table: string, nam
 /**
  * The table's Live dataset: one already kept (`keptAlready`), else made through the connection's own Live create; or why
  * not. Never a viewer's, even one given the table (E8, F6). Add to dashboard keeps a table's answer through it too (./answerDashboard).
+ * `sync: false`: its first schema sync is the caller's to queue.
  */
-export async function keepView(projectId: string, connId: string, docId: string, named = false): Promise<{ ok: true; datasetId: string; made?: true } | { ok: false; reason: string; needs?: 'copy' }> {
+export async function keepView(projectId: string, connId: string, docId: string, named = false, sync = true): Promise<{ ok: true; datasetId: string; made?: true } | { ok: false; reason: string; needs?: 'copy' }> {
   if (!(await seesSourceNames(projectId))) return { ok: false, reason: liveDatasetMissing() }; // the route's `write` refuses them first
   const v = await sourceView(projectId, connId, docId);
   if (!v.ok) return v;
   const kept = await keptAlready(projectId, v.table.connId, v.table.table, named);
   if (kept) return { ok: true, datasetId: kept };
-  const made = await createLiveDataset({ projectId, connId: v.table.connId, table: v.table.table, name: v.table.table });
+  const made = await createLiveDataset({ projectId, connId: v.table.connId, table: v.table.table, name: v.table.table }, { sync });
   if (!made.ok || !('dataset' in made) || !made.dataset) return { ok: false, reason: ('error' in made && made.error) || notFromTable() };
   return { ok: true, datasetId: made.dataset.id, made: true };
 }
@@ -88,7 +91,7 @@ async function keepSql(projectId: string, threadId: string, turnId: string, sql:
   try {
     for (const [i, id] of ids.entries()) {
       if (await datasets.getDatasetMeta(projectId, id)) continue; // a Live dataset beside the table: already one
-      const kept = await keepView(projectId, sql.table, id, true);
+      const kept = await keepView(projectId, sql.table, id, true, false); // no sync in flight to write a record back over the undo
       if (!kept.ok) return kept;
       if (kept.made) made.push(kept.datasetId);
       ids[i] = kept.datasetId;
@@ -97,9 +100,20 @@ async function keepSql(projectId: string, threadId: string, turnId: string, sql:
     if (!(await copilot.replaceAnswer(projectId, threadId, turnId, { sql: sql.text }, { ...rest, datasetIds: ids }))) return { ok: false, reason: answerNotThere() };
     pointed = true;
   } finally {
-    if (!pointed) for (const id of made) if ((await trash.trashRecord(projectId, 'dataset', id)).ok) await trash.purge(projectId, 'dataset', id);
+    if (pointed) made.forEach((id) => queueSync(projectId, id));
+    else for (const id of made) await undoMade(projectId, id);
   }
   return { ok: true, datasetId: ids.find((x) => !sql.datasetIds.includes(x)), turns: await turnsForBrowser(projectId, await copilot.loadHistory(projectId, threadId)) };
+}
+
+/** A dataset this Keep made, deleted for good (the Trash, then purge). A step that fails is logged, never silent. */
+async function undoMade(projectId: string, id: string): Promise<void> {
+  try {
+    if (!(await trash.trashRecord(projectId, 'dataset', id)).ok) logger.error(`[sourceKeep] dataset ${id} made by a failed Keep could not be moved to the Trash`);
+    else if (!(await trash.purge(projectId, 'dataset', id))) logger.error(`[sourceKeep] dataset ${id} made by a failed Keep stays in the Trash`);
+  } catch (err: unknown) {
+    logger.error(`[sourceKeep] dataset ${id} made by a failed Keep was not deleted: ${safeError(err)}`);
+  }
 }
 
 export function register(): void {
