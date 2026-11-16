@@ -591,6 +591,7 @@ export function registerHandlers(): void {
   registerCaller(() => dbPool); // row access rules: who is a project viewer
   (require('../ipc/rowPolicy') as typeof import('../ipc/rowPolicy')).register(() => dbPool); // …and the admin's Row access tab
   (require('../ipc/columnAccess') as typeof import('../ipc/columnAccess')).register(() => dbPool); // …and who sees each column (part 4)
+  (require('../ipc/teamTables') as typeof import('../ipc/teamTables')).register(); // …and which warehouse tables each team's viewers may ask about (team folders E8)
   // Admin and personal API tokens (T3.4). The env is read per call, like the pool.
   const env = (): ServerEnv => {
     if (!appEnv) throw new Error('no app built');

@@ -15,7 +15,8 @@ import { listSourceIndex, type SourceTableDoc } from './sourceTables';
 export type SourceTodoKind = 'used_no_doc' | 'never_read' | 'no_owner' | 'no_guide' | 'stale_read';
 const RANK: readonly SourceTodoKind[] = ['used_no_doc', 'never_read', 'no_owner', 'no_guide', 'stale_read'];
 
-export interface SourceRow { docId?: string; table: string; owner: string; hasGuide: boolean; readAt?: string; datasetIds: string[] }
+/** `label`: the name viewers read it by, when a team was given it (team folders E8). */
+export interface SourceRow { docId?: string; table: string; owner: string; hasGuide: boolean; readAt?: string; label?: string; datasetIds: string[] }
 /** `live`: this connection is asked live (`isLiveOffered`), so Explore answers its tables with no dataset (phase D). */
 export interface SourceConn { connId: string; name: string; connectorId: string; label: string; readsFacts: boolean; factsWake?: true; live?: true; rows: SourceRow[] }
 export interface SourceTodo { connId: string; docId?: string; table: string; kind: SourceTodoKind }
@@ -37,7 +38,7 @@ export function connectionHead(c: Connection): Omit<SourceConn, 'rows'> {
 /** A doc as `:get` and `:read` reply, built key by key (`dismissed` never leaves). The server formats the size; the web never divides it. */
 export function docView(docId: string, d: SourceTableDoc) {
   const facts = d.facts && { ...d.facts, ...(d.facts.bytes !== undefined ? { sizeLabel: estimateLabel(d.facts.bytes) } : {}) };
-  return { docId, table: d.table, owner: d.owner, refresh: d.refresh, requiredFilters: d.requiredFilters, guide: d.guide, ...(facts ? { facts } : {}), updatedBy: d.updatedBy, updatedAt: d.updatedAt };
+  return { docId, table: d.table, owner: d.owner, refresh: d.refresh, requiredFilters: d.requiredFilters, guide: d.guide, ...(d.label ? { label: d.label } : {}), ...(facts ? { facts } : {}), updatedBy: d.updatedBy, updatedAt: d.updatedAt };
 }
 
 function gapsOf(c: SourceConn, r: SourceRow, now: number): SourceTodoKind[] {
@@ -87,7 +88,7 @@ export async function sourceList(projectId: string): Promise<{ connections: Sour
     const built = used.get(c.id) ?? new Map<string, UsedDataset[]>();
     const indexed = await listSourceIndex(projectId, c.id);
     const documented: SourceRow[] = indexed.map((e) => ({
-      docId: e.docId, table: e.table, owner: e.owner, hasGuide: e.hasGuide, ...(e.readAt ? { readAt: e.readAt } : {}), datasetIds: (built.get(e.table) ?? []).map((d) => d.id),
+      docId: e.docId, table: e.table, owner: e.owner, hasGuide: e.hasGuide, ...(e.readAt ? { readAt: e.readAt } : {}), ...(e.label ? { label: e.label } : {}), datasetIds: (built.get(e.table) ?? []).map((d) => d.id),
     }));
     const docs = new Set(indexed.map((e) => e.table));
     const undocumented: SourceRow[] = [...built.keys()].filter((t) => !docs.has(t)).sort((a, b) => a.localeCompare(b))

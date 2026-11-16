@@ -31,6 +31,7 @@ const STEP_BACKS: Record<string, [count: number, reason: string]> = {
   'features/settings/ThemeEditor.tsx': [1, 'closes the in-page theme editor, back to the theme list on the same page'],
   'features/model/assistant/AgentPage.tsx': [1, 'closes an Assistant agent\'s page, back to the Assistant tab\'s sections on the same page'],
   'features/admin/AuditTab.tsx': [1, 'a pager: the previous page of the audit log'],
+  'features/admin/TeamTables.tsx': [1, 'closes a team\'s Tables, back to the Teams tab\'s list on the same page'],
   'features/subscriptions/SubscribeDialog.tsx': [1, 'the dialog\'s previous step'],
   'features/connections/ConnectionForm.tsx': [1, '"Change source": back to the picker on the same page'],
   'features/dashboards/tileActions.tsx': [1, 'the viewer\'s drill-back: restores the sheet and carried filters of the dashboard a navigate action came from (viewer state, not the page\'s parent)'],

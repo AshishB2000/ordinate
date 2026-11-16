@@ -15,13 +15,16 @@
 //           the first K by words by rank (../ai/rankFusion), then the rest by words (`withMeaning`). An item's
 //           fingerprint is made from `itemText`.
 //   spelling a name said is compared with the names by pg_trgm's similarity (./trigram, `speltItems`): "Did you mean".
+//   given   a part for viewers ('viewer': a documented table under its editor-written label, team folders E8) is found
+//           only when its keys meet the caller's `given` keys and none of their denied ones (`givenPart`): the index's
+//           WHERE, in JS.
 
 import { fuse } from '../ai/rankFusion';
 import { MIN_SIMILARITY, similarityOf, trigrams } from './trigram';
 
 export const MODEL_KINDS = ['dataset', 'metric', 'term', 'column', 'table'] as const;
 export type ModelKind = (typeof MODEL_KINDS)[number];
-export type Audience = 'all' | 'editor';
+export type Audience = 'all' | 'editor' | 'viewer';
 
 export interface Part {
   /** The part of its record that changes together: '' for most, catalog.json's `d:<datasetId>` or `s`. */
@@ -49,7 +52,15 @@ export interface Part {
 export interface ModelHit { kind: ModelKind; id: string; datasetId?: string; connId?: string; name: string; score: number }
 /** `exceptDatasetIds`: a part on one of these datasets finds nothing (an agent's outside-the-topic check). */
 /** `open`: the caller's open folders, for the index's WHERE only (docs/team-folders D13); the reference reads the stores, which already leave the rest out. */
-export interface RankOptions { kinds?: readonly ModelKind[]; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[]; audiences: readonly Audience[]; open?: readonly string[] | null }
+/** `given`: the source tables the caller's teams were given, as index keys (../server/authz/teamTables givenKeys); a 'viewer' part needs them. */
+export interface RankOptions { kinds?: readonly ModelKind[]; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[]; audiences: readonly Audience[]; open?: readonly string[] | null; given?: Given | null }
+export interface Given { readonly keys: readonly string[]; readonly denied: readonly string[] }
+
+/** May a 'viewer' part be found with `given`? Its keys meet the given ones and none of the denied (any other part: yes). */
+export function givenPart(p: Pick<Part, 'audience' | 'keys'>, given: Given | null | undefined): boolean {
+  if (p.audience !== 'viewer') return true;
+  return !!given && p.keys.some((k) => given.keys.includes(k)) && !p.keys.some((k) => given.denied.includes(k));
+}
 
 export const kindOrd = (k: ModelKind): number => MODEL_KINDS.indexOf(k);
 export const allWords = (p: Pick<Part, 'nameWords' | 'aliasWords' | 'textWords'>): string[] => [...new Set([...p.nameWords, ...p.aliasWords, ...p.textWords])];
@@ -95,7 +106,7 @@ function allowed(o: RankOptions): (p: Part) => boolean {
   const kinds = o.kinds ? new Set<string>(o.kinds) : null;
   const ds = o.datasetIds ? new Set(o.datasetIds) : null;
   const ex = o.exceptDatasetIds ? new Set(o.exceptDatasetIds) : null;
-  return (p) => aud.has(p.audience) && (!kinds || kinds.has(p.kind)) && (!ds || (p.datasetId !== null && ds.has(p.datasetId)))
+  return (p) => aud.has(p.audience) && givenPart(p, o.given) && (!kinds || kinds.has(p.kind)) && (!ds || (p.datasetId !== null && ds.has(p.datasetId)))
     && (!ex || p.datasetId === null || !ex.has(p.datasetId));
 }
 
@@ -193,11 +204,11 @@ export type CountedKind = Exclude<ModelKind, 'column'>;
 export type ModelCounts = Record<CountedKind, number>;
 export const noCounts = (): ModelCounts => ({ dataset: 0, metric: 0, term: 0, table: 0 });
 
-/** THE REFERENCE: every item but the columns that the caller's audiences may find (retired left out), as its kind and id. */
-export function foundItems(parts: readonly Part[], audiences: readonly Audience[]): Array<{ kind: CountedKind; id: string }> {
+/** THE REFERENCE: every item but the columns that the caller's audiences may find (retired left out, a viewer part given), as its kind and id. */
+export function foundItems(parts: readonly Part[], audiences: readonly Audience[], given: Given | null = null): Array<{ kind: CountedKind; id: string }> {
   const aud = new Set<string>(audiences);
   const out: Array<{ kind: CountedKind; id: string }> = [];
-  for (const ps of byItem(parts).values()) {
+  for (const ps of byItem(parts.filter((p) => givenPart(p, given))).values()) {
     const bases = seen(ps, aud);
     const kind = bases ? (least(bases.map((p) => p.kind)) as ModelKind) : 'column';
     if (bases && kind !== 'column') out.push({ kind, id: least(bases.map((p) => p.id)) });

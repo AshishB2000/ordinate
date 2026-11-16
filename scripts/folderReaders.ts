@@ -35,7 +35,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'analysis:previewPlan': 'OPEN', // a template mapping's previews: authoring, not a dashboard's reach
   'analysis:tiles': 'FIGURE',
   'answer:alsoOn': 'LIST', // the dashboards showing an open dataset: dashboards in closed folders left out
-  'answer:card': 'OPEN',
+  'answer:card': 'OPEN', // a source table is no folder's: a viewer's only when their team was given it (E8, src/ipc/sourceAnswers.ts sourceView)
   'answer:explain': 'FIGURE',
   'answer:refresh': 'ASK',
   'answer:rerun': 'ASK',
@@ -67,7 +67,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'connections:list': 'PROJECT', // p2-01 still decides what a viewer reads of a connection
   'connectors:catalog': 'PROJECT',
   'connectors:logos': 'PROJECT',
-  'copilot:ask': 'ASK', // E4: the indexes' folder WHERE; the turns it replays leave closed answers out (src/ipc/turnsOpen.ts)
+  'copilot:ask': 'ASK', // E4: the indexes' folder WHERE; the turns it replays leave closed answers out (src/ipc/turnsOpen.ts). E8: a viewer's source tables, by the given-tables WHERE
   'copilot:deleteThread': 'OWN',
   'copilot:history': 'ASK', // E4: an answer on a closed dataset and its question are not sent (src/ipc/turnsOpen.ts)
   'copilot:newThread': 'OWN',
@@ -207,6 +207,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'summary:rewrite': 'FIGURE', // narrates the figures summary:compute computed
   'template:list': 'OPEN',
   'template:plan': 'OPEN',
+  'teamTables:mine': 'FOLDER', // a viewer's given source tables by label (E8): a table is in no folder, its teams' ticks decide
   'term:get': 'ITEM',
   'term:list': 'LIST',
   'term:usage': 'ITEM', // names of the records that use a term: filtered

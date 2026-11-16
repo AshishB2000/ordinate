@@ -903,6 +903,27 @@ dashboard can only show fewer charts outside its folder until a new pod rebuilds
 **Rolling back.** The older release ignores the tables and the copies' `reads`. The triggers stay and mark a
 project stale when the older release saves a dashboard, so upgrading again rebuilds what it changed.
 
+## Viewers can ask about the warehouse tables their team was given (`0036_team_tables`)
+
+Part of shared folders ([design](../team-folders/00-design.md#connection-tables-as-built-e8), D19): an admin opens
+**Admin → Teams → <team> → Tables** and ticks schemas and tables of a project's connections, with hidden columns, and an
+editor names each ticked table for viewers there. A project viewer in that team can then ask the Assistant about those
+tables, by that name only. **Nothing is ticked by default**, so nothing changes for anyone until an admin ticks a table;
+editors and admins answer from every table, as before. Without `DATABASE_URL` there are no teams, and nothing changes.
+
+**Rolling out.** The migration adds the `team_tables` table (forced row-level security) and lets the Assistant's search
+index hold one more kind of row (`assistant_search.audience` gains `viewer`: widening a CHECK, no row rewritten). Each
+project's search index is rebuilt once on its first question after the upgrade (`ASSISTANT_SEARCH_VERSION` 5), with a
+second row for each documented table that has a viewer name. A source table doc gains an optional `label` (the name for
+viewers), kept on its index entry. Kept answers read from a source table are computed once more on their next open: the
+check of what a kept card may show now includes the table's columns, so a column hidden since never shows from a kept card.
+
+**What a pod of an older release does** (a rolling update, or a rollback): it ignores `team_tables`, so a viewer it
+serves gets no table, as before (a hide, never a leak). It asks its index for `all` or `editor` rows only, so it never
+returns a viewer row. It drops `label` when it saves a source table doc, which makes that table unoffered to viewers
+again until an editor names it once more; its rebuilds of the search index carry the older version, so upgrading again
+rebuilds once.
+
 ## Compose
 
 From a checkout:

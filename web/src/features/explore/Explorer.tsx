@@ -107,7 +107,7 @@ export function Explorer({
   const listed = topic ? topic.datasets.flatMap((t) => datasets.filter((d) => d.id === t.id)) : datasets;
   const options = [
     ...(table || listed.some((d) => d.id === dataset.id) ? listed : [...listed, dataset]).map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' })),
-    ...tables.map((t) => ({ value: tableValue(t), label: t.table, hint: t.live ? `Table on ${t.connection}` : 'Copy first' })),
+    ...tables.map((t) => ({ value: tableValue(t), label: t.table, hint: !t.live ? 'Copy first' : t.connection ? `Table on ${t.connection}` : 'Warehouse table' })),
   ];
   const topicFields = topic?.datasets.find((t) => t.id === dataset.id)?.fields;
   const pickTopic = (id: string) =>
@@ -165,7 +165,7 @@ export function Explorer({
           </>
         }
         actions={
-          table?.live && (
+          canEdit && table?.live && ( // keeping makes a dataset: an editor's
             <Button variant="primary" icon="plus" loading={keep.isPending} onClick={() => keepTable(table)}>
               Keep as a dataset
             </Button>
@@ -174,7 +174,7 @@ export function Explorer({
         sub={
           copyFirst ? (
             <p>
-              <b className={s.subName}>{name}</b> is a table on {table.connection}.
+              <b className={s.subName}>{name}</b> is {table.connection ? `a table on ${table.connection}` : 'a warehouse table'}.
             </p>
           ) : (
             <p>
@@ -194,13 +194,17 @@ export function Explorer({
               icon="database"
               title={`Copy ${table.table} into Ordinate first`}
               actions={
-                <Link className={buttonClass('primary')} to={`/connections/${projectId}/${table.connId}`}>
-                  <Icon name="plug" />
-                  <span>Open {table.connection}</span>
-                </Link>
+                table.connection !== undefined && (
+                  <Link className={buttonClass('primary')} to={`/connections/${projectId}/${table.connId}`}>
+                    <Icon name="plug" />
+                    <span>Open {table.connection}</span>
+                  </Link>
+                )
               }
             >
-              {`It is on ${table.connection}, a connection Ordinate does not ask live, so its rows have to be copied in before Explore can answer from it.`}
+              {table.connection !== undefined
+                ? `It is on ${table.connection}, a connection Ordinate does not ask live, so its rows have to be copied in before Explore can answer from it.`
+                : 'It is on a connection Ordinate does not ask live, so an editor has to copy its rows in before Explore can answer from it.'}
             </EmptyState>
           ) : (
             <>

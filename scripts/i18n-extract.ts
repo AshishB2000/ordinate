@@ -410,6 +410,7 @@ export const MAIN_FILES = [
   'src/analysis/answerAlertMessages.ts',
   'src/ai/answerSqlMessages.ts',
   'src/engine/liveSqlMessages.ts',
+  'src/server/teamTableMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

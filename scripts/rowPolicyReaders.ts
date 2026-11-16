@@ -18,7 +18,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'analysis:previewPlan': 'NET',
   'analysis:tiles': 'DOOR',
   'answer:alsoOn': 'META', // dashboard ids and names the caller may open (a viewer the published copies), found by dataset; no row, no figure
-  'answer:card': 'DOOR',
+  'answer:card': 'DOOR', // a source table given to a viewer's team (E8) has no rules: the tick dialog says every row is theirs
   'answer:explain': 'DOOR',
   'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced. An SQL answer's turn (src/ipc/answerSql.ts): its SQL through sql:run's gate, where the storage net refuses a restricted caller (NET); over Live datasets (F3, src/engine/live/liveSql.ts) printed under each table's lock (withLockOf per table); test-answerSql, test-liveSqlAnswers
   'answer:rerun': 'DOOR',
@@ -190,6 +190,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'summary:rewrite': 'EXPLICIT',
   'template:list': 'NET',
   'template:plan': 'NET',
+  'teamTables:mine': 'META', // a viewer's given source tables by label (team folders E8): no row, no figure; test-exploreSourceTables
   'term:get': 'REDACT', // a restricted caller gets no filter value (ipc/terms termForCaller)
   'term:list': 'REDACT', // …and a definition without one
   'term:usage': 'META', // record names a viewer's own lists show (caller-aware stores); no value, row or figure

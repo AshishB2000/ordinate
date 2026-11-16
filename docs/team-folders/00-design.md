@@ -692,6 +692,87 @@ connection), the tree from `connection:listTables`. **Admin → Teams → <team>
 tables with a tick and a *Hide columns* picker (from `connection:describe`). In phase E before D has
 merged, E8 ships the rows, the screen and the index filter; the viewer answer path lands with D.
 
+### Connection tables, as built (E8)
+
+- **The rows** (0036, `team_tables`): as the migrations table says, plus a CHECK that `hidden` sits on include table
+  rows only. `schema` is `''` for a source with no schemas (the fake warehouse, MySQL without a database). A documented
+  table is named as `listTables` qualifies it (`schema.name`); its schema is what comes before its **last** dot, so a
+  table name with a dot of its own reads as a schema nobody ticked (a hide).
+- **The rule** (`src/server/authz/teamTables.ts`, pure): `givenFrom` folds the rows team by team (a table row wins over
+  its schema row; two table rows naming one table, an exclude wins), `tableAccess` unites the teams (given by any; hidden
+  only what every giving team hides, compared case-insensitively, a schema tick hiding nothing). Only a team that holds a
+  role on the project counts. `givenOn(projectId)` reads the caller's teams' rows in **one** statement (`inOrg`), memoised
+  per request, only for a caller who does not see source names (a project viewer) and is in a team (`callerOn`'s team
+  ids): an editor, an admin and a viewer in no team read nothing. A database error refuses the request.
+- **The channels** (`src/api/teamTables.ts`, `src/ipc/teamTables.ts`): `teamTables:get` `{projectId, teamId}` → the team's
+  rows and its role on the project (`null`: its ticks give nothing, and the screen says so); `teamTables:set`
+  `{projectId, teamId, connId, rows}` (≤ 2,000) replaces that team's rows on that connection in one transaction, tidied
+  (one row per schema and table, the last wins; `hidden` kept only on an include table row). Both `admin`,
+  project-scoped (a project admin or an org admin), audited; without `DATABASE_URL` they answer *Tables for teams need a
+  database*. Being `admin`, they are in none of `folderReaders.ts`, `rowPolicyReaders.ts` and `columnAccessReaders.ts`
+  (those list `read` and `write` contracts; rank 3 opens everything). A deleted project's rows go with its grants
+  (`dropGrants`); a team's with the team (cascade).
+- **The label** (open question 1, as decided): `label` (≤ 120) on the source table doc, written through
+  `sourceTable:save`'s patch (a doc is created for a table that has none), kept by every re-save and by a facts read
+  (`updateSourceDoc`), and on the doc's index entry (`connections/<id>.tables.json`), which step 3's index reads.
+  `sourceTable:list` rows and `sourceTable:get` carry it. A table with no label is offered to no viewer, ticked or not.
+- **The screen**: **Admin → Teams → ⋯ → Tables…** (`?tab=teams&team=<id>`, `web/src/features/admin/TeamTables.tsx`,
+  `TeamTablesTree.tsx`): a project picker, the rows notice (*Everyone in this team sees every row …*), a warning when the
+  team has no role there, then one card per connection. **Show tables** asks `connection:listTables` on that click only;
+  schemas carry a tick (*Whole schema, tables added later included*), tables a tick, and a ticked table its **Name for
+  viewers** field (saved on blur), **Hide columns** (a dialog over `connection:describe`) and what viewers see (*Viewers
+  see it as “Returns”*, *Name it for viewers: until then they are not offered it*, *Read its columns on the Source
+  tables page first*). Every change saves at once. Share → Folders → Tables is E7's, over the same component.
+- **Step 3's index** (no migration beyond the CHECK): each documented table with a label gets a second item,
+  `label:<connection>/<doc>` — kind `table`, audience **`viewer`** (0036 widens the CHECK), its name, words and
+  fingerprint text the **label alone** — with `keys` `tableKey(conn, table)` and `schemaKey(conn, schema)` (hashes, 0028's
+  column). An editor's audiences are `all` + `editor`, so they never meet it; a viewer's are `all` + `viewer` only when
+  `givenKeys` gives them something, with `$keys` (the tables a table row gives, the schemas a schema row gives) and
+  `$denied` (every table some team names that they are not given) in the same WHERE as the folders' (`givenSql`:
+  `rankedPage`, `nearestPage`, `speltPage`, `foundItems`), before any ranking or LIMIT. The reference applies the same
+  rule (`givenPart`). `ASSISTANT_SEARCH_VERSION` 5 rebuilds each source once. A separate item, not a part of the
+  editor's: the item's words, its vector and its name would otherwise carry the warehouse name.
+- **The viewer's answer**: `sourceView` — the one door of every table reader: `inSourceTable` (the card, a refresh, a
+  conversation's reopen, the access print, a follow-up's PREVIOUS ANSWER), `sourceVocabulary`, `answer:keepTable`, and
+  phase D's Explore (`onSourceTable` behind its five inputs, and `explore:keepTable`) — asks who reads. An editor, as in phase D. A viewer given nothing is refused before any doc, connection or warehouse
+  read (*This dataset no longer exists.*); one given something reads the doc, and the table is theirs only when it is
+  given and labelled, else the same sentence. Their view is named by the label, carries no connection name, and declares
+  the table's columns **less the hidden ones** — so they are in no SOURCE TABLES line, no vocabulary, no "Did you mean",
+  and every compiled statement refuses them (a name the view does not declare) — but for a required partition column,
+  kept so the required date range still applies. The view's origin keeps the warehouse name, read by the compiler only;
+  `answeredFrom` sends a viewer the id alone, as before. The Live budget, cache and concurrency are a Live dataset's, for
+  anyone. Home's SOURCE TABLES block lists a viewer's tables as `- Shop orders: region (text), amount (number)`.
+- **Kept cards**: `accessPrint` of a table's view adds the columns it declares, so a card kept before a column was
+  hidden is never sent again (`answer:refresh` then refuses it). Editors' kept table cards are computed once more, once.
+- **The budget**: `test-askBudget` did not move — 92 / 88 / 75 / 120 / 112 / 22 / 151 queries (home, dataset, agent,
+  restricted viewer, dashboard, reopen, SQL), and the Ops viewer of case 8, who is in a team, 132 (E4 measured 132–138):
+  a viewer in no team, an editor and an admin read nothing of `team_tables`; one in a team, one statement a request.
+- **Tests**: `test-teamTables` (13 checks without a database, 36 with): the rule's include, exclude, schema, union and
+  hidden columns, each with its NEGATIVE CONTROL, and `givenKeys` equal to the rule over 8 tables × 8 team sets
+  (NEGATIVE CONTROL: without `denied` it is not); the channels (an editor 403, a team with no role `null`); the resolver
+  per viewer (NEGATIVE CONTROL: Ghost once it has a role); the index per viewer equal to the reference and the rule,
+  counts included, never by a warehouse name (NEGATIVE CONTROLS: without the WHERE; the editor by name); the prompt, the
+  answer Object.is the editor's through one warehouse statement, a hidden column, an excluded, an unticked and an
+  unlabelled table refused (NEGATIVE CONTROL: the editor's), the kept card after a column is hidden; the safety net: no
+  viewer reply, prompt, ⌘K search, history or MCP tool answer carries a warehouse name, schema, the connection or an
+  ungiven label (NEGATIVE CONTROL: the editor's prompt). Vitest `web/src/features/admin/teamTables.test.tsx`; e2e
+  `web/e2e/team-tables.e2e.ts` (both themes and the phone).
+- **Explore for a viewer**: the picker's tables come from `teamTables:mine` (`read`; classified `FOLDER` in
+  `folderReaders.ts`, `META` in the row and column inventories): the caller's given tables whose doc has a label and read
+  columns — the indexes of the connections their teams named in one read, each such connection once — as
+  `{connId, docId, name, live}`, `name` the label; empty for an editor, whose picker stays `sourceTable:list`. The page
+  names the table by that label, says *Warehouse table* with no connection, offers no Keep (an editor's; still 403), and
+  a table to copy first tells a viewer an editor has to copy it. `test-exploreSourceTables` 7 (Postgres): the picker's
+  one table by its label; its fields less the hidden column, its chart and batch Object.is the editor's, a drill, filter
+  values typed; a chart on the hidden column answered as one on a made-up name; a table labelled but given to no team is
+  no dataset; keep 403; no reply carries the warehouse name, the connection, the hidden column or the ungiven table
+  (NEGATIVE CONTROL: the editor's list and fields). Vitest `web/src/features/explore/sourceTable.test.tsx`.
+- **Left**: Share → Folders → Tables (E7). **Phase F (a viewer's SQL on given tables)** builds on `givenOn` / `tableAccess` and the view: a viewer's
+  statement names tables by their **labels** (the only names they have), which the gate resolves to warehouse names
+  server side, refusing any name that is not a given, labelled table as unknown (never echoing it); the columns it may
+  name are the view's declared ones (hidden columns refused, `*` expanded to those alone), the required date range as
+  the view's; and the SQL text, which carries warehouse names once resolved, never goes back to the viewer.
+
 ## Dashboard requests
 
 ### The flow
@@ -755,7 +836,7 @@ row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids co
 | 0033 `editor_asks` (Ask an editor, as built) | `editor_asks (org_id, user_email, id, project_id, asker, question, reason, note, created_at, seen_at)`, forced RLS; `users.request_email boolean NOT NULL DEFAULT false` ("Email me when a viewer asks for data"; dashboard requests reuse it) |
 | 0034 `search_anchors` (E4, as built) | `ordinate_turn_datasets(body)` (an Assistant turn's chart, "Did you mean" and SQL answer datasets, `{}` for a body that is no JSON: the conversation list's count of shown turns); `search_entries.anchor_kind`, `anchor_id` (nullable, no table rewrite, `COLLATE "C"`); `verified_keys.reads` (every dataset a verified question reads: an SQL question's all); `search_anchors_stale()` and the trigger `records_search_anchors_written` (INSERT or UPDATE on `records`): a write whose transaction does not set `ordinate.search_anchors` = 'on' drops that ⌘K source's marker, or the project's verified one, 0030's pattern. No DELETE trigger: an older pod's delete removes its rows as this release would |
 | 0035 `dashboard_reads` (E5, as built) | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, lowercase-checked, PK on all four, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; two triggers on `records` (`projects/%/analyses/%`) for writers without `ordinate.folders`: that dashboard's rows and the project's marker go |
-| 0036 `team_tables` | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, team → `teams` ON DELETE CASCADE |
+| 0036 `team_tables` (E8, as built) | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, `hidden` on include table rows only, team → `teams` ON DELETE CASCADE, forced RLS; `assistant_search.audience` CHECK widened to `viewer` (a documented table's labelled row) |
 | 0037 `dashboard_requests` | the table above with indexes for an approver's open list and a requester's own (`users.request_email`, off by default, is already there: Ask an editor's 0033 made it, and requests use the same switch) |
 
 `kind` in `folder_items` has no CHECK: the app validates it (`dataset`, `dashboard`), so a later

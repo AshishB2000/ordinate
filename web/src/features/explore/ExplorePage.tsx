@@ -5,7 +5,8 @@
 // sentence). Then the URL is made whole — `?project=&dataset=` — and the
 // workbench (./Explorer) takes over. An editor may also open a source table
 // (Assistant phase D): `?dataset=<its doc>&table=<its connection>`, from the
-// Source tables list; with no dataset at all, the first live one opens.
+// Source tables list; with no dataset at all, the first live one opens. A viewer
+// may open the tables their teams were given (team folders E8), by label.
 
 import { useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -19,7 +20,7 @@ import { read as rememberedTopic } from '../model/topics/rememberTopic';
 import { importPath } from '../home/homeText';
 import { useCanEdit, useRoles } from '../projects/api';
 import { useSourceTables } from '../model/sources/api';
-import { exploreTables } from './api';
+import { exploreTables, useGivenTables } from './api';
 import { useCurrentProject } from '../projects/current';
 import { NoProject } from '../projects/NoProject';
 import { VizIcon } from '../visuals/VizIcon';
@@ -63,11 +64,13 @@ function ProjectExplore({ projectId }: { projectId: string }) {
   const topics = nav.data?.topics ?? [];
   const topic = topics.find((t) => t.id === (urlTopic ?? remembered));
   const first = topic?.datasets.map((t) => list.find((d) => d.id === t.id)).find(Boolean);
-  // Source tables are an editor's (the list is too): a viewer's `?table=` falls back to a dataset, as a gone one does.
+  // An editor's tables are the Source tables list; a viewer's, the tables their teams were given (by label). Any other
+  // `?table=` falls back to a dataset, as a gone one does.
   const roles = useRoles();
   const canEdit = useCanEdit(projectId);
   const sources = useSourceTables(projectId, canEdit);
-  const tables = canEdit ? exploreTables(sources.data) : [];
+  const given = useGivenTables(projectId, roles.isSuccess && !canEdit);
+  const tables = canEdit ? exploreTables(sources.data) : (given.data ?? []);
   const urlTable = params.get('table');
   const inUrl = urlTable ? tables.find((t) => t.connId === urlTable && t.docId === asked) : undefined;
   const dataset = inUrl ? undefined : (list.find((d) => d.id === asked) ?? first ?? list[0]);
@@ -77,7 +80,7 @@ function ProjectExplore({ projectId }: { projectId: string }) {
   // asked of another dataset (or of one that is gone) does not survive the switch: its fields differ.
   // A remembered pick waits for the topic list, so the page does not open on one dataset and jump to another;
   // a table named in the URL (or a project with no dataset) waits for the roles and the editor's table list.
-  const tablesWait = (!!urlTable || (datasets.isSuccess && !list.length)) && (roles.isPending || (canEdit && sources.isPending));
+  const tablesWait = (!!urlTable || (datasets.isSuccess && !list.length)) && (roles.isPending || (canEdit ? sources.isPending : given.isPending));
   const waiting = datasets.isPending || (nav.isPending && !!(urlTopic || remembered)) || tablesWait;
   const id = waiting ? undefined : (table?.docId ?? dataset?.id);
   const conn = table?.connId ?? null;

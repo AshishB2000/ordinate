@@ -6,7 +6,9 @@
 //
 // An editor may also explore a SOURCE TABLE with no dataset (Assistant phase D): every call then sends `table` (its
 // connection) beside `datasetId` (its doc), and the server reads the table's Live view. The tables are the Source
-// tables list's documented, read ones; Keep as a dataset (`explore:keepTable`) makes its Live dataset.
+// tables list's documented, read ones; Keep as a dataset (`explore:keepTable`) makes its Live dataset. A viewer's are the
+// tables their teams were given (team folders E8, `teamTables:mine`), by the name an editor wrote for viewers: no
+// connection, no warehouse name, and no Keep (an editor's).
 
 import { skipToken, useMutation, useQuery } from '@tanstack/react-query';
 import { rpc, RpcError } from '../../api/client';
@@ -46,10 +48,24 @@ type SuggestReply =
 export interface ExploreTable {
   connId: string;
   docId: string;
+  /** What the picker names it: the warehouse name for an editor, the label for a viewer. */
   table: string;
-  connection: string;
+  /** Its connection's name: an editor's only. */
+  connection?: string;
   live: boolean;
 }
+
+/** A viewer's given tables, by label (`teamTables:mine`). `enabled: false` (an editor) asks nothing. */
+export const useGivenTables = (projectId: string, enabled: boolean) =>
+  useQuery({
+    queryKey: ['teamTables:mine', projectId],
+    queryFn: enabled
+      ? async () => {
+          const r = okOr((await rpc('teamTables:mine', { projectId })) as { ok: true; tables: { connId: string; docId: string; name: string; live: boolean }[] } | Fail, 'Tables');
+          return r.tables.map((t): ExploreTable => ({ connId: t.connId, docId: t.docId, table: t.name, live: t.live }));
+        }
+      : skipToken,
+  });
 
 /** The documented tables whose columns were read, from the Source tables list (an editor's). */
 export const exploreTables = (list: SourceList | undefined): ExploreTable[] =>
