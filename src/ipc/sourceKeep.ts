@@ -9,7 +9,8 @@
 // An SQL answer that read source tables (docs/live-data/01-live-sql.md F5, `sql.table`) keeps each the same way and
 // re-points its datasets: its text is unchanged, since a kept table takes the names its view had, so Verify then saves
 // the statement against the kept datasets. A table already kept (a Live dataset of the same connection and table the
-// caller can open) is re-pointed at, never made twice: by a second turn, a chart turn, or Explore.
+// caller can open) is re-pointed at, never made twice: by a second turn, a chart turn, or Explore. Keeping several
+// tables is all or nothing: a failure deletes, through the Trash's own delete for good, the datasets made in that call.
 // `explore:keepTable` (`write`) is the same make for the table Explore is on, with no turn to re-point.
 
 import { ipcMain } from './bus';
@@ -25,6 +26,7 @@ import { answerNotThere } from '../ai/answerSnapshotMessages';
 import { notFromTable } from '../ai/sourceAnswerMessages';
 import { turnsForBrowser } from './answerSnapshots';
 import { LIVE_NOTE } from './liveAnswers';
+import * as trash from '../app/trash';
 
 /**
  * A Live dataset the caller can open over the same connection and table: its origin's table, no defining query, no base
@@ -48,7 +50,7 @@ async function keptAlready(projectId: string, connId: string, table: string, nam
  * The table's Live dataset: one already kept (`keptAlready`), else made through the connection's own Live create; or why
  * not. Never a viewer's, even one given the table (E8, F6). Add to dashboard keeps a table's answer through it too (./answerDashboard).
  */
-export async function keepView(projectId: string, connId: string, docId: string, named = false): Promise<{ ok: true; datasetId: string } | { ok: false; reason: string; needs?: 'copy' }> {
+export async function keepView(projectId: string, connId: string, docId: string, named = false): Promise<{ ok: true; datasetId: string; made?: true } | { ok: false; reason: string; needs?: 'copy' }> {
   if (!(await seesSourceNames(projectId))) return { ok: false, reason: liveDatasetMissing() }; // the route's `write` refuses them first
   const v = await sourceView(projectId, connId, docId);
   if (!v.ok) return v;
@@ -56,7 +58,7 @@ export async function keepView(projectId: string, connId: string, docId: string,
   if (kept) return { ok: true, datasetId: kept };
   const made = await createLiveDataset({ projectId, connId: v.table.connId, table: v.table.table, name: v.table.table });
   if (!made.ok || !('dataset' in made) || !made.dataset) return { ok: false, reason: ('error' in made && made.error) || notFromTable() };
-  return { ok: true, datasetId: made.dataset.id };
+  return { ok: true, datasetId: made.dataset.id, made: true };
 }
 
 export async function keepTable(projectId: string, threadId: string, turnId: string): Promise<Record<string, unknown>> {
@@ -73,20 +75,30 @@ export async function keepTable(projectId: string, threadId: string, turnId: str
   return { ok: true, datasetId: made.datasetId, turns: await turnsForBrowser(projectId, await copilot.loadHistory(projectId, threadId)) };
 }
 
-/** An SQL answer's source tables (its ids that are no dataset), each kept as a Live dataset, and the turn re-pointed at them. */
+/**
+ * An SQL answer's source tables (its ids that are no dataset), each kept as a Live dataset, and the turn re-pointed at
+ * them; or, on any failure (a table that cannot be kept, a turn gone, a throw), none: the datasets this call made are
+ * deleted again and the turn is left as it was.
+ */
 async function keepSql(projectId: string, threadId: string, turnId: string, sql: SqlTurn): Promise<Record<string, unknown>> {
   if (!sql.table) return { ok: false, reason: notFromTable() };
   const ids = [...sql.datasetIds];
-  // shortcut: a keep that fails after another table was kept leaves that dataset made and the turn as it was; a second
-  // click makes it again. Upgrade if answers read several tables often.
-  for (const [i, id] of ids.entries()) {
-    if (await datasets.getDatasetMeta(projectId, id)) continue; // a Live dataset beside the table: already one
-    const made = await keepView(projectId, sql.table, id, true);
-    if (!made.ok) return made;
-    ids[i] = made.datasetId;
+  const made: string[] = [];
+  let pointed = false;
+  try {
+    for (const [i, id] of ids.entries()) {
+      if (await datasets.getDatasetMeta(projectId, id)) continue; // a Live dataset beside the table: already one
+      const kept = await keepView(projectId, sql.table, id, true);
+      if (!kept.ok) return kept;
+      if (kept.made) made.push(kept.datasetId);
+      ids[i] = kept.datasetId;
+    }
+    const { table: _t, ...rest } = sql;
+    if (!(await copilot.replaceAnswer(projectId, threadId, turnId, { sql: sql.text }, { ...rest, datasetIds: ids }))) return { ok: false, reason: answerNotThere() };
+    pointed = true;
+  } finally {
+    if (!pointed) for (const id of made) if ((await trash.trashRecord(projectId, 'dataset', id)).ok) await trash.purge(projectId, 'dataset', id);
   }
-  const { table: _t, ...rest } = sql;
-  if (!(await copilot.replaceAnswer(projectId, threadId, turnId, { sql: sql.text }, { ...rest, datasetIds: ids }))) return { ok: false, reason: answerNotThere() };
   return { ok: true, datasetId: ids.find((x) => !sql.datasetIds.includes(x)), turns: await turnsForBrowser(projectId, await copilot.loadHistory(projectId, threadId)) };
 }
 
@@ -102,6 +114,6 @@ export function register(): void {
   // Live dataset, which Explore then opens. One click, one dataset: the page leaves the table for it.
   ipcMain.handle('explore:keepTable', async (_e, { projectId, datasetId, table }: Record<string, unknown> = {}) => {
     const made = await keepView(String(projectId ?? ''), String(table ?? ''), String(datasetId ?? ''));
-    return made.ok ? made : { ok: false, error: made.reason, ...(made.needs ? { needs: made.needs } : {}) };
+    return made.ok ? { ok: true, datasetId: made.datasetId } : { ok: false, error: made.reason, ...(made.needs ? { needs: made.needs } : {}) };
   });
 }

@@ -23,6 +23,9 @@
 //  10. A REQUIRED DATE FILTER (a partition BigQuery requires a filter on, from the table's doc): as a chart's, a statement
 //      that filters no `d` gets Last 12 months in the view, bound, with the chart's sentence, ≡ the reference with it by
 //      hand; the second call is told. NEGATIVE CONTROLS: one filtering `d` itself, and a table with no such fact, as before.
+//      Only a WHERE restricting THAT table's `d` by bound values counts: `d` only in a correlation (`t2.d = o.d`), in an
+//      OR with an unrestricted branch, or under NOT gets the range (NEGATIVE CONTROLS: a real `o.d >= '2025-01-01'`
+//      beside the same correlation, and an OR whose every branch restricts `d`, do not).
 // Database leg (DATABASE_URL: scripts/rowPolicyHarness.ts, real grants over the real RPC route):
 //   7. A LOCKED viewer's table is Object.is-equal to the reference locked to East; another viewer's lock (West) is a
 //      second statement, equal to the reference locked to West; the first asked again is a cache hit; the editor's is
@@ -362,6 +365,24 @@ async function fileLeg(): Promise<void> {
     const own = await ask(ADMIN, OWN, ['dated']);
     ok('10. NEGATIVE CONTROL: a statement that filters d itself is left as it came: its own date only, no sentence, the reference\'s table', own.sent === 1 && dates().join() === '2024-01-01' && !own.turn?.card?.bullets?.includes(NOTE)
       && problems(own.turn?.card, await as(ADMIN, 'admin', () => diff.reference(kit, OWN.replace('dated', 'orders'), false))).length === 0, show([dates(), own.turn?.card?.bullets]));
+    // Only a WHERE restricting THIS table's d by bound values counts (sql/view `whereColumns`), not a column named anywhere.
+    const RANGE = 'BETWEEN DATE \'2024-03-01\' AND DATE \'2025-02-28\'';
+    const CORR = 'SELECT count(*) AS n FROM dated o WHERE EXISTS (SELECT 1 FROM orders t2 WHERE t2.d = o.d AND t2.qty > 0)';
+    const corr = await ask(ADMIN, CORR, ['dated', 'orders']);
+    ok('10. d named only in a join condition (a correlation, `t2.d = o.d`) is no filter: the view gets Last 12 months and the sentence, ≡ the reference with it by hand', corr.sent === 1 && dates().join() === '2024-03-01,2025-02-28' && corr.turn?.card?.bullets?.includes(NOTE)
+      && problems(corr.turn?.card, await as(ADMIN, 'admin', () => diff.reference(kit, `SELECT count(*) AS n FROM orders o WHERE o.d ${RANGE} AND EXISTS (SELECT 1 FROM orders t2 WHERE t2.d = o.d AND t2.qty > 0)`, false))).length === 0, show([dates(), corr.turn?.card?.bullets, corr.turn?.card?.rows]));
+    const REAL = CORR.replace('WHERE EXISTS', 'WHERE o.d >= \'2025-01-01\' AND EXISTS');
+    const real = await ask(ADMIN, REAL, ['dated', 'orders']);
+    ok('10. NEGATIVE CONTROL: the same with a real `o.d >= \'2025-01-01\'` is left as it came: its own date only, no sentence', real.sent === 1 && dates().join() === '2025-01-01' && !real.turn?.card?.bullets?.includes(NOTE), show([dates(), real.turn?.card?.bullets]));
+    const OR = 'SELECT count(*) AS n FROM dated WHERE d >= \'2025-01-01\' OR qty > 3';
+    const or = await ask(ADMIN, OR, ['dated']);
+    ok('10. an OR with an unrestricted branch is no filter: the range is added, ≡ the reference with it by hand', or.sent === 1 && dates().sort().join() === '2024-03-01,2025-01-01,2025-02-28' && or.turn?.card?.bullets?.includes(NOTE)
+      && problems(or.turn?.card, await as(ADMIN, 'admin', () => diff.reference(kit, `SELECT count(*) AS n FROM orders WHERE (d >= '2025-01-01' OR qty > 3) AND d ${RANGE}`, false))).length === 0, show([dates(), or.turn?.card?.bullets]));
+    const both = await ask(ADMIN, 'SELECT count(*) AS n FROM dated WHERE d >= \'2025-02-01\' OR d < \'2024-01-01\'', ['dated']);
+    ok('10. …but an OR whose every branch restricts d is a filter (no range, no sentence)', both.sent === 1 && dates().sort().join() === '2024-01-01,2025-02-01' && !both.turn?.card?.bullets?.includes(NOTE), show([dates(), both.turn?.card?.bullets]));
+    // (DuckDB's parse already folds `NOT (d < x)` into `d >= x`, a range; a NOT it keeps is none.)
+    const not = await ask(ADMIN, 'SELECT count(*) AS n FROM dated WHERE NOT (d BETWEEN \'2024-01-01\' AND \'2024-06-30\')', ['dated']);
+    ok('10. …and a restriction under NOT is none (the range is added)', not.sent === 1 && dates().length === 4 && not.turn?.card?.bullets?.includes(NOTE), show([dates(), not.turn?.card?.bullets]));
     const bare = await ask(ADMIN, REQ.replace('dated', 'orders'));
     ok('10. NEGATIVE CONTROL: a table with no such fact gets no range and no sentence', bare.sent === 1 && dates().length === 0 && !bare.turn?.card?.bullets?.includes(NOTE) && !/needs a WHERE filter/.test(bare.prompt), show([dates(), bare.turn?.card?.bullets]));
     const checked = await as(ADMIN, 'admin', () => liveSql.checkLiveSql(P, REQ, [{ id: dated, names: ['dated'] }]));

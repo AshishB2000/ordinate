@@ -21,10 +21,15 @@
 //   6. LINK (outcome E): an answer naming a column of an unlinked dataset gets the checked-link card (the key pair, names
 //      and types, the sampled share found, TO's key unique), kept on the turn; Approve (`relationship:save`) saves one
 //      relationship, after which the same answer is no missing link.
+//   8. A LIVE SIDE: the same card for a copy and a Live dataset (names and types, TO's key unique, no sampled share):
+//      the Live key counted in ONE warehouse statement through the door, counted by the daily limit under its id, the
+//      cache on a second ask; its counts Object.is the extract's over the same rows (a unique key and a repeating one).
+//      Approve is still refused there, typed (answerLink's shortcut).
 // DATABASE_URL only:
 //   7. VIEWERS: the project viewer's prompt never names a source table nor any column-only fact of it; a spec naming one
 //      is answered as a dataset that does not exist; keep and Approve are refused (403); the link refusal is the plain
-//      sentence with `needs: 'link'` and no card. NEGATIVE CONTROL: the editor's prompt and card have them.
+//      sentence with `needs: 'link'` and no card. NEGATIVE CONTROL: the editor's prompt and card have them. With a Live
+//      side too, and no warehouse statement for them (NEGATIVE CONTROL: 8., the editor's one).
 //
 //   npm run build:ts && [DATABASE_URL=… ORDINATE_EXPECT_PGVECTOR=1] node scripts/test-sourceAnswers.js
 
@@ -47,6 +52,7 @@ const liveDataset: typeof import('../src/data/liveDataset') = require('../src/da
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const say: typeof import('../src/ai/sourceAnswerMessages') = require('../src/ai/sourceAnswerMessages');
 const missing: typeof import('../src/engine/liveQueryMessages') = require('../src/engine/liveQueryMessages');
+const answerLink: typeof import('../src/ipc/answerLink') = require('../src/ipc/answerLink');
 
 const TABLE = 'canary_returns_5d1';
 const COPY_TABLE = 'canary_tickets_5d1';
@@ -55,6 +61,11 @@ const ROWS = [['Damaged', 12.5, '2026-01-02'], ['Late', 7, '2026-01-03'], ['Dama
 /** A column only the table's facts hold (no dataset has it): a fact no viewer may read. */
 const FACT_CANARY = 'canary_note_5d1';
 const FACTS: TableFacts = { columns: [{ name: 'reason', type: 'VARCHAR' }, { name: 'amount', type: 'DOUBLE' }, { name: 'day', type: 'DATE' }, { name: FACT_CANARY, type: 'VARCHAR' }], rowEstimate: 5 };
+/** Outcome E with a Live side: a copy's key, a Live dataset's dimension over this warehouse table. */
+const STORES_TABLE = 'canary_stores_5d1';
+const STORE_COLUMNS = [{ name: 'store_id', type: 'text' as const }, { name: 'store_city', type: 'text' as const }];
+const STORE_ROWS = [['s1', 'Oslo'], ['s2', 'Rome'], ['s3', 'Oslo'], ['s4', null]];
+const TILLS_ASK = { kind: 'answer', intent: 'Takings by city', spec: { dataset: 'Tills', category: 'store_city', measures: [{ column: 'takings', aggregation: 'sum' }] } };
 const QUESTION = 'returns amount by reason';
 const ASK = (dataset: string) => ({ kind: 'answer', intent: 'Returns amount by reason', spec: { dataset, category: 'reason', measures: [{ column: 'amount', aggregation: 'sum' }] } });
 
@@ -76,12 +87,13 @@ interface Bench {
   call(who: string, channel: string, payload: object): Promise<{ status: number; body: any }>; // any: each channel's own reply
 }
 
-interface Seeded { connId: string; docId: string; copyConn: string; copyDoc: string; liveId: string; copyId: string; sales: string; countries: string }
+interface Seeded { connId: string; docId: string; copyConn: string; copyDoc: string; liveId: string; copyId: string; sales: string; countries: string; tills: string; stores: string }
 
 async function seed(b: Bench): Promise<Seeded> {
   return b.as(async () => {
     fakeMod.registerLiveFake();
     await fakeMod.loadWarehouseTable(TABLE, COLUMNS, ROWS as never);
+    await fakeMod.loadWarehouseTable(STORES_TABLE, STORE_COLUMNS, STORE_ROWS as never);
     const conn = (await connections.saveConnection(b.P, { name: 'Warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} }))!;
     const copyConn = (await connections.saveConnection(b.P, { name: 'App DB', connectorId: 'postgres', values: { host: 'db.internal', port: '5432', database: 'app', user: 'ro' } }))!;
     const doc = async (connId: string, table: string) => {
@@ -102,7 +114,12 @@ async function seed(b: Bench): Promise<Seeded> {
       name: 'Countries', sourceKind: 'csv', columns: [{ name: 'country_id', type: 'text' }, { name: 'territory', type: 'text' }],
       rows: [['c1', 'North'], ['c2', 'South'], ['c3', 'North']] as never,
     }))!.id;
-    return { connId: conn.id, docId, copyConn: copyConn.id, copyDoc, liveId, copyId, sales, countries };
+    const tills = (await datasets.saveDataset(b.P, {
+      name: 'Tills', sourceKind: 'csv', columns: [{ name: 'store_id', type: 'text' }, { name: 'takings', type: 'number' }],
+      rows: [['s1', 5], ['s2', 3], ['s1', 2]] as never,
+    }))!.id;
+    const stores = (await liveRecord.saveLiveRecord(b.P, { name: 'Stores', columns: STORE_COLUMNS, origin: { kind: 'connection', connId: conn.id, table: STORES_TABLE } }))!.id;
+    return { connId: conn.id, docId, copyConn: copyConn.id, copyDoc, liveId, copyId, sales, countries, tills, stores };
   });
 }
 
@@ -212,6 +229,32 @@ async function editorLegs(b: Bench, s: Seeded): Promise<void> {
   ok('6. APPROVE saves exactly one relationship, counted over the full tables', saved?.ok === true && list.length === 1 && list[0].verified.matched === 4, JSON.stringify({ saved, n: list.length }));
   const linked = await ask('shipment amount by territory', linkAsk);
   ok('6. …after which the same answer is no missing link', !lastAssistant(linked.reply)?.needs, JSON.stringify(lastAssistant(linked.reply)));
+
+  // 8. A missing link with a Live side.
+  const probed: string[] = [];
+  budget.setDailyCheckForTest((_org, datasetId) => { probed.push(datasetId); return { ok: true }; });
+  fakeMod.resetFake();
+  const live = lastAssistant((await ask('till takings by store city', TILLS_ASK)).reply);
+  const sent = fakeMod.fake.calls.length;
+  const cached = lastAssistant((await ask('till takings by store city', TILLS_ASK)).reply);
+  budget.setDailyCheckForTest(null);
+  ok('8. LIVE SIDE: a copy and a Live dataset get the checked link: the key pair, many-to-one', live?.needs === 'link' && live.link?.from?.datasetId === s.tills && live.link.from.column === 'store_id'
+    && live.link.to.datasetId === s.stores && live.link.to.column === 'store_id' && live.link.cardinality === 'many_to_one', JSON.stringify(live));
+  ok('8. …its checks: names and types match, unique in Stores, no sampled share (no engine holds both)', live?.link?.checks?.names === true && live.link.checks.types === true && live.link.checks.foundPct === null && live.link.checks.unique === true, JSON.stringify(live?.link?.checks));
+  ok('8. …the Live key counted in ONE warehouse statement, counted by the daily limit under its id; asked again, the cache', sent === 1 && probed.join() === s.stores && fakeMod.fake.calls.length === 1
+    && fakeMod.fake.calls[0].sql.includes(STORES_TABLE) && JSON.stringify(cached?.link) === JSON.stringify(live?.link), JSON.stringify({ sent, probed, calls: fakeMod.fake.calls.map((c) => c.sql.slice(0, 120)) }));
+  // The answerLink shortcut, pinned: Approve counts matched rows over both tables, which a Live side refuses, typed.
+  const approve = (await b.call(b.editor, 'relationship:save', { projectId: b.P, relationship: { from: { datasetId: s.tills, column: 'store_id' }, to: { datasetId: s.stores, column: 'store_id' }, cardinality: 'many_to_one' } })).body;
+  ok('8. …Approve with a Live side is still refused, typed (live_dataset), and saves nothing', approve?.ok === false && approve.code === 'live_dataset' && (await b.as(() => rels.listRelationships(b.P))).length === 1, JSON.stringify(approve));
+  const twin = await b.as(async () => (await datasets.saveDataset(b.P, { name: 'Stores copy', sourceKind: 'csv', columns: STORE_COLUMNS, rows: STORE_ROWS as never }))!.id);
+  for (const column of ['store_id', 'store_city']) {
+    const [onLive, onCopy] = await b.as(async () => [
+      await answerLink.keyCounts(b.P, (await datasets.getDatasetMeta(b.P, s.stores))!, column),
+      await answerLink.keyCounts(b.P, (await datasets.getDatasetMeta(b.P, twin))!, column),
+    ]);
+    ok(`8. DIFFERENTIAL: the Live side's counts of ${column} are Object.is the extract's over the same rows`, !!onLive && !!onCopy && (['rows', 'empty', 'repeatedKeys'] as const).every((k) => Object.is(onLive[k], onCopy[k]))
+      && (column === 'store_id' ? onCopy.repeatedKeys === 0 : onCopy.repeatedKeys === 1 && onCopy.empty === 1), JSON.stringify({ onLive, onCopy }));
+  }
 }
 
 async function viewerLegs(b: Bench, s: Seeded, W: RP.World): Promise<void> {
@@ -239,6 +282,10 @@ async function viewerLegs(b: Bench, s: Seeded, W: RP.World): Promise<void> {
   ok('7. …the viewer\'s link refusal is the sentence with needs "link" and no card', vt?.needs === 'link' && !vt.link && vt.text.includes(say.cannotCombine()), JSON.stringify(vt));
   const e = await W.call('ed', 'copilot:ask', { projectId: b.P, context: { kind: '' }, question: 'parcel weight by zone name' });
   ok('7. NEGATIVE CONTROL: the editor\'s same ask gets the card', lastAssistant(e.body)?.link?.to?.datasetId === ids[1], JSON.stringify(lastAssistant(e.body)).slice(0, 300));
+  nextAction = TILLS_ASK;
+  const f0 = fakeMod.fake.calls.length;
+  const vl = lastAssistant((await W.call('nobody', 'copilot:ask', { projectId: b.P, context: { kind: '' }, question: 'till takings by store city' })).body);
+  ok('7. …with a Live side, the viewer gets the sentence too, and no warehouse statement is sent (no probe)', vl?.needs === 'link' && !vl.link && vl.text.includes(say.cannotCombine()) && fakeMod.fake.calls.length === f0, JSON.stringify({ vl, sent: fakeMod.fake.calls.length - f0 }));
 }
 
 async function withoutDatabase(): Promise<void> {

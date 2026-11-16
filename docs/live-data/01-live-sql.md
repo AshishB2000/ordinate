@@ -587,15 +587,21 @@ first difference (an unknown `lag`, a frame read differently).
   `withRequiredRange`; `liveSql.ts` `inputsOf`; `sql/view.ts` `whereColumns`) takes the chart path's rule, not a
   refusal. Each table read whose doc requires a filter on a date column (`requiredDates` from `liveTarget`) gets
   REQUIRED_RANGE (*Last 12 months*) in its view's WHERE, through `predicates` as a base filter (raw on a key column, so
-  BigQuery prunes), unless its lock, its base filters or a WHERE of the statement (any query, CTE or subquery) names that
-  column. The card's bullets carry the chart's sentence (`liveRequiredRange`). The range is printed, so it is in the cache
-  key, and `checkLiveSql` prints the same. The second call's TABLES line says `needs a WHERE filter on d (without one,
-  only last 12 months are read)`, unless the column is hidden from the caller. No new sentence. Shortcut: a column named
-  anywhere in a WHERE counts as filtered, even as a correlation only (`t2.d = o.d`); BigQuery then refuses an unfiltered
-  scan, typed. `test-liveSqlAnswers` §10 (the fake connector, a doc requiring `d`, `ORDINATE_TODAY` 2025-03-15): with no
-  filter the view binds [2024-03-01, 2025-02-28] and the card says so, `Object.is` to the reference with that range written
-  by hand; the prompt says it; the translate-only check passes. NEGATIVE CONTROLS: a statement filtering `d` itself sends
-  its own date only, with no sentence; a table with no such fact sends none.
+  BigQuery prunes), unless its lock or its base filters name that column, or the statement's WHERE restricts it. Read
+  from the IR (`whereColumns`): the column counts only when EVERY read of the table (each FROM instance of its view) is
+  restricted on it by the WHERE of the query that reads it (any query, CTE or subquery) with a range or equality on bound
+  values (`=`, `<`, `>`, `<=`, `>=`, BETWEEN, IN), held by every branch of an OR. A column-to-column condition (a join's,
+  a correlation's `t2.d = o.d`), `<>`, a NOT DuckDB's parse keeps (`NOT BETWEEN`; it folds `NOT (d < x)` into `d >= x`),
+  an OR with an unrestricted branch, or a relation's output column is no restriction, so the range is added. The card's
+  bullets carry the chart's sentence (`liveRequiredRange`). The range is printed, so it is in the cache key, and
+  `checkLiveSql` prints the same. The second call's TABLES line says `needs a WHERE filter on d (without one, only last
+  12 months are read)`, unless the column is hidden from the caller. No new sentence. `test-liveSqlAnswers` §10 (the fake
+  connector, a doc requiring `d`, `ORDINATE_TODAY` 2025-03-15): with no filter the view binds [2024-03-01, 2025-02-28]
+  and the card says so, `Object.is` to the reference with that range written by hand; the prompt says it; the
+  translate-only check passes; `d` only in a correlation, in an OR with an unrestricted branch, or under NOT BETWEEN gets
+  the range (the first two `Object.is` to the reference with it by hand). NEGATIVE CONTROLS: a statement filtering `d`
+  itself sends its own date only, with no sentence, and so does the correlation beside a real `o.d >= '2025-01-01'`, and
+  an OR whose every branch restricts `d`; a table with no such fact sends none.
 - **The column gate reads the IR, not words.** `prepared` takes `withLockOf` on every table with no question (the rules'
   fail-closed refusals) and translates over the VISIBLE columns. On a refusal it translates again over every declared
   column, and the columns THAT IR reads from each table are `withLockOf`'s question: a statement reading a hidden column
@@ -624,6 +630,12 @@ first difference (an unknown `lag`, a frame read differently).
   none made (NEGATIVE CONTROL: the two tables make two); `test-exploreSourceTables` §5, Keep opens the fixture's Live twin
   of the table and makes none, then with the twin deleted makes exactly one, and a second Keep returns it;
   `test-sourceAnswers` §5, a chart turn's Keep re-points at the twin.
+- **Keeping several tables is all or nothing** (`keepSql`). `keepView` says which datasets it made; on any failure after
+  one (a table that cannot be kept, the turn gone, a throw), those are deleted for good through the Trash's own path
+  (`trashRecord`, then `purge`: placements and versions forgotten) and the failure is returned; the turn is not
+  re-pointed. `test-liveSqlSources` §6, both modes: a Keep whose second table is gone from the warehouse fails, one Live
+  record was written and none is left, none in the Trash, the turn's table and doc ids unchanged (NEGATIVE CONTROL: the
+  Keep after it, both tables there, makes two and re-points).
 
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15

@@ -22,7 +22,7 @@ import { calcFrom, namesCalc } from '../calcLayers';
 import type { LiveFilter } from '../liveSpec';
 import { adaptFilter, columnOf, isRefusal, refuse } from '../liveSpec';
 import { hasNul } from '../sqlParams';
-import type { LiveSqlIR, ViewUse } from './ir';
+import type { Expr, From, LiveSqlIR, Select, ViewUse } from './ir';
 import { Refused } from './scope';
 
 /** What one dataset read needs: the target's compile env (source, every column with its calcs, base filters) and the caller's lock. */
@@ -49,28 +49,50 @@ export function lockFilters(lock: readonly FilterStep[], env: ViewInput['env']):
 }
 
 /**
- * Per dataset read (`ir.views[i]`), the record columns some WHERE of the statement names — in any query, CTE or
- * subquery. A required date range goes into the view of a table only where none names its column (./liveDateRange),
- * as a chart question that filters it is left as it came.
+ * Per dataset read (`ir.views[i]`), the record columns EVERY read of it is restricted on by the WHERE of the query that
+ * reads it (in any query, CTE or subquery): a range or equality on bound values (`=`, `<`, `>`, `<=`, `>=`, BETWEEN, IN),
+ * held by every branch of an OR. Not a column-to-column condition (a join's or a correlation's), not `<>`, not under
+ * NOT. A required date range goes into the view of a table only where its column is not so restricted
+ * (./liveDateRange), as a chart question that filters it is left as it came.
  */
 export function whereColumns(ir: LiveSqlIR): Set<string>[] {
-  const viewOf = new Map<number, number>();
-  const named: Array<{ t: number; c: number }> = [];
-  const walk = (n: unknown, where: boolean): void => {
-    if (Array.isArray(n)) return n.forEach((x) => walk(x, where));
+  const viewOf = new Map<number, number>(); // FROM instance → view
+  const held = new Set<string>(); // `${t}:${c}`
+  const walk = (n: unknown): void => {
+    if (Array.isArray(n)) return n.forEach(walk);
     if (!n || typeof n !== 'object') return;
     const o = n as Record<string, unknown>;
     if (o.k === 'view') viewOf.set(o.t as number, o.v as number);
-    if (o.k === 'col' && o.q === null && where) named.push({ t: o.t as number, c: o.c as number });
-    for (const [key, v] of Object.entries(o)) walk(v, o.k === 'select' ? key === 'where' : where);
+    const s = o.k === 'select' ? (o as unknown as Select) : null;
+    if (s?.where) restricted(s.where, instances(s.from)).forEach((k) => held.add(k));
+    Object.values(o).forEach(walk);
   };
-  walk([ir.rels, ir.main], false);
-  const out = ir.views.map(() => new Set<string>());
-  for (const { t, c } of named) {
-    const v = viewOf.get(t);
-    if (v !== undefined) out[v].add(ir.views[v].columns[c]);
-  }
+  walk([ir.rels, ir.main]);
+  const reads = ir.views.map((): number[] => []);
+  for (const [t, v] of viewOf) reads[v].push(t);
+  return ir.views.map((use, v) => new Set(use.columns.filter((_, c) => reads[v].length > 0 && reads[v].every((t) => held.has(`${t}:${c}`)))));
+}
+
+/** The view instances a FROM reads itself (not a relation's, not an enclosing query's). */
+function instances(f: From | null, out = new Set<number>()): Set<number> {
+  if (f?.k === 'view') out.add(f.t);
+  if (f?.k === 'join') [f.l, f.r].forEach((x) => instances(x, out));
   return out;
+}
+
+/** The `${t}:${c}` view columns of `own` that `e` restricts by bound values. */
+function restricted(e: Expr, own: ReadonlySet<number>): Set<string> {
+  const col = (x: Expr): string | null => (x.k === 'col' && x.q === null && own.has(x.t) ? `${x.t}:${x.c}` : null);
+  const bound = (x: Expr): boolean => x.k === 'param';
+  const one = (k: string | null): Set<string> => new Set(k ? [k] : []);
+  switch (e.k) {
+    case 'and': return new Set(e.xs.flatMap((x) => [...restricted(x, own)]));
+    case 'or': return e.xs.map((x) => restricted(x, own)).reduce((a, b) => new Set([...a].filter((k) => b.has(k))));
+    case 'cmp': return e.op === '<>' ? one(null) : one(bound(e.r) ? col(e.l) : bound(e.l) ? col(e.r) : null);
+    case 'between': return one(!e.not && bound(e.lo) && bound(e.hi) ? col(e.x) : null);
+    case 'in': return one(!e.not && e.list.length > 0 && e.list.every(bound) ? col(e.x) : null);
+    default: return one(null);
+  }
 }
 
 /** The body of view CTE `v<i>`, its values bound into `c.b`. */

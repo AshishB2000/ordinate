@@ -274,7 +274,8 @@ function agesOf(views: readonly LiveTarget[]): { lookupMs: number; keepMs: numbe
 
 /**
  * Each table read as its view input: its lock, and REQUIRED_RANGE (./liveDateRange) on each date column its table
- * requires a filter on that neither the lock, the base filters nor a WHERE of the statement names — a chart question's
+ * requires a filter on that neither the lock, the base filters nor the statement's WHERE restricts by bound values
+ * (./sql/view `whereColumns`: not a join condition, not an OR with an unrestricted branch) — a chart question's
  * rule, with its sentence. The range is printed, so it is in the cache key and moves at midnight.
  */
 function inputsOf(ir: LiveSqlIR, views: readonly LiveTarget[], locks: ReadonlyArray<Lock | null>): { inputs: ViewInput[]; notes: string[] } {
