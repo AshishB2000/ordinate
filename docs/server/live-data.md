@@ -7,7 +7,8 @@ needs on its side (a read-only identity) and on yours (network egress). The plan
 [docs/live-data/00-plan.md](../live-data/00-plan.md). It starts with [what a Live dataset
 is](#live-datasets) and [how to choose its cache age](#choosing-a-cache-age), and also covers
 [what a live query can cost and how it is bounded](#what-a-live-query-can-cost-and-how-it-is-bounded),
-the [refresh URL](#refresh-url) that dbt or Airflow calls when new data has landed, the
+[SQL on Live datasets](#sql-on-live-datasets) (what the role may hold, what read-only means per
+warehouse), the [refresh URL](#refresh-url) that dbt or Airflow calls when new data has landed, the
 [schema sync](#schema-sync) a Live dataset runs, and [fresh on ask](#fresh-on-ask) for the copies of
 operational databases.
 
@@ -379,6 +380,90 @@ time, and its SQL API reports no byte figure for a statement, so a Snowflake con
 **Not reported**. Read its cost from `QUERY_HISTORY` instead (see [What Ordinate sends](#what-ordinate-sends)):
 Live statements carry the query tag `ordinate:<org>:live`.
 
+## SQL on Live datasets
+
+When a question needs more than one chart can say ("bought in January but not February", "days
+between orders"), the assistant answers it with SQL. On a copy that SQL runs in Ordinate's own
+engine. On a Live dataset it runs **in the warehouse**, as one statement per answer
+([design](../live-data/01-live-sql.md)).
+
+**What reaches the warehouse.** Never the text the AI wrote. Ordinate parses it, checks every part
+of it against a short allow-list (`SELECT`, joins, `WITH`, set operators, `count`/`sum`/`avg`/`min`/
+`max`, seven window functions, `CASE`, a few date and number functions), and prints its own
+statement for the warehouse: one `SELECT`, every value a bind parameter, every name generated except
+the table and column names from the dataset's record. Each table is read through a view Ordinate
+writes, holding only the columns the person may see and only the rows their row rules allow. Nothing
+with side effects or reach outside the table has a form in it: no stages, external or remote
+functions, `EXTERNAL_QUERY`, `url()`, `s3()`, `dblink`, settings, time travel or system catalogs. A
+statement that needs something outside the list is refused in one sentence, and nothing is sent.
+
+**What it costs.** Every limit in [the section above](#what-a-live-query-can-cost-and-how-it-is-bounded)
+applies: the cache, the timeout, cancel on hang-up, the concurrency cap and the daily limit (an
+answer is one statement). On top, each member may have **30 Live SQL answers per connection per
+hour**, counted across pods before the AI writes, so a refused one costs no model call and no
+statement. An answer returns at most 500 rows. Only BigQuery can refuse by size before running:
+
+- **BigQuery.** Each statement is first dry-run (free, counted nowhere) and refused unless BigQuery
+  reports a `SELECT` under `maximumBytesBilled`, the lowest of the connection's **Max bytes billed per
+  query**, [`LIVE_MAX_BYTES_BILLED`](configuration.md) (10 GiB by default) and any lower limit. The
+  person sees the size: *Refused before running: this query would process 14.2 GB, over this
+  connection's limit of 10 GB billed per query. Nothing was billed.* The job carries the same cap, so
+  BigQuery fails it at no charge if the estimate was low. Lower the connection's field to tighten it.
+- **Snowflake** bills warehouse time, and its SQL API has no byte ceiling. A statement stops at
+  [`LIVE_QUERY_TIMEOUT_MS`](configuration.md) (60 s); the warehouse's own
+  `STATEMENT_TIMEOUT_IN_SECONDS` applies too, and also bounds anyone else using the warehouse. Give
+  Ordinate its own small warehouse with a **resource monitor** ([above](#what-ordinate-sends)) so a
+  month of questions has a ceiling in credits:
+
+  ```sql
+  ALTER WAREHOUSE ORDINATE_WH SET STATEMENT_TIMEOUT_IN_SECONDS = 60 AUTO_SUSPEND = 60;
+  ```
+
+- **ClickHouse, PostgreSQL, Redshift, Databricks** are bounded by time: `max_execution_time`,
+  `statement_timeout` or Ordinate's deadline then a cancel, each set from `LIVE_QUERY_TIMEOUT_MS`.
+
+**What read-only means, per warehouse.** The statement is always one `SELECT`, so no write can be
+printed. Underneath, whether the engine itself refuses a write differs, and where it does not, the
+role is the only guard:
+
+| Warehouse | Writes refused by the engine? | The boundary |
+|---|---|---|
+| PostgreSQL (a read replica), Redshift | PostgreSQL: yes, the session is `default_transaction_read_only`. Redshift: not verified on a real cluster | PostgreSQL: the session, then the role. Redshift: the role |
+| ClickHouse | Yes: every request carries `readonly=2`. A query may still change settings, so Ordinate never prints a `SETTINGS` clause | the request's setting, then the user |
+| BigQuery | Yes, by IAM. The token's scopes are read-only too (whether Google enforces them is recorded nightly once the test secrets are set), and the dry run must report a `SELECT` | IAM |
+| Snowflake | No: the SQL API has no read-only session. One statement per request; **Test connection** warns on `ACCOUNTADMIN`, `SYSADMIN`, `SECURITYADMIN` | the role alone |
+| Databricks SQL | No | the token's grants alone |
+
+**The role's rights, as defence in depth.** The allow-list already refuses everything below; a role
+without these rights means that even a bug there could not use them.
+
+- **Snowflake:** the read-only role [above](#read-only-is-your-roles-job), and **no `USAGE` on any
+  stage, storage or API integration, or external function**, nor ownership of one. Check with
+  `SHOW GRANTS TO ROLE ORDINATE_READER;`: it should list `USAGE` on the warehouse, database and
+  schemas and `SELECT` on tables and views, nothing else.
+- **BigQuery:** the two roles [above](#the-service-account-two-roles-nothing-else) and nothing that
+  reaches beyond BigQuery's tables: **not BigQuery Connection User** (`roles/bigquery.connectionUser`,
+  which `EXTERNAL_QUERY` and remote functions need), and no role on a Cloud SQL instance or a Cloud
+  Function. `INFORMATION_SCHEMA.JOBS` (other people's query text) needs Resource Viewer; do not grant it.
+- **ClickHouse:** a user whose settings profile has `readonly = 2` (not `1`, which also refuses the
+  row and time caps Ordinate sets on each request), `SELECT` on the databases it reads, and **no
+  `SOURCES` grants** (`FILE`, `URL`, `REMOTE`, `MYSQL`, `S3`, …), which the table functions of the same
+  names need, and no `dictGet` grant.
+- **PostgreSQL and Redshift:** the role in [Live on a PostgreSQL read replica](#a-role-for-it); not a
+  superuser, not `pg_read_server_files`, `pg_write_server_files` or `pg_execute_server_program`, no
+  `EXECUTE` on `dblink` and no `USAGE` on a foreign server. On Redshift, no `USAGE` on an external
+  (Spectrum) schema and no `ASSUMEROLE` grant (which `UNLOAD` and `COPY` use): the role is Redshift's
+  only write guard.
+- **Databricks:** a token whose principal has `SELECT` (and `USE CATALOG`, `USE SCHEMA`) only: no
+  `MODIFY`, no `READ FILES` on a volume or external location, no secret scope.
+
+**How it is proven.** The same corpus of SQL questions runs through each warehouse's real connector
+and must match, cell for cell, the copy's answer to the same text: on PostgreSQL on every pull
+request, on ClickHouse every night in a container, and on Snowflake and BigQuery every night once
+their test accounts are configured ([below](#testing-against-a-real-account)). Where an engine
+differs, Ordinate refuses that construct on it (ClickHouse: a subquery that reads its outer query,
+and `lag`, `lead`, `first_value`, `last_value`) until the nightly shows it agrees.
+
 ## Testing against a real account
 
 The connectors' self-checks run against recorded replies. `scripts/test-warehouseLive.ts` runs the
@@ -399,6 +484,15 @@ account and the read-only role below is enough. The same matrix runs against Pos
 pull request and against a ClickHouse container every night. Each run also checks Live calculated
 fields: 400 formulas against the formula engine, row by row (2,000 on PostgreSQL and ClickHouse), and
 the matrix's calculated-field charts and KPIs.
+
+Then it runs **SQL on Live datasets** ([above](#sql-on-live-datasets);
+`scripts/warehouseLiveSqlParity.ts`): the corpus of SQL questions, translated and printed for the
+warehouse and run through its connector over the same literal rows, unlocked and under a viewer's
+row rule, each answer compared cell for cell with the copy's answer to the same text. A real account
+runs every 8th question plus every window function, every hostile literal, and the checks that the
+comparison catches a dropped row rule. The ClickHouse container runs all of it, and also reports
+whether the constructs Ordinate refuses on ClickHouse would agree (`LIFT PROBE` lines in the log and
+the run's summary; they never fail the run).
 
 Last, it **measures date-filter pruning** (`scripts/warehousePruning.ts`): one count over a month
 of a partitioned or clustered table's date column, compiled the way Live sends it today (the column
@@ -486,8 +580,8 @@ prints no credential and no account identifier, because the log of a public repo
 
 **What it costs.** Snowflake: about two minutes of the warehouse (most of it the cancel check,
 which waits for Snowflake's own 45-second hand-off before cancelling), plus the parity matrix's
-roughly 500 small statements and its calculated fields' roughly 400, plus the warehouse's auto-suspend
-time. BigQuery: nothing billed in
+roughly 500 small statements, its calculated fields' roughly 400 and Live SQL's roughly 80, plus the
+warehouse's auto-suspend time. BigQuery: nothing billed in
 the usual case. Every query it runs reads generated or literal rows rather than a table; the one
 table it touches, the public `bigquery-public-data.samples.shakespeare`, is only described and
 dry-run, and both are free.

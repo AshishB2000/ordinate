@@ -496,6 +496,50 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   from the label, never the table (`namesOf` takes the label for a viewer); and the team-hidden columns become a column
   rule the view's `withLockOf` already applies (the second call's facts and the view then drop them).
 
+### F7 as built
+
+**First nightly run (2026-11-15):** 112 of 114 corpus runs agreed on ClickHouse. The two that didn't were `FULL JOIN … USING` (unlocked and locked): ClickHouse filled the missing side with the type's default (`0`) where every other engine and the reference give `NULL`. The printer now ends every ClickHouse statement with `SETTINGS join_use_nulls = 1`. The lift probe confirmed both pins: ClickHouse refuses a correlated scalar subquery (HTTP 501), and `lead`/`lag` give `0` instead of `NULL` past the frame, so CH1 and CH2 stay refused.
+
+- **Files:** `scripts/warehouseLiveSqlParity.ts` (the nightly's legs: `runLeg` over any parity engine;
+  `runSnowflakeSql` and `runBigquerySql`, which `test-warehouseLive` calls after its live parity, under
+  its plans and its secret canary; run on its own, the ClickHouse container with `CLICKHOUSE_URL`, or
+  the fake warehouse with `--fake`), `scripts/liveSqlPins.ts` (pins CH1 and CH2, `dialectPins`,
+  `liftProbe`; control 1 takes the leg's cases), `runCorpus` taking a case list, the printer's
+  ClickHouse refusals as a table (`OFF_CLICKHOUSE` in `print.ts`, the lift probe's seam, as
+  `JOIN_WORDS` is the controls'), a `Live SQL parity on ClickHouse` step in `warehouse-nightly.yml`
+  (run whenever the container is up, whatever the L2.8 matrix said), and `test-warehouseLiveSql` on
+  every `npm test`. Operator docs: [SQL on Live datasets](../server/live-data.md#sql-on-live-datasets)
+  (the role's rights per warehouse, the Snowflake resource monitor and statement timeout, BigQuery's
+  byte cap, what read-only means).
+- **The legs:** ClickHouse (the container, free): every corpus case but the four its pins hold back,
+  unlocked and locked to East (114 runs), the 35 hostile literals, the controls, P1–P5 and R4, the
+  dialect pins, the lift probe. Snowflake and BigQuery (billed, literal twins): every 8th case plus
+  every window case (11 statements, 22 runs; the windows are there because BigQuery's `NULLS LAST`
+  inside `OVER` is unverified), all 35 literals (one cheap statement each, and binding is what differs
+  most per engine), the controls over those 11, the pins. The fake (every `npm test`): as ClickHouse,
+  through the `live-fake` connector and `runLiveBound`.
+- **Skips and failures:** Snowflake or BigQuery unset is `test-warehouseLive`'s one skip line each (the
+  SQL legs add none: checked); half set is its plan's failure; set but unusable fails every statement
+  and the leg's verdict (checked on the fake with every statement refused: 0 of 22 agree). ClickHouse
+  unset is one skip line; not http(s), or nothing answering, exits 1 (checked). The SQL legs run inside
+  `test-warehouseLive`'s process, so every line they print is under its canary; the printed SQL holds
+  the literal twin and generated names, no account identifier.
+- **Pins:** CH1 (a subquery that reads its outer query) and CH2 (`lag`, `lead`, `first_value`,
+  `last_value`), each checked still refused on ClickHouse with the `dialect` code, each holding back
+  two corpus cases, together exactly the cases the printer refuses there (CONTROL: with CH1's refusal
+  lifted, its pin and the count fail, nothing else). No other per-dialect divergence is pinned, because
+  none has been seen: **nothing in this PR has run on ClickHouse, Snowflake or BigQuery** (no Docker
+  locally; the secrets are unset). What the first runs show becomes a pin with its check, never a
+  looser comparison (a BigQuery that refuses `NULLS LAST` in a window would be a printer refusal of its
+  own, BQ1).
+
+**Follow-up, its own PR: lifting CH1 and CH2.** The ClickHouse step prints `LIFT PROBE CH1 …` and
+`LIFT PROBE CH2 …` (log and run summary): the held cases printed with the refusal widened, run
+unlocked and locked, compared with `Object.is`; reported, never failing the run. A pin whose runs all
+agree is lifted by deleting its entry from `OFF_CLICKHOUSE` and `DIALECT_PINS`, so its cases join the
+corpus run, citing that run. One with a disagreement stays refused; the line names the case and the
+first difference (an unknown `lag`, a frame read differently).
+
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15
 (43735675013) skipped both warehouses for want of them. They must be added (on

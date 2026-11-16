@@ -15,8 +15,18 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube, dbt)
 # also runs the semantic parity matrix against that semantic view (semantic
 # layer part 7, c1); without it, that part prints its skip.
 #
+# Each warehouse also runs SQL on Live datasets (docs/live-data/01-live-sql.md,
+# F7; scripts/warehouseLiveSqlParity.ts): the Live SQL corpus translated,
+# printed for its dialect and run through its runBound, against DuckDB running
+# the model's own text — Snowflake and BigQuery over literal twins inside the
+# real-account step (same secrets, same skip, same canary), every 8th case
+# plus every window case.
+#
 # The `clickhouse` job runs the same matrix against a ClickHouse server in a
 # service container (scripts/test-liveParityClickhouse.ts); it needs no secret.
+# It then runs the whole Live SQL corpus there, and the lift probe: the cases
+# ClickHouse's printer refuses (pins CH1, CH2) run with the refusal widened, and
+# the result goes to the summary, never failing the run.
 # The `cube` job runs the semantic parity matrix against a Cube server over
 # Postgres seeded with the same fixture (scripts/fixtures/cube/compose.yml, the
 # image pinned by digest; scripts/test-semanticCubeLive.ts, semantic layer part
@@ -64,7 +74,7 @@ jobs:
   live:
     name: Snowflake + BigQuery (real accounts)
     runs-on: ubuntu-latest
-    # The connector checks take a few minutes; the parity matrix ~500 statements a warehouse, its calculated fields ~400 more.
+    # The connector checks take a few minutes; the parity matrix ~500 statements a warehouse, its calculated fields ~400 more, Live SQL ~80.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +85,7 @@ jobs:
       - run: npm ci
       - name: Type-check + compile TypeScript
         run: npm run build:ts
-      - name: Real-account checks
+      - name: Real-account checks (connectors, live parity, Live SQL, pruning)
         run: node scripts/test-warehouseLive.js
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -134,11 +144,18 @@ jobs:
       - name: Type-check + compile TypeScript
         run: npm run build:ts
       - name: Wait for ClickHouse
+        id: ready
         run: |
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:8123/ping && exit 0; sleep 2; done
           echo "ClickHouse never answered on 8123"; exit 1
       - name: Live parity on ClickHouse
         run: node scripts/test-liveParityClickhouse.js
+        env:
+          CLICKHOUSE_URL: http://parity:parity@127.0.0.1:8123
+      # Its own verdict: runs whenever ClickHouse is up, whatever the matrix said.
+      - name: Live SQL parity on ClickHouse
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: node scripts/warehouseLiveSqlParity.js
         env:
           CLICKHOUSE_URL: http://parity:parity@127.0.0.1:8123
 

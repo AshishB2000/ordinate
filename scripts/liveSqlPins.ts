@@ -13,11 +13,21 @@
 //       (the app's UTC day in F3; the reference's own here, so the two compare like with like).
 //   R4  −0: Postgres returns it (DuckDB stores none); read as 0, as the chart shaping does.
 //
+// The printer's per-dialect refusals (F1 as built), each held back from that engine's corpus run
+// and checked to still be refused (F7, scripts/warehouseLiveSqlParity.ts):
+//
+//   CH1 ClickHouse: a subquery that reads its outer query.
+//   CH2 ClickHouse: lag, lead, first_value and last_value (`lagInFrame` reads its frame).
+//
+// Lifting one is its own change, on the numbers of the nightly's LIFT PROBE (`liftProbe`): the held
+// cases printed with the refusal widened and run on the container, reported and never a check.
+//
 // And the five CONTROLS of the PR plan, each of which must make the differential disagree.
 
 import type { ParityEngine } from './liveParityFixture';
 import type { Kit, Sources } from './liveSqlDiff';
-import type { SqlDialect } from '../src/engine/live/dialect';
+import type { CompileDialectId, SqlDialect } from '../src/engine/live/dialect';
+import type { SqlCase } from './liveSqlCorpus';
 
 const corpus: typeof import('./liveSqlCorpus') = require('./liveSqlCorpus');
 const diff: typeof import('./liveSqlDiff') = require('./liveSqlDiff');
@@ -45,13 +55,14 @@ async function patched<T extends object, K extends keyof T, R>(obj: T, key: K, v
   }
 }
 
-export async function controls(kit: Kit, sources: Sources, engine: ParityEngine, ok: Ok): Promise<void> {
+/** `cases`: the statements control 1 drops the lock from (a billed warehouse runs a stride; an engine's held cases are left out). */
+export async function controls(kit: Kit, sources: Sources, engine: ParityEngine, ok: Ok, cases: readonly SqlCase[] = corpus.CASES): Promise<void> {
   const problems = (name: string, opts: { lock: boolean; liveLock?: [] } = { lock: false }) => diff.problems(kit, caseNamed(name), sources, engine, opts);
 
   // 1. The lock dropped from the view: the locked reference against an unlocked Live answer.
   let caught = 0;
-  for (const c of corpus.CASES) if ((await diff.problems(kit, c, sources, engine, { lock: true, liveLock: [] })).length) caught += 1;
-  ok(`NEGATIVE CONTROL: ${engine.name}: with the lock dropped from the view, ${caught} of ${corpus.CASES.length} locked statements disagree`, caught >= corpus.CASES.length / 2);
+  for (const c of cases) if ((await diff.problems(kit, c, sources, engine, { lock: true, liveLock: [] })).length) caught += 1;
+  ok(`NEGATIVE CONTROL: ${engine.name}: with the lock dropped from the view, ${caught} of ${cases.length} locked statements disagree`, cases.length > 0 && caught >= cases.length / 2);
 
   // 2. LEFT printed as INNER.
   const inner = await patched(print.JOIN_WORDS, 'left', 'INNER JOIN', () => problems('LEFT JOIN keeps the unmatched'));
@@ -117,4 +128,63 @@ export async function run(kit: Kit, sources: Sources, engine: ParityEngine, ok: 
   const negZero = 'error' in minus ? -1 : minus.raw.flat().filter((v) => Object.is(v, -0)).length;
   ok(`PIN R4 (${name}): −0 cells from the engine: ${negZero} (Postgres returns them, DuckDB stores none); each read as 0`,
     engine.dialect === 'redshift' ? negZero > 0 : negZero >= 0);
+}
+
+/** A refusal the printer makes on one dialect, the corpus cases it holds back there, and how the lift probe widens it. */
+export interface DialectPin {
+  pin: string;
+  dialect: CompileDialectId;
+  what: string;
+  cases: readonly string[];
+  lift<R>(body: () => Promise<R>): Promise<R>;
+}
+
+export const DIALECT_PINS: readonly DialectPin[] = [
+  {
+    pin: 'CH1', dialect: 'clickhouse', what: 'a subquery that reads its outer query',
+    cases: ['January but not February (NOT EXISTS, correlated)', 'a correlated scalar subquery'],
+    lift: (body) => patched(print.OFF_CLICKHOUSE, 'correlated', false, body),
+  },
+  {
+    pin: 'CH2', dialect: 'clickhouse', what: 'lag, lead, first_value and last_value',
+    cases: ['days between orders (lag)', 'lead, lag, first and last value, a forward frame'],
+    lift: (body) => patched(print.OFF_CLICKHOUSE, 'shifts', new Set<string>(), body),
+  },
+];
+
+/** The corpus cases an engine's dialect holds back (its pins'). */
+export const heldOn = (dialect: CompileDialectId): Set<string> => new Set(DIALECT_PINS.filter((p) => p.dialect === dialect).flatMap((p) => p.cases));
+
+/** Each dialect pin still exists — its cases refused on its dialect, code `dialect` — and holds back exactly what the printer refuses there. Pure printing: no engine. */
+export async function dialectPins(kit: Kit, sources: Sources, ok: Ok): Promise<void> {
+  for (const d of new Set(DIALECT_PINS.map((p) => p.dialect))) {
+    const refused: string[] = [];
+    for (const c of corpus.CASES) {
+      const q = await diff.printed(kit, c.sql, sources, [], d);
+      if ('error' in q && q.error.startsWith('refused printing (dialect)')) refused.push(c.name);
+    }
+    for (const p of DIALECT_PINS.filter((x) => x.dialect === d)) {
+      ok(`PIN ${p.pin} (${d}): the printer still refuses ${p.what} — ${p.cases.length} corpus cases held back`, p.cases.every((n) => refused.includes(n)), refused.join(' | '));
+      const lifted = await p.lift(async () => Promise.all(p.cases.map((n) => diff.printed(kit, caseNamed(n).sql, sources, [], d))));
+      ok(`PIN ${p.pin} (${d}): with the refusal lifted, its cases print (what the lift probe runs)`, lifted.every((q) => !('error' in q)), JSON.stringify(lifted.filter((q) => 'error' in q)));
+    }
+    const held = heldOn(d);
+    ok(`the ${d} pins hold back exactly the ${refused.length} corpus cases its printer refuses`, refused.length === held.size && refused.every((n) => held.has(n)), refused.join(' | '));
+  }
+}
+
+/** The LIFT PROBE: each pin of `engine`'s dialect, its cases printed with the refusal lifted, run unlocked and locked. Lines for the log; never a check. */
+export async function liftProbe(kit: Kit, sources: Sources, engine: ParityEngine): Promise<string[]> {
+  const lines: string[] = [];
+  for (const p of DIALECT_PINS.filter((x) => x.dialect === engine.dialect)) {
+    const runs = await p.lift(async () => {
+      const out: { name: string; problems: string[] }[] = [];
+      for (const n of p.cases) for (const lock of [false, true]) out.push({ name: `${n}${lock ? ', locked' : ''}`, problems: await diff.problems(kit, caseNamed(n), sources, engine, { lock }) });
+      return out;
+    });
+    const bad = runs.filter((r) => r.problems.length);
+    lines.push(`LIFT PROBE ${p.pin} (${engine.name}, ${p.what}): ${runs.length - bad.length} of ${runs.length} runs agree with Object.is` +
+      (bad.length ? `; disagree: ${bad.map((r) => `${r.name}: ${r.problems[0].split('\n')[0].slice(0, 240)}`).join(' | ')}` : ' — all agree here; lifting it is its own change'));
+  }
+  return lines;
 }

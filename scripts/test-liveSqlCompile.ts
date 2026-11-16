@@ -71,7 +71,7 @@ async function goldenShapes(): Promise<void> {
   const sets: Record<CompileDialectId, string> = { duckdb: 'EXCEPT', redshift: 'EXCEPT', snowflake: 'EXCEPT', databricks: 'EXCEPT', bigquery: 'EXCEPT DISTINCT', clickhouse: 'EXCEPT DISTINCT' };
   for (const d of ALL) {
     const p = await compileSql('SELECT region FROM orders EXCEPT SELECT region FROM targets ORDER BY region', d);
-    ok(`golden ${d}: EXCEPT spelled ${sets[d]}, read through a derived table, ordered NULLS LAST, LIMIT 501`, p.ok && p.sql.includes(` ${sets[d]} SELECT `) && /\) AS w\d+ ORDER BY w\d+\.o_0 ASC NULLS LAST LIMIT 501$/.test(p.sql), p.ok ? p.sql : p.message);
+    ok(`golden ${d}: EXCEPT spelled ${sets[d]}, read through a derived table, ordered NULLS LAST, LIMIT 501`, p.ok && p.sql.includes(` ${sets[d]} SELECT `) && /\) AS w\d+ ORDER BY w\d+\.o_0 ASC NULLS LAST LIMIT 501(\nSETTINGS join_use_nulls = 1)?$/.test(p.sql) && (d === 'clickhouse') === p.sql.endsWith('SETTINGS join_use_nulls = 1'), p.ok ? p.sql : p.message);
     const w = await compileSql('SELECT region, sum(amount) OVER (PARTITION BY region ORDER BY order_date DESC ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS s, rank() OVER (ORDER BY amount) AS r FROM orders', d);
     ok(`golden ${d}: a window — its frame through sqlInt, the null order explicit, every rank a DOUBLE`, w.ok && w.sql.includes('ORDER BY t0.c1 DESC NULLS LAST ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)') && w.sql.includes(dialects.dialectFor(d).toDouble('rank() OVER (ORDER BY t0.c2 ASC NULLS LAST)')), w.ok ? w.sql : w.message);
     const corr = await compileSql('SELECT region FROM orders o WHERE EXISTS (SELECT 1 FROM targets t WHERE t.region = o.region)', d);
