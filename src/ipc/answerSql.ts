@@ -28,6 +28,9 @@ import { gateRows, hiddenColumnsFor, isRowPolicyError } from '../data/rowAccess'
 import { isLive } from '../data/liveDataset';
 import { isSourceView, withSourceViews } from '../data/sourceView';
 import { checkLiveSql, liveSqlClosed, runLiveSql, takeSqlHour, type LiveSqlTable } from '../engine/live/liveSql';
+import { liveTarget } from '../engine/live/liveTarget';
+import { REQUIRED_RANGE } from '../engine/live/liveDateRange';
+import { describePeriod, getCalendar } from '../analysis/dateIntel';
 import * as lmsg from '../engine/liveSqlMessages';
 import { listRelationships } from '../analysis/relationships';
 import { tableFacts } from '../app/tableDocs';
@@ -141,8 +144,12 @@ export async function tablesFor(projectId: string, ids: readonly string[]): Prom
     const live = isLive(meta);
     tableOf.set(id, e.slug);
     hiddenOf.set(id, hidden);
+    // A date column its source table requires a filter on (as a chart's, ../engine/live/liveDateRange): told, unless hidden.
+    const target = live ? await liveTarget(projectId, id) : null;
+    const required = (target?.ok ? target.target.requiredDates ?? [] : []).filter((c) => !hidden.has(c));
     tables.push({
       table: e.slug, name: e.name, ...(live ? { live: true } : { rows: meta.rowCount }), ...(doc?.key && !hidden.has(doc.key) ? { key: doc.key } : {}), ...(doc?.grain ? { grain: doc.grain } : {}),
+      ...(required.length ? { required: { columns: required, otherwise: describePeriod(REQUIRED_RANGE, getCalendar()) } } : {}),
       columns: (live ? meta.columns : viewColumns(meta.columns)).filter((c) => !hidden.has(c.name)).map((c) => ({ name: c.name, type: c.type })),
     });
   }
@@ -194,7 +201,8 @@ async function runLive(projectId: string, text: string, allowed: readonly string
   const r = await runLiveSql(projectId, text, await liveVocabulary(projectId, allowed));
   if (!r.ok) return { ok: false, reason: r.error, ...(r.code ? { code: r.code } : {}) };
   const names = await Promise.all(r.deps.map((id) => nameOf(projectId, id)));
-  return { ok: true, deps: r.deps, card: { ...cardOf({ title, sql: text, datasets: names, columns: r.columns, rows: r.rows, truncated: r.truncated }), asOf: r.asOf } };
+  const card = cardOf({ title, sql: text, datasets: names, columns: r.columns, rows: r.rows, truncated: r.truncated });
+  return { ok: true, deps: r.deps, card: { ...card, bullets: [...card.bullets, ...(r.notes ?? [])], asOf: r.asOf } }; // notes: a required date range, as a chart says it
 }
 
 /** Each dataset of `ids` under the names the second call was given (the gate's: the slug, the exact name). */

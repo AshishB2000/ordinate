@@ -12,7 +12,9 @@
 // step (./liveQuery `run`), so every door — answers, charts, tiles — gets it the same way and says so
 // in one catalog sentence. A question that filters the column already (a filter, a lock, a base
 // filter) is left as it came, and so is every question on a table with no such fact. The range is
-// in the IR, so it is in the cache key and moves at midnight like any period.
+// in the IR, so it is in the cache key and moves at midnight like any period. SQL on Live datasets
+// takes the same rule through `requiredRange` (./liveSql: in the view of a table no WHERE of the
+// statement filters on that column), with the same sentence on its card.
 
 import type { DatasetOrigin } from '../../data/datasetOrigin';
 import { docTablesOf, sourceTablesOf } from '../../data/sourceTableOf';
@@ -60,12 +62,18 @@ export async function dateFactsOf(projectId: string, origin: Extract<DatasetOrig
   return { required: [...required], keys: [...keys] };
 }
 
+/** REQUIRED_RANGE on each required column not in `filtered`, and the sentence that says so; none when nothing is missing. */
+export function requiredRange(required: readonly string[] | undefined, filtered: Iterable<string>): { filters: LiveFilter[]; notes: string[] } {
+  const done = new Set(filtered);
+  const missing = (required ?? []).filter((c) => !done.has(c));
+  const r = missing.length ? resolvePeriodNow(REQUIRED_RANGE) : null;
+  if (!r) return { filters: [], notes: [] };
+  const filters = missing.map((column): LiveFilter => ({ kind: 'range', column, ...(r.from ? { from: r.from } : {}), ...(r.to ? { to: r.to } : {}) }));
+  return { filters, notes: [msg.liveRequiredRange(describePeriod(REQUIRED_RANGE, getCalendar()))] };
+}
+
 /** `ir` with REQUIRED_RANGE on each required column neither it nor the base filters filter, and the sentence that says so; else `ir` as it came. */
 export function withRequiredRange(ir: LiveIR, required: readonly string[] | undefined, base: readonly LiveFilter[] | undefined): { ir: LiveIR; notes: string[] } {
-  const filtered = new Set([...(base ?? []), ...ir.filters].map((f) => f.column));
-  const missing = (required ?? []).filter((c) => !filtered.has(c));
-  const r = missing.length ? resolvePeriodNow(REQUIRED_RANGE) : null;
-  if (!r) return { ir, notes: [] };
-  const added = missing.map((column): LiveFilter => ({ kind: 'range', column, ...(r.from ? { from: r.from } : {}), ...(r.to ? { to: r.to } : {}) }));
-  return { ir: { ...ir, filters: [...ir.filters, ...added] }, notes: [msg.liveRequiredRange(describePeriod(REQUIRED_RANGE, getCalendar()))] };
+  const r = requiredRange(required, [...(base ?? []), ...ir.filters].map((f) => f.column));
+  return r.filters.length ? { ir: { ...ir, filters: [...ir.filters, ...r.filters] }, notes: r.notes } : { ir, notes: [] };
 }

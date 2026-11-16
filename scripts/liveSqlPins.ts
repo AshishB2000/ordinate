@@ -17,10 +17,15 @@
 // and checked to still be refused (F7, scripts/warehouseLiveSqlParity.ts):
 //
 //   CH1 ClickHouse: a subquery that reads its outer query.
-//   CH2 ClickHouse: lag, lead, first_value and last_value (`lagInFrame` reads its frame).
 //
 // Lifting one is its own change, on the numbers of the nightly's LIFT PROBE (`liftProbe`): the held
 // cases printed with the refusal widened and run on the container, reported and never a check.
+// A LIFTED pin (`LIFTED_PINS`) asserts the opposite: its cases print on its dialect in their own
+// form, and on that engine every one agrees, unlocked and locked:
+//
+//   CH2 ClickHouse: lag, lead, first_value and last_value. The first nightly found 0 where DuckDB has
+//       NULL past the frame; they now print as `lagInFrame(toNullable(x), n, NULL)` over the whole
+//       partition and `first_value_respect_nulls(toNullable(x))`. Unproven until the nightly runs it.
 //
 // And the five CONTROLS of the PR plan, each of which must make the differential disagree.
 
@@ -145,10 +150,24 @@ export const DIALECT_PINS: readonly DialectPin[] = [
     cases: ['January but not February (NOT EXISTS, correlated)', 'a correlated scalar subquery'],
     lift: (body) => patched(print.OFF_CLICKHOUSE, 'correlated', false, body),
   },
+];
+
+/** A pin lifted: its cases print on `dialect` (the printed text holds every `shape`, never an `unlike`) and must agree on that engine. */
+export interface LiftedPin {
+  pin: string;
+  dialect: CompileDialectId;
+  what: string;
+  cases: readonly string[];
+  shape: readonly RegExp[];
+  unlike: RegExp;
+}
+
+export const LIFTED_PINS: readonly LiftedPin[] = [
   {
     pin: 'CH2', dialect: 'clickhouse', what: 'lag, lead, first_value and last_value',
     cases: ['days between orders (lag)', 'lead, lag, first and last value, a forward frame'],
-    lift: (body) => patched(print.OFF_CLICKHOUSE, 'shifts', new Set<string>(), body),
+    shape: [/lagInFrame\(toNullable\(.+?\), 1, NULL\) OVER \([^)]*ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\)/, /leadInFrame\(toNullable\(.+?\), 2, NULL\) OVER/, /first_value_respect_nulls\(toNullable\(/, /last_value_respect_nulls\(toNullable\(/],
+    unlike: /\b(lag|lead|first_value|last_value)\(/,
   },
 ];
 
@@ -170,6 +189,23 @@ export async function dialectPins(kit: Kit, sources: Sources, ok: Ok): Promise<v
     }
     const held = heldOn(d);
     ok(`the ${d} pins hold back exactly the ${refused.length} corpus cases its printer refuses`, refused.length === held.size && refused.every((n) => held.has(n)), refused.join(' | '));
+  }
+  for (const p of LIFTED_PINS) {
+    const got = await Promise.all(p.cases.map((n) => diff.printed(kit, caseNamed(n).sql, sources, [], p.dialect)));
+    const text = got.map((q) => ('error' in q ? q.error : q.sql)).join('\n');
+    ok(`PIN ${p.pin} (${p.dialect}, lifted): ${p.what} print in its own form, none refused`, got.every((q) => !('error' in q)) && p.shape.every((re) => re.test(text)) && !p.unlike.test(text), text);
+  }
+}
+
+/** Each lifted pin of `engine`'s dialect: its cases agree with Object.is there, unlocked and locked (they also run in the corpus). */
+export async function liftedPins(kit: Kit, sources: Sources, engine: ParityEngine, ok: Ok): Promise<void> {
+  for (const p of LIFTED_PINS.filter((x) => x.dialect === engine.dialect)) {
+    const bad: string[] = [];
+    for (const n of p.cases) for (const lock of [false, true]) {
+      const pr = await diff.problems(kit, caseNamed(n), sources, engine, { lock });
+      if (pr.length) bad.push(`${n}${lock ? ', locked' : ''}: ${pr[0].split('\n')[0].slice(0, 240)}`);
+    }
+    ok(`PIN ${p.pin} (${engine.name}, lifted): ${p.what} agree with Object.is, ${p.cases.length * 2 - bad.length} of ${p.cases.length * 2} runs`, bad.length === 0, bad.join(' | '));
   }
 }
 

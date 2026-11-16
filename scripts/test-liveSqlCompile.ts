@@ -77,7 +77,8 @@ async function goldenShapes(): Promise<void> {
     const corr = await compileSql('SELECT region FROM orders o WHERE EXISTS (SELECT 1 FROM targets t WHERE t.region = o.region)', d);
     const lag = await compileSql('SELECT lag(amount) OVER (ORDER BY order_date) AS p FROM orders', d);
     if (d === 'clickhouse') {
-      ok('ClickHouse: a correlated subquery and lag() are refused (pins for the nightly, F7), each in its sentence', !corr.ok && corr.code === 'dialect' && !lag.ok && lag.code === 'dialect' && /ClickHouse/.test(lag.message));
+      ok('ClickHouse: a correlated subquery is refused (pin CH1, F7), in its sentence', !corr.ok && corr.code === 'dialect' && /ClickHouse/.test(corr.message));
+      ok('ClickHouse: lag() prints as lagInFrame on a Nullable argument, NULL past the partition, over all of it (pin CH2, lifted)', lag.ok && lag.sql.includes('lagInFrame(toNullable(t0.c1), 1, NULL) OVER (ORDER BY t0.c0 ASC NULLS LAST ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)'), lag.ok ? lag.sql : lag.message);
     } else {
       ok(`golden ${d}: a correlated EXISTS reads the outer alias t0, and lag() prints`, corr.ok && corr.sql.includes('(t1.c0 = t0.c0)') && lag.ok && lag.sql.includes('lag(t0.c1) OVER (ORDER BY t0.c0 ASC NULLS LAST)'), `${corr.ok ? corr.sql : corr.message}\n${lag.ok ? lag.sql : lag.message}`);
     }

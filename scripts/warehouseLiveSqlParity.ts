@@ -7,8 +7,9 @@
 // check that it still exists, never a loosened comparison. Three legs:
 //
 //   clickhouse  the `clickhouse` job's container (CLICKHOUSE_URL), the fixture in a scratch database:
-//               the whole corpus, every hostile literal, the controls, the pins, and the LIFT PROBE of
-//               pins CH1 and CH2 (their held cases run with the refusal widened, reported only).
+//               the whole corpus, every hostile literal, the controls, the pins, the lifted pin CH2
+//               (lag/lead/first_value/last_value must agree), and the LIFT PROBE of pin CH1 (its held
+//               cases run with the refusal widened, reported only).
 //   snowflake   `runSnowflakeSql` / `runBigquerySql`, called by scripts/test-warehouseLive.ts after
 //   bigquery    its own checks, under its plans (unset: its one skip line; half set: a failure) and
 //               its SECRET CANARY. The rows are literal twins (./liveParityLiteral.ts): the accounts
@@ -70,6 +71,7 @@ export async function runLeg(engine: ParityEngine, ok: Ok, stride: number): Prom
   await pins.controls(kit, sources, engine, ok, cases);
   await pins.run(kit, sources, engine, ok);
   await pins.dialectPins(kit, sources, ok);
+  await pins.liftedPins(kit, sources, engine, ok);
   report.probe = await pins.liftProbe(kit, sources, engine);
   for (const line of report.probe) say(line);
   return report;

@@ -72,6 +72,8 @@ export interface SqlTable {
   /** One row per this column (the table doc's key), and the grain sentence. */
   key?: string;
   grain?: string;
+  /** Live: date columns its source table requires a WHERE filter on, and the range the app reads when none does. */
+  required?: { columns: string[]; otherwise: string };
   columns: Array<Pick<ParsedColumn, 'name' | 'type'>>;
 }
 
@@ -98,6 +100,7 @@ export function tablesBlock(tables: readonly SqlTable[], links: readonly SqlLink
     const about = [`the dataset ${JSON.stringify(t.name)}`, t.live ? 'Live' : `${(t.rows ?? 0).toLocaleString('en-US')} rows`];
     if (t.key) about.push(`one row per ${ident(t.key)}`);
     else if (t.grain) about.push(t.grain.slice(0, 120));
+    if (t.required) about.push(`needs a WHERE filter on ${t.required.columns.map(ident).join(' and ')} (without one, only ${t.required.otherwise.toLowerCase()} are read)`);
     lines.push(`- ${ident(t.table)} (${about.join(' · ')})`);
     lines.push(`    ${t.columns.map((c) => `${ident(c.name)} ${c.type}`).join(', ')}`);
   }

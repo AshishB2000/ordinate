@@ -18,7 +18,8 @@
 //      one anyway is refused in the lane's own words, with no table's doc read, no second call and no statement; Keep is
 //      refused (403 off the route).
 //   6. KEEP, THEN VERIFY: Verify before Keep saves nothing; Keep makes one Live dataset per table read and re-points the
-//      turn (no `table`, the text unchanged); a second Keep makes none; Verify then saves the SQL against the kept
+//      turn (no `table`, the text unchanged); a second Keep makes none, nor does Keep of another turn over the same tables
+//      (re-pointed at the kept ones; NEGATIVE CONTROL: the two tables make two); Verify then saves the SQL against the kept
 //      datasets; asked word for word it runs with no model call, equal to the reference.
 //
 //   npm run build:ts && [DATABASE_URL=… ORDINATE_EXPECT_PGVECTOR=1] node scripts/test-liveSqlSources.js
@@ -264,6 +265,7 @@ async function legs(b: Bench, s: Seeded): Promise<void> {
   // 6. Keep, then Verify.
   const KEEP = `SELECT o.region, count(*) AS n, max(t.target) AS goal FROM ${ORDERS_T} o JOIN ${TARGETS_T} t ON o.region = t.region GROUP BY o.region ORDER BY o.region`;
   const asked = await ask(E, [ORDERS_T, TARGETS_T], KEEP);
+  const twin = await ask(E, [ORDERS_T, TARGETS_T], KEEP); // another turn over the same tables, asked before either is kept
   const KEEP_REF = await ref(KEEP.replace(new RegExp(ORDERS_T, 'g'), 'orders').replace(new RegExp(TARGETS_T, 'g'), 'targets'));
   ok('6. the table answer to keep is the reference\'s', problems(asked.turn?.card, KEEP_REF).length === 0, show(asked.turn?.card?.rows));
   const VQ = 'canary orders per region against their target';
@@ -275,10 +277,14 @@ async function legs(b: Bench, s: Seeded): Promise<void> {
   const keptIds: string[] = repointed?.sql?.datasetIds ?? [];
   ok('6. KEEP makes one Live dataset per table read, and re-points the turn: the kept ids, no table, the text unchanged', kept?.ok === true && (await datasetCount()) === n0 + 2 && keptIds.length === 2
     && keptIds.every((id) => ![s.ordersDoc, s.targetsDoc].includes(id)) && !repointed.sql.table && repointed.sql.text === KEEP, show({ kept, made: (await datasetCount()) - n0 }));
+  ok('6. NEGATIVE CONTROL: a different table on the same connection makes a new one — two tables, two datasets', new Set(keptIds).size === 2);
   const names = await b.as(b.admin, () => sqlDatasets.projectNames(b.P));
   ok('6. …each kept dataset takes the name its view had, so the same text reads it', [ORDERS_T, TARGETS_T].every((t) => names.some((e) => e.slug === t && keptIds.includes(e.id))), show(names.filter((e) => keptIds.includes(e.id))));
   const again = (await call(E, 'answer:keepTable', { projectId: b.P, threadId: asked.thread, turnId: asked.turn.id })).body;
   ok('6. a second Keep makes none', again?.ok === false && again.reason === say.notFromTable() && (await datasetCount()) === n0 + 2, show(again));
+  const keptTwin = (await call(E, 'answer:keepTable', { projectId: b.P, threadId: twin.thread, turnId: twin.turn.id })).body;
+  const twinIds: string[] = (keptTwin?.turns ?? []).find((t: { id: string }) => t.id === twin.turn.id)?.sql?.datasetIds ?? [];
+  ok('6. KEEP of another turn over the same tables makes no second dataset: it is re-pointed at the kept ones', keptTwin?.ok === true && (await datasetCount()) === n0 + 2 && twinIds.join() === keptIds.join(), show({ keptTwin: keptTwin?.ok, twinIds, keptIds }));
   const onKept = (await call(E, 'answer:refresh', { projectId: b.P, threadId: asked.thread, turnId: asked.turn.id })).body;
   ok('6. the kept answer, run again on the kept datasets, is the reference\'s', problems(onKept, KEEP_REF).length === 0, show(onKept));
   const saved = (await call(E, 'verified:save', { projectId: b.P, input: { question: VQ, sql: KEEP } })).body;

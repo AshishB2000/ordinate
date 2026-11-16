@@ -17,6 +17,12 @@
 //   5. SNAPSHOTS: reopening runs nothing and brings the table back; Refresh is one counted statement past the cache.
 //   6. CANARY (R-L6, R-L17): the warehouse's table names, a defining query and the connection's secret are in no reply
 //      and no prompt; the secret in no log line, though a warehouse error carried it.
+//   9. PRECISE COLUMN GATE: a column hidden from a viewer and named `sum` no longer refuses `sum()` (NEGATIVE CONTROL: F3's
+//      words-as-question check refuses it); every real reference — bare, qualified, aliased, quoted, through `*`, in
+//      WHERE or an aggregate — is still the column gate's sentence with nothing sent.
+//  10. A REQUIRED DATE FILTER (a partition BigQuery requires a filter on, from the table's doc): as a chart's, a statement
+//      that filters no `d` gets Last 12 months in the view, bound, with the chart's sentence, ≡ the reference with it by
+//      hand; the second call is told. NEGATIVE CONTROLS: one filtering `d` itself, and a table with no such fact, as before.
 // Database leg (DATABASE_URL: scripts/rowPolicyHarness.ts, real grants over the real RPC route):
 //   7. A LOCKED viewer's table is Object.is-equal to the reference locked to East; another viewer's lock (West) is a
 //      second statement, equal to the reference locked to West; the first asked again is a cache hit; the editor's is
@@ -65,6 +71,10 @@ const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnect
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const corpus: typeof import('./liveSqlCorpus') = require('./liveSqlCorpus');
 const diff: typeof import('./liveSqlDiff') = require('./liveSqlDiff');
+const rowDoors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');
+const lexer: typeof import('../src/engine/sqlLex') = require('../src/engine/sqlLex');
+const store: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+const dateRange: typeof import('../src/engine/live/liveDateRange') = require('../src/engine/live/liveDateRange');
 
 type Role = import('../src/server/context').Identity['user']['role'];
 type Table = import('./liveSqlDiff').Table;
@@ -303,6 +313,63 @@ async function fileLeg(): Promise<void> {
   ok('6. R-L17: the canary is live: the warehouse was sent the table names and the defining query', fake.calls.some((c) => c.sql.includes(TABLE_CANARY)) && fake.calls.some((c) => c.sql.includes(DEFQ_CANARY)));
   const leaked = replies.concat(calls.sql.map((c) => c.text)).filter((t) => t.includes(TABLE_CANARY) || t.includes(DEFQ_CANARY) || t.includes(SECRET) || /lv_src|\bv0 AS\b/.test(t));
   ok(`6. R-L17: no reply (${replies.length}) and no prompt (${calls.sql.length}) carries a warehouse table, the defining query, the printed SQL or the secret`, leaked.length === 0, leaked[0]?.slice(0, 300));
+
+  // 9. The column gate reads the columns the translator resolves, never words: `sum` is a column hidden from the viewer.
+  const fn = await as(ADMIN, 'admin', async () => {
+    const d = await liveRecord.saveLiveRecord(P, { name: 'fn_orders', columns: [...fx.COLUMNS, { name: 'sum', type: 'number' }], origin: { kind: 'connection', connId: W.main.conn, sql: `SELECT *, qty AS "sum" FROM ${TABLE_CANARY}_orders` } });
+    await rec.serialized(rec.datasetFilePath(P, d!.id), (raw) => {
+      raw.columnAccess = access.buildColumnAccess(raw, [{ column: 'sum', visibleTo: [{ teamId: '99999999-9999-4999-8999-999999999999' }] }], 'ana@acme.test', new Date().toISOString());
+      return true;
+    });
+    return d!.id;
+  });
+  fresh();
+  const FN = 'SELECT region, sum(qty) AS total FROM fn_orders GROUP BY region ORDER BY region';
+  const fnAsk = await ask(VIEWER, FN, ['fn_orders']);
+  ok('9. a hidden column named `sum` no longer refuses sum(): the viewer\'s table is the reference\'s', fnAsk.sent === 1 && problems(fnAsk.turn?.card, await as(ADMIN, 'admin', () => diff.reference(kit, FN.replace('fn_orders', 'orders'), false))).length === 0, show(fnAsk.turn));
+  const words = lexer.lexSql(FN).flatMap((t) => (t.kind === 'word' || t.kind === 'qid' ? [t.text] : []));
+  const byWords = await as(VIEWER, 'viewer', () => rowDoors.withLockOf(P, fn, async () => 'ran', words).catch((e: unknown) => (rowPolicy.isRowPolicyError(e) ? e.reason : 'threw')));
+  ok('9. NEGATIVE CONTROL: F3\'s check, the statement\'s words as the gate\'s question, refuses that statement (hidden)', byWords === 'hidden', String(byWords));
+  const REFS = ['SELECT region, sum FROM fn_orders', 'SELECT f.sum AS s FROM fn_orders f', 'SELECT "SUM" FROM fn_orders', 'SELECT s.sum FROM (SELECT * FROM fn_orders) s',
+    'WITH w AS (SELECT * FROM fn_orders) SELECT max(w.sum) AS m FROM w', 'SELECT region FROM fn_orders WHERE sum > 2', 'SELECT region, sum(sum) AS x FROM fn_orders GROUP BY region'];
+  const refs = [];
+  for (const q of REFS) refs.push({ q, a: await ask(VIEWER, q, ['fn_orders']) });
+  const leaky = refs.filter((r) => !refusedWith(r.a, rowPolicy.rowPolicyRefusal('hidden').error));
+  ok(`9. every real reference to it — bare, qualified, aliased, quoted in another case, through a * in a subquery or a CTE, in WHERE, in an aggregate — is the gate's sentence, nothing sent (${REFS.length - leaky.length}/${REFS.length})`, leaky.length === 0, leaky.map((r) => `${r.q}: ${show(r.a.turn?.text)}`).join(' | '));
+  const adminRef = await ask(ADMIN, 'SELECT f.sum AS s FROM fn_orders f ORDER BY s LIMIT 3', ['fn_orders']);
+  ok('9. TWIN: the admin, who sees `sum`, reads it', !!adminRef.turn?.card && adminRef.turn.card.rowCount === 3, show(adminRef.turn));
+
+  // 10. A required date filter, as a chart takes it: `d` of the table `dated` reads is a partition column BigQuery requires a filter on.
+  const pinned = process.env.ORDINATE_TODAY;
+  process.env.ORDINATE_TODAY = '2025-03-15'; // inside the fixture's dates: Last 12 months is [2024-03-01, 2025-02-28]
+  try {
+    const dated = await as(ADMIN, 'admin', async () => {
+      await fx.duckEngine.load(`${TABLE_CANARY}_dated`, fx.layout(fx.COLUMNS), kit.rows.orders);
+      const made = await store.createSourceDoc(P, W.main.conn, `${TABLE_CANARY}_dated`, {});
+      if (!made.ok) throw new Error('fixture: a source doc');
+      await store.updateSourceDoc(P, W.main.conn, made.docId, (d) => ({ ...d, facts: { columns: [{ name: 'd', type: 'DATE' }], partition: { columns: ['d'], method: 'DAY', required: true }, readAt: '2025-03-01T00:00:00Z', readBy: 'ana' } }));
+      return (await liveRecord.saveLiveRecord(P, { name: 'dated', columns: fx.COLUMNS, origin: { kind: 'connection', connId: W.main.conn, table: `${TABLE_CANARY}_dated` } }))!.id;
+    });
+    const NOTE = dateRange.requiredRange(['d'], []).notes[0];
+    const dates = () => (fake.calls.at(-1)?.params ?? []).filter((p) => p.type === 'date').map((p) => String(p.value));
+    const REQ = 'SELECT count(*) AS n, min(d) AS first_day, max(d) AS last_day FROM dated';
+    const req0 = await ask(ADMIN, REQ, ['dated']);
+    ok('10. the second call is told the table needs a filter on d, and what is read without one', /- dated \(the dataset "dated" · Live · needs a WHERE filter on d \(without one, only last 12 months are read\)\)/.test(req0.prompt), req0.prompt.slice(0, 300));
+    ok('10. a statement with no filter on d: its view gets Last 12 months, bound, and the card says so in the chart\'s sentence', req0.sent === 1 && dates().join() === '2024-03-01,2025-02-28' && req0.turn?.card?.bullets?.includes(NOTE), show([dates(), req0.turn?.card?.bullets]));
+    const byHand = 'SELECT count(*) AS n, min(d) AS first_day, max(d) AS last_day FROM orders WHERE d BETWEEN DATE \'2024-03-01\' AND DATE \'2025-02-28\'';
+    ok('10. …its table is the reference\'s with that range written by hand', problems(req0.turn?.card, await as(ADMIN, 'admin', () => diff.reference(kit, byHand, false))).length === 0, show(req0.turn?.card?.rows));
+    const OWN = 'SELECT count(*) AS n FROM dated WHERE d >= DATE \'2024-01-01\'';
+    const own = await ask(ADMIN, OWN, ['dated']);
+    ok('10. NEGATIVE CONTROL: a statement that filters d itself is left as it came: its own date only, no sentence, the reference\'s table', own.sent === 1 && dates().join() === '2024-01-01' && !own.turn?.card?.bullets?.includes(NOTE)
+      && problems(own.turn?.card, await as(ADMIN, 'admin', () => diff.reference(kit, OWN.replace('dated', 'orders'), false))).length === 0, show([dates(), own.turn?.card?.bullets]));
+    const bare = await ask(ADMIN, REQ.replace('dated', 'orders'));
+    ok('10. NEGATIVE CONTROL: a table with no such fact gets no range and no sentence', bare.sent === 1 && dates().length === 0 && !bare.turn?.card?.bullets?.includes(NOTE) && !/needs a WHERE filter/.test(bare.prompt), show([dates(), bare.turn?.card?.bullets]));
+    const checked = await as(ADMIN, 'admin', () => liveSql.checkLiveSql(P, REQ, [{ id: dated, names: ['dated'] }]));
+    ok('10. the translate-only check takes it too (it prints with the range, sends nothing)', checked === null, show(checked));
+  } finally {
+    if (pinned === undefined) delete process.env.ORDINATE_TODAY;
+    else process.env.ORDINATE_TODAY = pinned;
+  }
 }
 
 async function dbLeg(): Promise<void> {

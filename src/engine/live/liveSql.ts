@@ -8,17 +8,21 @@
 // read through its view CTE (./sql/view: the caller's lock, the base filters, the calcs, only the columns read).
 //
 //   one connection   every table Live, every one on the same connection (F-D9), none answered by a semantic layer;
-//   the gate         `withLockOf` on every table the second call was given, before anything is parsed, with every
-//                    name the statement writes as the question: one naming a hidden column gets the column gate's
-//                    `hidden`, as a chart naming it does, and rules that cannot be applied refuse whole (F-D10). The
-//                    vocabulary the translator resolves against holds the VISIBLE columns only, so `SELECT *` is
-//                    what the caller may see and a hidden column is never in a view;
+//   the gate         `withLockOf` on every table the second call was given, before anything is parsed: rules that
+//                    cannot be applied refuse whole (F-D10). The vocabulary the translator resolves against holds the
+//                    VISIBLE columns only, so `SELECT *` is what the caller may see and a hidden column is never in a
+//                    view. A statement that reads a hidden column (a reference the translator resolves over every
+//                    declared column, not a word: `sum()` is no reference to a column named `sum`) gets the column
+//                    gate's `hidden`, as a chart naming it does;
 //   the binder       DuckDB binds the statement over empty views typed as the Live views are (numbers DOUBLE, dates
 //                    DATE, text VARCHAR): what DuckDB would not bind (a column neither grouped nor aggregated) is
 //                    refused before any warehouse reads it. No row exists to read;
 //   the locks        each table read takes `withLockOf(…, the columns read from it)`, nested, so the statement is
 //                    printed and asked inside every one; its lock's values are bound parameters, so two entitlements
 //                    are two statements and two cache entries (row-policy D12);
+//   a required date  a table whose source doc requires a filter on a date column (../liveDateRange, as a chart):
+//                    where neither its lock, its base filters nor any WHERE of the statement names that column, its
+//                    view gets REQUIRED_RANGE, and the reply says so (`notes`);
 //   the cache        orgKey('livesql' · project · connection · [dataset, epoch, schemaSyncedAt] per table · the
 //                    printed SQL · its params), aged by the lowest maxCacheAgeSec of the tables read (F-D12); an
 //                    expired entry is the stale fallback, labelled `asOf.stale`;
@@ -54,7 +58,6 @@ import { withLockOf } from '../../ipc/rowDoors';
 import * as duck from '../duckdb';
 import { foldKey, quoteIdent } from '../datasetView';
 import { cleanDuckError, stripSemicolons } from '../sqlDatasets';
-import { lexSql } from '../sqlLex';
 import * as queryCache from '../queryCache';
 import * as trace from '../residentTrace';
 import * as qmsg from '../liveQueryMessages';
@@ -69,6 +72,8 @@ import { liveTarget, type LiveTarget } from './liveTarget';
 import { LiveCallError, dialectOf, failed, opOf, timeoutMs, warehouse } from './liveWarehouse';
 import type { LiveSqlIR, Ty } from './sql/ir';
 import { LIVE_SQL_ROWS, printLiveSql } from './sql/print';
+import { whereColumns, type ViewInput } from './sql/view';
+import { requiredRange } from './liveDateRange';
 import { parseSql, translate, type SqlEnv, type SqlRefusal } from './sql/tree';
 import { seesSourceNames } from '../../data/sourceNames';
 
@@ -80,7 +85,8 @@ const HOUR_MS = 3_600_000;
 export type LiveSqlFailure = { ok: false; error: string; code?: LiveFailureCode };
 
 /** The result table, positional to the statement's outputs, dated (`asOf`), and the datasets it read, in the IR's order. */
-export type LiveSqlReply = { ok: true; columns: ParsedColumn[]; rows: Cell[][]; truncated: boolean; deps: string[]; asOf: AsOf } | LiveSqlFailure;
+/** `notes`: what the card says beside it (a required date range the view was given, ./liveDateRange). */
+export type LiveSqlReply = { ok: true; columns: ParsedColumn[]; rows: Cell[][]; truncated: boolean; deps: string[]; asOf: AsOf; notes?: string[] } | LiveSqlFailure;
 
 /** One dataset the statement may name: its record id, and the names the second call was given (the slug, the exact name). */
 export interface LiveSqlTable {
@@ -114,11 +120,11 @@ async function targetsOf(projectId: string, ids: readonly string[]): Promise<Map
   return out;
 }
 
-/** The column gate and the row rules' fail-closed refusals on every table (F-D10): each one's hidden columns, or the gate's sentence. */
-async function gated(projectId: string, ids: readonly string[], words: readonly string[]): Promise<Map<string, ReadonlySet<string>> | LiveSqlFailure> {
+/** The row rules' fail-closed refusals on every table (F-D10): each one's hidden columns, or the gate's sentence. */
+async function gated(projectId: string, ids: readonly string[]): Promise<Map<string, ReadonlySet<string>> | LiveSqlFailure> {
   const out = new Map<string, ReadonlySet<string>>();
   try {
-    for (const id of ids) out.set(id, await withLockOf(projectId, id, async (_lock, hidden) => hidden, words));
+    for (const id of ids) out.set(id, await withLockOf(projectId, id, async (_lock, hidden) => hidden));
   } catch (err) {
     if (isRowPolicyError(err)) return { ok: false, error: err.message };
     throw err;
@@ -130,7 +136,7 @@ async function gated(projectId: string, ids: readonly string[], words: readonly 
 export async function liveSqlClosed(projectId: string, ids: readonly string[]): Promise<string | null> {
   const targets = await targetsOf(projectId, ids);
   if (!(targets instanceof Map)) return targets.error;
-  const g = await gated(projectId, ids, []);
+  const g = await gated(projectId, ids);
   return g instanceof Map ? null : g.error;
 }
 
@@ -184,7 +190,7 @@ export async function checkLiveSql(projectId: string, text: string, tables: read
   if (!('ir' in p)) return p;
   try {
     return await underLocks(projectId, p.ir, 0, [], async (locks) => {
-      const printed = printLiveSql(p.ir, p.views.map((v, i) => ({ env: v.env, lock: locks[i]?.steps ?? [] })), p.views[0].dialect);
+      const printed = printLiveSql(p.ir, inputsOf(p.ir, p.views, locks).inputs, p.views[0].dialect);
       return printed.ok ? null : refused(opOf(p.views[0].dialect), printed.message);
     });
   } catch (err) {
@@ -200,18 +206,22 @@ async function prepared(projectId: string, text: string, tables: readonly LiveSq
   const targets = await targetsOf(projectId, ids);
   if (!(targets instanceof Map)) return targets;
   const op = opOf([...targets.values()][0]?.dialect);
-  const words = lexSql(text).flatMap((tok) => (tok.kind === 'word' || tok.kind === 'qid' ? [tok.text] : []));
-  const hidden = await gated(projectId, ids, words);
+  const hidden = await gated(projectId, ids); // rules that cannot apply refuse whole; the columns named are the IR's, below
   if (!(hidden instanceof Map)) return hidden;
-  const env: SqlEnv = {
+  const envOver = (shown: (id: string, column: string) => boolean): SqlEnv => ({
     tables: new Map(tables.flatMap((tb) => {
-      const columns = targets.get(tb.id)!.columns.filter((c) => !hidden.get(tb.id)!.has(c.name));
+      const columns = targets.get(tb.id)!.columns.filter((c) => shown(tb.id, c.name));
       return tb.names.map((n) => [foldKey(n), { id: tb.id, columns }] as const);
     })),
     today: utcDay(), // F-D4: the UTC day, as the warehouse's session and the reference read it
-  };
-  const tr = translate(await parseSql(text), env);
-  if (!tr.ok) return refused(op, await sentenceOf(projectId, tr));
+  });
+  const env = envOver((id, c) => !hidden.get(id)!.has(c));
+  const tree = await parseSql(text);
+  const tr = translate(tree, env);
+  if (!tr.ok) {
+    const gate = await hiddenRead(projectId, tree, hidden, envOver);
+    return gate ? { ok: false, error: gate } : refused(op, await sentenceOf(projectId, tr)); // the gate's: no code, the caller's access (F4)
+  }
   const bind = await unbound(text, env);
   if (bind) return refused(op, bind);
   const ir = tr.ir;
@@ -221,6 +231,25 @@ async function prepared(projectId: string, text: string, tables: readonly LiveSq
     if (gone) return refused(op, gone.message);
   }
   return { ir, views };
+}
+
+/**
+ * The column gate's own sentence when the refused statement reads a column hidden from the caller, else null. It is
+ * translated again over every declared column, and the columns THAT IR reads from each table are the gate's question
+ * (F-D10), as a chart's are: only references the translator resolves count (bare, qualified, aliased or through a `*`),
+ * so a hidden column named `sum` never refuses `sum()`. Nothing of the second IR is printed or sent.
+ */
+async function hiddenRead(projectId: string, tree: unknown, hidden: ReadonlyMap<string, ReadonlySet<string>>, envOver: (shown: (id: string, column: string) => boolean) => SqlEnv): Promise<string | null> {
+  if (![...hidden.values()].some((h) => h.size)) return null;
+  const all = translate(tree, envOver(() => true));
+  if (!all.ok) return null;
+  try {
+    for (const v of all.ir.views) await withLockOf(projectId, v.id, async () => null, v.columns);
+  } catch (err) {
+    if (isRowPolicyError(err)) return err.message;
+    throw err;
+  }
+  return null;
 }
 
 /**
@@ -243,11 +272,35 @@ function agesOf(views: readonly LiveTarget[]): { lookupMs: number; keepMs: numbe
   return { lookupMs: Math.max(sec, budget.cacheAgeFloorSec()) * 1000, keepMs: Math.max(sec, budget.publicFloorSec()) * 1000 };
 }
 
-/** Print, then cache → one flight → the dry run → warehouse() (F-D11, F-D12). */
+/**
+ * Each table read as its view input: its lock, and REQUIRED_RANGE (./liveDateRange) on each date column its table
+ * requires a filter on that neither the lock, the base filters nor a WHERE of the statement names — a chart question's
+ * rule, with its sentence. The range is printed, so it is in the cache key and moves at midnight.
+ */
+function inputsOf(ir: LiveSqlIR, views: readonly LiveTarget[], locks: ReadonlyArray<Lock | null>): { inputs: ViewInput[]; notes: string[] } {
+  const named = whereColumns(ir);
+  const notes = new Set<string>();
+  const inputs = views.map((v, i): ViewInput => {
+    const lock = locks[i]?.steps ?? [];
+    const r = requiredRange(v.requiredDates, [...(v.env.base ?? []).map((f) => f.column), ...lock.map((s) => s.column), ...named[i]]);
+    r.notes.forEach((n) => notes.add(n));
+    return { env: r.filters.length ? { ...v.env, base: [...(v.env.base ?? []), ...r.filters] } : v.env, lock };
+  });
+  return { inputs, notes: [...notes] };
+}
+
+/** The statement under the caller's locks, with the sentence of any required date range it was given. */
 async function ask(projectId: string, ir: LiveSqlIR, views: readonly LiveTarget[], locks: ReadonlyArray<Lock | null>): Promise<LiveSqlReply> {
+  const { inputs, notes } = inputsOf(ir, views, locks);
+  const r = await asked(projectId, ir, views, inputs);
+  return r.ok && notes.length ? { ...r, notes } : r;
+}
+
+/** Print, then cache → one flight → the dry run → warehouse() (F-D11, F-D12). */
+async function asked(projectId: string, ir: LiveSqlIR, views: readonly LiveTarget[], inputs: readonly ViewInput[]): Promise<LiveSqlReply> {
   const t = views[0];
   const op = opOf(t.dialect);
-  const printed = printLiveSql(ir, views.map((v, i) => ({ env: v.env, lock: locks[i]?.steps ?? [] })), t.dialect);
+  const printed = printLiveSql(ir, inputs, t.dialect);
   if (!printed.ok) return refused(op, printed.message);
   const q = printed.query;
   const key = orgKey(['livesql', projectId, t.connectionId, ...views.flatMap((v) => [v.datasetId, String(v.live.epoch), v.live.schemaSyncedAt]), q.sql, queryCache.stableStringify(q.params)].join('\u0000'));
