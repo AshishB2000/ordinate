@@ -538,6 +538,7 @@
   "liveSqlMessages.this_number_is_too_large_to": "This number is too large to compare exactly on a warehouse.",
   "liveSqlMessages.this_statement_doesn_t_add_up": "This statement doesn’t add up, so it was not sent to the warehouse: {detail}",
   "liveSqlMessages.this_statement_is_nested_too_deeply": "This statement is nested too deeply to check.",
+  "liveSqlMessages.this_statement_names_a_table_that": "This statement names a table that is not a dataset this question can read.",
   "liveSqlMessages.this_statement_reads_no_dataset": "This statement reads no dataset.",
   "liveSqlMessages.you_have_had_sql_answers_from": "You have had {limit} SQL answers from this connection in the last hour, the most one person can. Try again in {minutes} min, or ask for a chart.",
   "mentionMessages.a_comment_or_reply_can_mention": "A comment or reply can mention at most {max} people.",

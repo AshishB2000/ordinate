@@ -541,6 +541,7 @@
   "liveSqlMessages.this_number_is_too_large_to": "この数値は大きすぎて、データウェアハウスで正確に比較できません。",
   "liveSqlMessages.this_statement_doesn_t_add_up": "このステートメントは成り立たないため、データウェアハウスには送信していません: {detail}",
   "liveSqlMessages.this_statement_is_nested_too_deeply": "このステートメントは入れ子が深すぎて確認できません。",
+  "liveSqlMessages.this_statement_names_a_table_that": "このステートメントは、この質問で読み取れるデータセットではないテーブルを指定しています。",
   "liveSqlMessages.this_statement_reads_no_dataset": "このステートメントはデータセットを読み取りません。",
   "liveSqlMessages.you_have_had_sql_answers_from": "過去 1 時間にこの接続から {limit} 件の SQL の回答を受け取りました。これが 1 人あたりの上限です。{minutes} 分後にもう一度試すか、グラフを依頼してください。",
   "mentionMessages.a_comment_or_reply_can_mention": null,

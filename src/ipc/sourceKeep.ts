@@ -16,14 +16,17 @@ import * as copilot from '../ai/copilot';
 import * as datasets from '../data/datasets';
 import type { SqlTurn } from '../ai/answerSql';
 import { sourceView } from './sourceAnswers';
+import { seesSourceNames } from '../data/sourceNames';
+import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import { createLiveDataset } from './liveDatasets';
 import { answerNotThere } from '../ai/answerSnapshotMessages';
 import { notFromTable } from '../ai/sourceAnswerMessages';
 import { turnsForBrowser } from './answerSnapshots';
 import { LIVE_NOTE } from './liveAnswers';
 
-/** The table's Live dataset, made through the connection's own Live create, or why not (a viewer's: the missing dataset). */
+/** The table's Live dataset, made through the connection's own Live create, or why not. Never a viewer's, even one given the table (E8, F6). */
 async function keepView(projectId: string, connId: string, docId: string): Promise<{ ok: true; datasetId: string } | { ok: false; reason: string; needs?: 'copy' }> {
+  if (!(await seesSourceNames(projectId))) return { ok: false, reason: liveDatasetMissing() }; // the route's `write` refuses them first
   const v = await sourceView(projectId, connId, docId);
   if (!v.ok) return v;
   const made = await createLiveDataset({ projectId, connId: v.table.connId, table: v.table.table, name: v.table.table });
