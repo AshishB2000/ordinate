@@ -984,6 +984,21 @@ function, so for a caller a folder restricts it shows such a prose answer, as it
 conversation of only hidden turns. A chart answer it refreshes or saves as a visual is stored again without the record;
 its chart's dataset still hides it.
 
+## Source table facts are read again on a schedule (no migration)
+
+A documented source table's facts (what **Read from warehouse** stores: comments, key, partitions, size) were read
+only on an editor's click and, for a Live dataset's tables, on its daily schema sync. This release adds a job,
+`sourceTable:facts`: one more row per org in the `jobs` table, run hourly by whichever pod claims it. It reads again
+the facts older than `TABLE_FACTS_MAX_AGE_HOURS` (default 24, [configuration.md](configuration.md#warehouses-and-live-data)),
+at most 20 tables a run per org, through the same door and the same 60-an-hour count per connection as the click.
+What an operator may notice: a facts read now and then in a warehouse's query history (it can start a suspended
+warehouse, as the click can), facts stamped as read by `jobs@system`, and one `[sourceFacts]` warning line per run
+for a connection whose read failed (its error redacted, never a secret). An org with no documented table reads nothing.
+
+**Rolling out.** A pod of the release before neither knows nor claims the kind, so during a rolling update only new
+pods run it. **Rolling back.** The older release leaves the rows unclaimed; they stay idle and are used again after the
+next upgrade.
+
 ## Compose
 
 From a checkout:

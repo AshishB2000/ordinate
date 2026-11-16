@@ -1,8 +1,8 @@
 // `sourceTable:read` (docs/semantic-layer/02-source-tables.md, D6, D15): an editor's click reads one
 // table's facts from the warehouse and stores them on its doc, with who and when. `readFacts` is the
-// only caller of the facts door (src/connectors/tableFactsRun.ts): the click, and a Live dataset's
-// daily schema sync (./sourceFactsRefresh, docs/assistant/00-design.md "Table facts"); no view or
-// refresh reads facts. At most READS_PER_HOUR per connection across pods, both callers together,
+// only caller of the facts door (src/connectors/tableFactsRun.ts): the click, a Live dataset's daily
+// schema sync and the `sourceTable:facts` job (./sourceFactsRefresh, docs/assistant/00-design.md "Table
+// facts"); no view or refresh reads facts. At most READS_PER_HOUR per connection across pods, all callers together,
 // taken before the door (a refusal charges nothing; a read that fails still counts). The order is
 // the doc, the connection, the count, the secrets, the door, the write. The write is
 // `updateSourceDoc`, which cannot move a typed field or the edit tag, so an open editor never sees a

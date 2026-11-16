@@ -1,21 +1,32 @@
-// A Live dataset's source table facts, kept current without a click (docs/assistant/00-design.md, "Table facts") —
-// MAIN PROCESS ONLY.
+// Source table facts, kept current without a click (docs/assistant/00-design.md, "Table facts") — MAIN PROCESS ONLY.
+// Two ways, both through `readFacts` (./sourceTableRead): the SSRF guard, the context's timeout and row clamps,
+// safeError, the secrets redacted, and the click's 60-an-hour count per connection, shared with editors. A read that
+// fails, or a count that is spent, writes nothing: the facts stored before stay.
 //
-// There is no schedule per connection: the scheduled job that reads a connection's catalog is the Live dataset's daily
-// schema sync (src/engine/live/schemaSyncJob.ts), so the facts ride it, on the same day's visit to the warehouse (no
-// extra wake of a Snowflake or Databricks warehouse). After a SCHEDULED sync lands, the documented source tables of
-// that dataset whose facts are older than FACTS_STALE_MS (or were never read) are read again, stalest first, at most
-// FACTS_PER_SYNC of them, one after another, each through `readFacts` (./sourceTableRead): the SSRF guard, the
-// context's timeout and row clamps, safeError, the secrets redacted, and the click's 60-an-hour count per connection,
-// shared with editors. A read that fails, or a count that is spent, writes nothing: the facts stored before stay.
-// Never throws: the sync's job never fails for its facts.
+// 1. A Live dataset's daily schema sync (src/engine/live/schemaSyncJob.ts) reads its catalog anyway, so its tables' facts
+//    ride it, on the same day's visit to the warehouse (no extra wake of a Snowflake or Databricks warehouse). After a
+//    SCHEDULED sync lands, the documented source tables of that dataset whose facts are older than FACTS_STALE_MS (or
+//    were never read) are read again, stalest first, at most FACTS_PER_SYNC of them, one after another. Never throws: the
+//    sync's job never fails for its facts.
+// 2. The `sourceTable:facts` job, one row per org in the jobs table (src/server/jobs/runner.ts: a run is a claim, FOR
+//    UPDATE SKIP LOCKED under a heartbeat lease, so two pods never run one org's at once), hourly, with a database only:
+//    every documented table of the org, of any connection whose connector reads facts (an extract's or a Live one's),
+//    whose facts are older than TABLE_FACTS_MAX_AGE_HOURS (24) or were never read, stalest first, at most FACTS_PER_RUN
+//    reads a run. A connection whose read fails is logged once (its error safeError'd by the door) and skipped for the
+//    rest of the run: its tables are still stale, so the next run tries again. Nothing documented: nothing is read.
 
 import * as datasets from '../data/datasets';
 import * as connections from '../connectors/connections';
 import { isLive } from '../data/liveDataset';
 import { docTablesOf, sourceTablesOf } from '../data/sourceTableOf';
-import { listSourceIndex, readSourceDoc } from '../app/sourceTables';
+import { listSourceIndex, readSourceDoc, readSourceIndexes } from '../app/sourceTables';
+import * as projects from '../app/projects';
 import { logger } from '../app/logger';
+import { getConnector } from '../connectors';
+import { canReadFacts } from '../connectors/tableFactsRun';
+import { safeError } from '../connectors/types';
+import { tableFactsMaxAgeMs } from '../server/env';
+import { defineJob } from '../server/jobs/runner';
 import { readFacts } from './sourceTableRead';
 
 /**
@@ -58,4 +69,65 @@ export async function refreshSourceFacts(projectId: string, datasetId: string, n
     logger.warn(`[sourceFacts] the source table facts of dataset ${datasetId} were not refreshed: ${err instanceof Error ? err.message : String(err)}`);
     return 0;
   }
+}
+
+export const FACTS_JOB = 'sourceTable:facts';
+export const FACTS_JOB_EVERY_MS = 60 * 60_000;
+/** Reads one run starts at most, a failed one included: 480 a day per org, a fraction of each connection's 60 an hour. */
+export const FACTS_PER_RUN = 20;
+
+/** TABLE_FACTS_MAX_AGE_HOURS, re-read per run (env.ts refused a bad value at startup). */
+export function factsMaxAgeMs(): number {
+  try {
+    return tableFactsMaxAgeMs(process.env.TABLE_FACTS_MAX_AGE_HOURS);
+  } catch {
+    return tableFactsMaxAgeMs(undefined);
+  }
+}
+
+/** One run of the job for the context's org: how many docs' facts were read and stored. Past `stopAt` it starts no read. */
+export async function refreshOrgFacts(stopAt = Infinity, most = FACTS_PER_RUN, now = Date.now()): Promise<number> {
+  const maxAge = factsMaxAgeMs();
+  const stale: { projectId: string; connId: string; docId: string; readAt: number }[] = [];
+  for (const p of await projects.listProjects()) {
+    const conns = (await connections.listConnections(p.id)).filter((c) => canReadFacts(getConnector(c.connectorId)));
+    for (const [connId, entries] of await readSourceIndexes(p.id, conns.map((c) => c.id))) {
+      for (const e of entries) {
+        const readAt = msOf(e.readAt);
+        if (now - readAt >= maxAge) stale.push({ projectId: p.id, connId, docId: e.docId, readAt });
+      }
+    }
+  }
+  // shortcut: more than FACTS_PER_RUN connections failing in one org take every read of a run; keep a failure stamp per
+  // connection if an org ever has that many broken ones.
+  const failed = new Set<string>();
+  let tried = 0;
+  let read = 0;
+  for (const s of stale.sort((a, b) => a.readAt - b.readAt)) {
+    if (tried >= most || Date.now() >= stopAt) break;
+    if (failed.has(s.connId)) continue;
+    tried += 1;
+    let error: string;
+    try {
+      const r = await readFacts(s.projectId, s.connId, s.docId);
+      if (r.ok) {
+        read += 1;
+        continue;
+      }
+      error = r.error;
+    } catch (err: unknown) {
+      error = safeError(err);
+    }
+    failed.add(s.connId);
+    logger.warn(`[sourceFacts] connection ${s.connId} of project ${s.projectId}: a table's facts were not read again, so its tables wait for the next run (the stored facts stay): ${error}`);
+  }
+  return read;
+}
+
+let defined = false;
+/** Declares the job (src/server/app.ts, with a database). Once per process: a second app in one process shares it. */
+export function wireFactsRefresh(): void {
+  if (defined) return;
+  defined = true;
+  defineJob(FACTS_JOB, { everyMs: FACTS_JOB_EVERY_MS, run: async (_target, stopAt) => { await refreshOrgFacts(stopAt); } });
 }
