@@ -17,7 +17,7 @@ export const VALUE_LINES = 12;
 const NOT_VALUES: ReadonlySet<string> = new Set([
   ...STOP, 'in', 'of', 'by', 'to', 'on', 'at', 'is', 'it', 'me', 'my', 'we', 'an', 'as', 'or', 'do', 'be', 'so', 'if', 'vs', 'up',
   'when', 'where', 'why', 'last', 'next', 'year', 'years', 'quarter', 'quarters', 'month', 'months', 'week', 'weeks', 'day', 'days',
-  'today', 'yesterday', 'ago', 'since', 'ytd', 'mtd', 'qtd', 'between', 'over', 'under', 'top', 'bottom', 'total', 'count', 'sum',
+  'today', 'yesterday', 'ago', 'since', 'ytd', 'mtd', 'qtd', 'between', 'over', 'under', 'top', 'bottom', 'count', 'total', 'sum', // question words, not an aggregation list (test-aggregationList)
   'average', 'avg', 'number', 'trend', 'chart', 'compare', 'versus',
 ]);
 
