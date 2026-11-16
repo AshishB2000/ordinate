@@ -498,6 +498,8 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
 
 ### F7 as built
 
+**First nightly run (2026-11-15):** 112 of 114 corpus runs agreed on ClickHouse. The two that didn't were `FULL JOIN … USING` (unlocked and locked): ClickHouse filled the missing side with the type's default (`0`) where every other engine and the reference give `NULL`. The printer now ends every ClickHouse statement with `SETTINGS join_use_nulls = 1`. The lift probe confirmed both pins: ClickHouse refuses a correlated scalar subquery (HTTP 501), and `lead`/`lag` give `0` instead of `NULL` past the frame, so CH1 and CH2 stay refused.
+
 - **Files:** `scripts/warehouseLiveSqlParity.ts` (the nightly's legs: `runLeg` over any parity engine;
   `runSnowflakeSql` and `runBigquerySql`, which `test-warehouseLive` calls after its live parity, under
   its plans and its secret canary; run on its own, the ClickHouse container with `CLICKHOUSE_URL`, or

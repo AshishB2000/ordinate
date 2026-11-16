@@ -199,7 +199,10 @@ export function printLiveSql(ir: LiveSqlIR, inputs: readonly ViewInput[], dialec
     const rels = ir.rels.map((q, i) => `q${i} AS (${p.query(q, `o${i}_`, null, false)})`);
     const main = p.query(ir.main, 'o_', kindsOf(ir.main), true);
     const columns = ir.main.items.map((_, i) => `o_${i}`);
-    return { ok: true, query: b.finish(`WITH ${[...views, ...rels].join(',\n')}\n${main}`, d, columns) };
+    // ClickHouse fills an outer join's missing side with each type's default (0, '') unless told to use NULL, as every
+    // other engine and the DuckDB reference do (the nightly's FULL JOIN USING case found it).
+    const settings = d.id === 'clickhouse' ? '\nSETTINGS join_use_nulls = 1' : '';
+    return { ok: true, query: b.finish(`WITH ${[...views, ...rels].join(',\n')}\n${main}${settings}`, d, columns) };
   } catch (e) {
     if (e instanceof Refused) return e.refusal as SqlRefusal | LiveRefusal;
     throw e;
