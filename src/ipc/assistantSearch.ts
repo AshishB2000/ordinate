@@ -4,8 +4,9 @@
 // no row value, no dataset origin. Two ways that must agree, field by field (scripts/test-assistantSearch.ts):
 //
 //   INDEXED    with a database: ../server/assistantSearchIndex ranks inside one query, the caller's audience and the
-//              folders they open in its WHERE (a viewer never matches a source table; nobody matches an item in a folder
-//              they cannot open, docs/team-folders D13), and reads no record once built.
+//              folders they open in its WHERE (a viewer matches a source table only under its label, and only when their
+//              teams were given it, team folders E8; nobody matches an item in a folder they cannot open, D13), and reads
+//              no record once built.
 //   REFERENCE  every store read, each record turned into parts by the SAME mapping below, ranked in JS. Without a
 //              database this is the path, and with one it answers whenever the index fails.
 //
@@ -46,7 +47,8 @@ import { searchWords, searchWordsOf } from '../ai/modelWords';
 import { MEANING_K, MODEL_KINDS, findableBases, foundItems, fusedHead, itemKey, itemTexts, keyedItems, nearItems, newestItems, noCounts, phrase, rankParts, speltItems, withMeaning } from '../app/assistantSearchRank';
 import { meaningOf, nearOrWords } from './meaning';
 import { indexFolders } from '../server/authz/folderGate';
-import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions, SpeltHit } from '../app/assistantSearchRank';
+import { givenKeys, givenOn, schemaKey, schemaOf, tableKey } from '../server/authz/teamTables';
+import type { Audience, CountedKind, Given, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions, SpeltHit } from '../app/assistantSearchRank';
 
 export type { KeyedItem, ModelCounts, ModelHit, ModelKind, SpeltHit } from '../app/assistantSearchRank';
 
@@ -128,11 +130,21 @@ export function termParts(t: terms.TermSummary): Part[] {
   })];
 }
 
-/** A connection's documented tables, for editors only: a viewer never reads a warehouse table's name (p2-01). */
-export const tableParts = (connId: string, entries: readonly SourceIndexEntry[]): Part[] => entries.map((e) => part({
-  item: `table:${connId}/${e.docId}`, kind: 'table', base: true, id: e.docId, connId, name: clean(e.table), audience: 'editor', nameWords: searchWords(e.table),
-  text: phrase(clean(e.table), [], ''),
-}));
+/**
+ * A connection's documented tables: by their warehouse names for editors only (a viewer never reads one, p2-01), and,
+ * once an editor named one for viewers, a second item under that label alone — its words, its fingerprint, its name —
+ * keyed by the table and its schema (../server/authz/teamTables), so only a viewer whose teams were given it finds it.
+ */
+export const tableParts = (connId: string, entries: readonly SourceIndexEntry[]): Part[] => entries.flatMap((e) => [
+  part({
+    item: `table:${connId}/${e.docId}`, kind: 'table', base: true, id: e.docId, connId, name: clean(e.table), audience: 'editor', nameWords: searchWords(e.table),
+    text: phrase(clean(e.table), [], ''),
+  }),
+  ...(e.label ? [part({
+    item: `label:${connId}/${e.docId}`, kind: 'table', base: true, id: e.docId, connId, name: clean(e.label), audience: 'viewer', nameWords: searchWords(e.label),
+    keys: [tableKey(connId, e.table), schemaKey(connId, schemaOf(e.table))], text: phrase(clean(e.label), [], ''),
+  })] : []),
+]);
 
 /**
  * catalog.json: a dataset's description and its columns' "also called" names, display name and description, one
@@ -198,11 +210,18 @@ async function storeParts(projectId: string): Promise<Part[]> {
 /** `exceptDatasetIds`: nothing on these datasets is found (an agent's outside-the-topic check). */
 export interface SearchOptions { kinds?: readonly ModelKind[]; limit: number; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[] }
 
-const audiencesOf = async (projectId: string): Promise<Audience[]> => ((await seesSourceNames(projectId)) ? ['all', 'editor'] : ['all']);
+/** Who searches: an editor (every source table by its name), or a viewer (the tables their teams were given, by their labels). */
+async function readerOf(projectId: string): Promise<{ audiences: Audience[]; given: Given | null }> {
+  if (await seesSourceNames(projectId)) return { audiences: ['all', 'editor'], given: null };
+  const given = givenKeys(await givenOn(projectId));
+  return given.keys.length ? { audiences: ['all', 'viewer'], given } : { audiences: ['all'], given: null };
+}
 
 async function rankOptions(projectId: string, o: SearchOptions): Promise<RankOptions> {
+  const { audiences, given } = await readerOf(projectId);
   return {
-    audiences: await audiencesOf(projectId),
+    audiences,
+    ...(given ? { given } : {}),
     ...(o.kinds ? { kinds: MODEL_KINDS.filter((k) => o.kinds?.includes(k)) } : {}),
     ...(o.datasetIds ? { datasetIds: [...new Set(o.datasetIds.filter((d) => typeof d === 'string'))] } : {}),
     ...(o.exceptDatasetIds ? { exceptDatasetIds: [...new Set(o.exceptDatasetIds.filter((d) => typeof d === 'string'))] } : {}),
@@ -326,13 +345,16 @@ export async function indexedModel(projectId: string, question: string, o: Searc
 }
 
 export async function referenceCount(projectId: string): Promise<ModelCounts> {
-  return isValidId(projectId) ? tally(projectId, foundItems(await storeParts(projectId), await audiencesOf(projectId))) : noCounts();
+  if (!isValidId(projectId)) return noCounts();
+  const { audiences, given } = await readerOf(projectId);
+  return tally(projectId, foundItems(await storeParts(projectId), audiences, given));
 }
 
 export async function indexedCount(projectId: string): Promise<ModelCounts | null> {
   if (!useIndex || !orgDb() || projectId !== projectId.toLowerCase()) return null;
   if (!isValidId(projectId)) return noCounts();
-  const items = await index.foundItems(projectId, await audiencesOf(projectId), recordFs.rowsUnder, await openFolders(projectId));
+  const { audiences, given } = await readerOf(projectId);
+  const items = await index.foundItems(projectId, audiences, recordFs.rowsUnder, await openFolders(projectId), given);
   return items && tally(projectId, items);
 }
 

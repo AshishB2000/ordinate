@@ -929,6 +929,8 @@
   "targetMessages.the_plan_metric_was_deleted": "The plan metric was deleted.",
   "targetMessages.the_target_comes_from_data_your": "The target comes from data your access rules treat differently, so it isn't shown.",
   "targetMessages.the_target_is_drawn_for_at": "The target is drawn for at most 24 dates.",
+  "teamTableMessages.tables_for_teams_need_a_database": "Tables for teams need a database (DATABASE_URL): without one this server has no teams.",
+  "teamTableMessages.that_team_is_no_longer_in": "That team is no longer in this organization. Refresh and try again.",
   "termMessages.a_glossary_term_cannot_use_another": "A glossary term cannot use another term. Add its filters instead.",
   "termMessages.a_glossary_term_needs_at_least": "A glossary term needs at least one filter.",
   "termMessages.a_glossary_term_reached_the_engine": "A glossary term reached the engine without being expanded, so the figure was not computed.",

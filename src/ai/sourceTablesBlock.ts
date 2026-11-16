@@ -9,8 +9,10 @@ import type { LedgerEntry } from './numberAudit';
 export const SOURCE_TABLES_MAX = 3000;
 
 export interface SourceTableEntry {
+  /** What the answer names it by: the warehouse name for an editor, the editor-written label for a viewer (team folders E8). */
   table: string;
-  connection: string;
+  /** Its connection's name; none for a viewer, who reads no part of where it lives. */
+  connection?: string;
   /** False: the connection is not asked live, so the table must be copied first. */
   live: boolean;
   columns: readonly { name: string; type: string }[];
@@ -24,9 +26,10 @@ const FRAMING = [
   'that has the columns. A table marked "copy first" is not asked live: answering from it means copying it into Ordinate.',
 ].join('\n');
 
-/** `- ANALYTICS.RETURNS (on "Snowflake"): reason (text), amount (number)`. */
+/** `- ANALYTICS.RETURNS (on "Snowflake"): reason (text), amount (number)`; a viewer's `- Returns: reason (text)`. */
 export function sourceTableLine(e: SourceTableEntry): string {
-  return schemaLine({ name: `${e.table} (on "${e.connection}"${e.live ? '' : ', copy first'})`, columns: [...e.columns] });
+  const where = [e.connection === undefined ? '' : `on "${e.connection}"`, e.live ? '' : 'copy first'].filter(Boolean).join(', ');
+  return schemaLine({ name: where ? `${e.table} (${where})` : e.table, columns: [...e.columns] });
 }
 
 /** The block, or '' (and no ledger) when no table is offered. */

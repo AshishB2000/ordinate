@@ -237,6 +237,9 @@
   background: var(--surface-2);
   color: var(--muted);
 }
+.notice > svg {
+  flex: 0 0 auto; /* a long line beside it must not squeeze the icon (phone width) */
+}
 .noticeTitle {
   color: var(--text-strong);
   font-size: var(--t-13);

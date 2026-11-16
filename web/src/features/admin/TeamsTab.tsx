@@ -1,7 +1,9 @@
 // Admin → Teams: create, rename, and choose members. A team is what a project
 // is owned by and shared with (Projects tab, and sharing on each project).
+// A team's Tables (`?team=<id>`, ./TeamTables) are the warehouse tables its viewers may ask about.
 
 import { useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router';
 import { Button, IconButton } from '../../ui/Button';
 import { Checkbox } from '../../ui/Choice';
 import { Dialog, DialogClose } from '../../ui/Dialog';
@@ -11,6 +13,7 @@ import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { Badge } from '../../ui/Badge';
 import { fmtDate, useAdminUsers, useIdpGroups, useTeams, useWrite, type Team } from './api';
+import { TeamTables } from './TeamTables';
 import s from './Admin.module.css';
 
 /** Create (no `team`) or rename (`team`) — one name field. */
@@ -97,8 +100,11 @@ export function TeamsTab() {
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<Team | null>(null);
   const [members, setMembers] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
   // The dialog follows the refetched team, so a tick shows at once.
   const membersOf = teams.data?.find((t) => t.id === members);
+  const tablesOf = teams.data?.find((t) => t.id === params.get('team'));
+  if (tablesOf) return <TeamTables team={tablesOf} onBack={() => setParams({ tab: 'teams' })} />;
   let body;
   if (teams.isPending) body = <SkeletonTable cols={4} rows={4} label="Loading teams" />;
   else if (teams.isError) {
@@ -162,6 +168,7 @@ export function TeamsTab() {
                     items={[
                       ...(linked.has(t.id) ? [] : [{ label: 'Members…', icon: 'user' as const, onSelect: () => setMembers(t.id) }]),
                       { label: 'Rename…', icon: 'pencil', onSelect: () => setRenaming(t) },
+                      { label: 'Tables…', icon: 'table', onSelect: () => setParams({ tab: 'teams', team: t.id }) },
                     ]}
                   />
                 </td>

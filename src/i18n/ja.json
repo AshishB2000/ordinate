@@ -932,6 +932,8 @@
   "targetMessages.the_plan_metric_was_deleted": "計画のメトリックは削除されました。",
   "targetMessages.the_target_comes_from_data_your": "目標は、アクセスルールで扱いが異なるデータに基づくため、表示されません。",
   "targetMessages.the_target_is_drawn_for_at": "目標は最大24の日付まで描画されます。",
+  "teamTableMessages.tables_for_teams_need_a_database": "チームごとのテーブルにはデータベース（DATABASE_URL）が必要です。データベースがないと、このサーバーにはチームがありません。",
+  "teamTableMessages.that_team_is_no_longer_in": "そのチームはこの組織にもう存在しません。更新してもう一度お試しください。",
   "termMessages.a_glossary_term_cannot_use_another": "用語集の用語に別の用語は使えません。代わりにその用語のフィルターを追加してください。",
   "termMessages.a_glossary_term_needs_at_least": "用語集の用語には少なくとも 1 つのフィルターが必要です。",
   "termMessages.a_glossary_term_reached_the_engine": "用語集の用語が展開されないままエンジンに届いたため、数値は計算されませんでした。",

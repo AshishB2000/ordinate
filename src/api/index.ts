@@ -56,6 +56,7 @@ import { columnAccess } from './columnAccess';
 import { semantic } from './semantic';
 import { agents } from './agents';
 import { folders } from './folders';
+import { teamTables } from './teamTables';
 
 export const contracts = {
   ...projects,
@@ -113,6 +114,7 @@ export const contracts = {
   ...semantic,
   ...agents,
   ...folders,
+  ...teamTables,
 } as const;
 
 export type Channel = keyof typeof contracts;

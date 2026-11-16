@@ -49,6 +49,7 @@ import { verifiedSqlOn } from './verifiedLookup';
 import type { AnswerCard, Built, CardLearn, Failure } from './answers';
 import { inSourceTable, inSqlTables } from './sourceAnswers';
 import { openTurns } from './turnsOpen';
+import { viewHook } from '../data/sourceView';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
 export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot'> & { card?: Record<string, unknown> };
@@ -58,7 +59,8 @@ export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot'> & { card?: Recor
  * are refused one) and the columns hidden from them. The two things every answer door applies for the caller
  * (./rowDoors `withLockOf`): a Live dataset's warehouse question takes the same lock. The Share policy's marked
  * columns are left out: they shape what a MODEL reads (../ai/answerFacts), never the card a person sees.
- * Reads the dataset's record only, never a row.
+ * A source table's view (../data/sourceView) adds the columns it declares: for a viewer, those their teams do not hide
+ * (team folders E8), so a column hidden since is never shown from a kept card. Reads the dataset's record only, never a row.
  */
 export async function accessPrint(projectId: string, datasetId: string): Promise<string> {
   let lock: unknown;
@@ -71,7 +73,8 @@ export async function accessPrint(projectId: string, datasetId: string): Promise
     lock = { refused: err.reason };
   }
   const hidden = [...(await hiddenColumnsFor(projectId, datasetId))].sort();
-  return createHash('sha256').update(stableStringify({ v: 1, lock, hidden })).digest('hex');
+  const view = viewHook(projectId, datasetId);
+  return createHash('sha256').update(stableStringify({ v: 1, lock, hidden, ...(view ? { columns: view.columns.map((c) => c.name).sort() } : {}) })).digest('hex');
 }
 
 /** `accessPrint` of every dataset an SQL answer read, as one sha256: a change on any of them, and its table is computed again. */

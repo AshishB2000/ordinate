@@ -11,6 +11,7 @@ import type { Pool } from 'pg';
 import { ctx } from '../context';
 import { registry } from '../rpc';
 import { rolesOf } from './index';
+import { inOrg, orgDb } from '../db/inOrg';
 
 type Role = 'viewer' | 'editor' | 'admin';
 type Member = { userId: string } | { teamId: string };
@@ -40,7 +41,10 @@ let poolOf: () => Pool | null = () => null;
  */
 export async function dropGrants(projectId: string): Promise<void> {
   const p = poolOf();
-  if (p) await p.query('DELETE FROM project_grants WHERE org_id = $1 AND project_id = $2', [ctx().org.id, projectId]);
+  if (!p) return;
+  await p.query('DELETE FROM project_grants WHERE org_id = $1 AND project_id = $2', [ctx().org.id, projectId]);
+  // …and the tables its teams were given (0036: forced row-level security, so as the org).
+  if (orgDb()) await inOrg((c, org) => c.query('DELETE FROM team_tables WHERE org_id = $1 AND project_id = $2', [org, projectId]));
 }
 
 /** Registers the channels; `pool()` is read per call (null → the server has no Postgres). */

@@ -18,6 +18,8 @@ export interface SourceRow {
   owner: string;
   hasGuide: boolean;
   readAt?: string;
+  /** The name viewers read it by once a team was given it (Admin → Teams → Tables). */
+  label?: string;
   datasetIds: string[];
 }
 export interface SourceConn {

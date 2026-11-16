@@ -11,6 +11,8 @@ const Patch = z.strictObject({
   refresh: z.string().max(200).optional(),
   requiredFilters: z.string().max(500).optional(),
   guide: z.string().max(8_000).optional(),
+  // The name a project viewer reads the table by once a team they are in was given it (team folders E8); '' removes it.
+  label: z.string().max(120).optional(),
 });
 const Doc = { projectId: Uuid, connId: Uuid, docId: Uuid };
 

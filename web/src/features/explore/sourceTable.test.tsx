@@ -1,7 +1,8 @@
 // Explore on a source table, no dataset (Assistant phase D; docs/assistant/00-design.md, "Explore, as built"): an editor
 // picks a documented warehouse table as a dataset; every call names it (`table` beside its doc's id); the header says it
 // is a warehouse table and offers Keep as a dataset, which opens the new Live dataset with the same question. A table on
-// a connection not asked live asks nothing and says to copy it in. A viewer is never offered one and never sends `table`.
+// a connection not asked live asks nothing and says to copy it in. A viewer is offered only the tables their teams were
+// given (team folders E8, `teamTables:mine`), by label, with no Keep; given none, they never send `table`.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configure, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -47,6 +48,7 @@ function serve(role: 'viewer' | 'editor', extra: Record<string, RpcReply> = {}) 
     'ai:status': { body: { ready: false, models: [], mine: null, keyStore: null } },
     'dataset:list': () => ({ body: datasets }),
     'sourceTable:list': role === 'editor' ? { body: SOURCES } : { status: 403, body: { error: 'forbidden' } },
+    'teamTables:mine': { body: { ok: true, tables: [] } },
     'explore:suggest': { body: SUGGEST },
     'visual:data': { body: ANSWER },
     'visual:dataBatch': (p) => ({ body: ((p as { items: unknown[] }).items ?? []).map(() => ANSWER) }),
@@ -103,7 +105,7 @@ describe('Explore on a source table', () => {
     expect(screen.queryByRole('button', { name: 'Keep as a dataset' })).toBeNull();
   });
 
-  it('a viewer is never offered a table: a link naming one opens a dataset, and no call carries `table`', async () => {
+  it('a viewer given no table is never offered one: a link naming one opens a dataset, and no call carries `table`', async () => {
     const calls = serve('viewer');
     const router = renderApp(at(DOC, CONN, Q));
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('dataset')).toBe(DID));
@@ -113,5 +115,21 @@ describe('Explore on a source table', () => {
     expect(calls.some((c) => JSON.stringify(c.payload ?? null).includes(CONN))).toBe(false);
     fireEvent.click(await screen.findByRole('combobox', { name: 'Dataset' }));
     expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Retail orders']);
+  });
+
+  it('a viewer given a table explores it by its label alone, with no Keep and no connection', async () => {
+    const calls = serve('viewer', { 'teamTables:mine': { body: { ok: true, tables: [{ connId: CONN, docId: DOC, name: 'Returns log', live: true }] } } });
+    renderApp(at(DOC, CONN, Q));
+    await screen.findByText('Warehouse table, not a dataset');
+    await screen.findByText('12.6');
+    expect(screen.getAllByText('Returns log').length).toBeGreaterThan(0);
+    const asked = named(calls, DOC);
+    expect(asked.map((c) => c.channel)).toEqual(expect.arrayContaining(['explore:suggest', 'visual:data']));
+    expect(asked.every((c) => (c.payload as { table?: string }).table === CONN)).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Keep as a dataset' })).toBeNull();
+    expect(calls.some((c) => c.channel === 'sourceTable:list')).toBe(false);
+    expect(screen.getByRole('main').textContent).not.toMatch(/RETURNS|Warehouse(?! table)/); // the page (an earlier test's toast lives outside it)
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Dataset' }));
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Retail orders', 'Returns logWarehouse table']);
   });
 });

@@ -36,6 +36,11 @@ export interface SourceTableDoc {
   requiredFilters: string;
   /** Markdown. */
   guide: string;
+  /**
+   * The name a project VIEWER reads this table by, when a team they are in was given it (docs/team-folders/00-design.md,
+   * open question 1): an editor's words, never derived from the table's own. None: it is offered to no viewer.
+   */
+  label?: string;
   facts?: TableFacts & { readAt: string; readBy: string };
   /** By dataset id. Never leaves the server. */
   dismissed?: Record<string, Dismissed>;
@@ -50,9 +55,11 @@ export interface SourceIndexEntry {
   owner: string;
   hasGuide: boolean;
   readAt?: string;
+  /** The doc's viewer label (step 3's index reads it from here): absent until an editor writes one. */
+  label?: string;
 }
 
-export const MAX_SOURCE_DOCS = 2000, MAX_TABLE = 1000, MAX_OWNER = 80, MAX_REFRESH = 200, MAX_REQUIRED = 500, MAX_SOURCE_GUIDE = 8000;
+export const MAX_SOURCE_DOCS = 2000, MAX_TABLE = 1000, MAX_OWNER = 80, MAX_REFRESH = 200, MAX_REQUIRED = 500, MAX_SOURCE_GUIDE = 8000, MAX_LABEL = 120;
 const MAX_STAMP = 40;
 export const MAX_DISMISSED_DATASETS = 500;
 const MAX_DISMISSED_COLUMNS = 2000, MAX_COLUMN_NAME = 256;
@@ -91,6 +98,7 @@ export function sanitizeSourceDoc(raw: unknown): SourceTableDoc | null {
   const readAt = line((r.facts as Record<string, unknown> | null)?.readAt, MAX_STAMP);
   const readBy = line((r.facts as Record<string, unknown> | null)?.readBy, MAX_OWNER);
   const dismissed = sanitizeDismissed(r.dismissed);
+  const label = line(r.label, MAX_LABEL);
   // The key order is fixed here, so two equal docs stringify equal.
   return {
     table,
@@ -98,6 +106,7 @@ export function sanitizeSourceDoc(raw: unknown): SourceTableDoc | null {
     refresh: line(r.refresh, MAX_REFRESH),
     requiredFilters: line(r.requiredFilters, MAX_REQUIRED),
     guide: str(r.guide).slice(0, MAX_SOURCE_GUIDE),
+    ...(label ? { label } : {}),
     ...(facts && readAt ? { facts: { ...facts, readAt, readBy } } : {}),
     ...(dismissed ? { dismissed } : {}),
     updatedBy: line(r.updatedBy, MAX_OWNER),
@@ -122,6 +131,8 @@ export function sanitizeIndex(raw: unknown): SourceIndexEntry[] {
     const entry: SourceIndexEntry = { table, docId, owner: line(e.owner, MAX_OWNER), hasGuide: e.hasGuide === true };
     const readAt = line(e.readAt, MAX_STAMP);
     if (readAt) entry.readAt = readAt;
+    const label = line(e.label, MAX_LABEL);
+    if (label) entry.label = label;
     out.push(entry);
     if (out.length === MAX_SOURCE_DOCS) break;
   }
@@ -176,7 +187,7 @@ const readIndex = async (projectId: string, connId: string): Promise<SourceIndex
 
 /** What the list needs of a doc, so the tab costs one small read per connection. */
 const entryOf = (docId: string, d: SourceTableDoc): SourceIndexEntry => ({
-  table: d.table, docId, owner: d.owner, hasGuide: d.guide.trim() !== '', ...(d.facts ? { readAt: d.facts.readAt } : {}),
+  table: d.table, docId, owner: d.owner, hasGuide: d.guide.trim() !== '', ...(d.facts ? { readAt: d.facts.readAt } : {}), ...(d.label ? { label: d.label } : {}),
 });
 
 /** Under the index's lock. */
@@ -235,8 +246,9 @@ export async function readSourceDocs(projectId: string, refs: readonly { connId:
 }
 
 /** What a person typed: each present field replaces the stored one, an absent one keeps it. */
-export interface SourcePatch { owner?: string; refresh?: string; requiredFilters?: string; guide?: string }
-const HUMAN = ['owner', 'refresh', 'requiredFilters', 'guide'] as const;
+/** `label`: the name viewers read (an empty one removes it). */
+export interface SourcePatch { owner?: string; refresh?: string; requiredFilters?: string; guide?: string; label?: string }
+const HUMAN = ['owner', 'refresh', 'requiredFilters', 'guide', 'label'] as const;
 const typed = (p: SourcePatch): SourcePatch => Object.fromEntries(HUMAN.filter((k) => typeof p[k] === 'string').map((k) => [k, p[k]]));
 
 /** A new doc for `table`, or the one that already has that exact name (`created: false`, the patch unused). */
@@ -290,7 +302,7 @@ export async function saveSourceDoc(projectId: string, connId: string, docId: st
  */
 export async function updateSourceDoc(projectId: string, connId: string, docId: string, fn: (d: SourceTableDoc) => SourceTableDoc): Promise<SourceTableDoc | null> {
   if (![projectId, connId, docId].every(isValidId)) return null;
-  return edit(projectId, connId, docId, undefined, (d) => ({ ...fn(d), table: d.table, owner: d.owner, refresh: d.refresh, requiredFilters: d.requiredFilters, guide: d.guide, updatedBy: d.updatedBy, updatedAt: d.updatedAt }));
+  return edit(projectId, connId, docId, undefined, (d) => ({ ...fn(d), table: d.table, owner: d.owner, refresh: d.refresh, requiredFilters: d.requiredFilters, guide: d.guide, label: d.label, updatedBy: d.updatedBy, updatedAt: d.updatedAt }));
 }
 
 /** The doc and its entry go; the entry first, so a crash leaves an unlisted doc and never a dangling entry. False when there was neither. */

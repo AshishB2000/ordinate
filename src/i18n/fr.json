@@ -932,6 +932,8 @@
   "targetMessages.the_plan_metric_was_deleted": "La métrique du plan a été supprimée.",
   "targetMessages.the_target_comes_from_data_your": "L’objectif provient de données que vos règles d’accès traitent différemment ; il n’est donc pas affiché.",
   "targetMessages.the_target_is_drawn_for_at": "La cible est tracée pour 24 dates au plus.",
+  "teamTableMessages.tables_for_teams_need_a_database": "Les tables par équipe ont besoin d’une base de données (DATABASE_URL) : sans elle, ce serveur n’a pas d’équipes.",
+  "teamTableMessages.that_team_is_no_longer_in": "Cette équipe ne fait plus partie de cette organisation. Actualisez la page et réessayez.",
   "termMessages.a_glossary_term_cannot_use_another": "Un terme du glossaire ne peut pas utiliser un autre terme. Ajoutez plutôt ses filtres.",
   "termMessages.a_glossary_term_needs_at_least": "Un terme du glossaire doit avoir au moins un filtre.",
   "termMessages.a_glossary_term_reached_the_engine": "Un terme du glossaire a atteint le moteur sans être développé : le chiffre n’a donc pas été calculé.",

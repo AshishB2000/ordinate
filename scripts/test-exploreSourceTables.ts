@@ -22,6 +22,10 @@
 //      doc read, no connection read, no warehouse statement, nothing counted; no reply holds the table's name, its
 //      connection's, a column only its facts have, or a figure. Keep is 403. NEGATIVE CONTROL: the editor's same calls
 //      read the doc and carry those names.
+//   7. A TABLE GIVEN TO A VIEWER'S TEAM (team folders E8): its picker (`teamTables:mine`) lists it by its label alone;
+//      the five inputs answer from its view as the editor's do (figures Object.is), less the column the team hides; no
+//      reply holds the warehouse name, the connection's or the hidden column; a table labelled but not given is
+//      "no longer exists"; keep stays 403. NEGATIVE CONTROL: the editor's replies and list carry them.
 //
 //   npm run build:ts && [DATABASE_URL=… ORDINATE_EXPECT_PGVECTOR=1] node scripts/test-exploreSourceTables.js
 
@@ -224,6 +228,40 @@ async function viewerLegs(b: Bench, s: Seeded, W: RP.World): Promise<void> {
   }
 }
 
+const LABEL = 'Refund log';
+
+async function givenLegs(b: Bench, s: Seeded, W: RP.World): Promise<void> {
+  await W.as('boss', async () => {
+    await store.saveSourceDoc(b.P, s.connId, s.docId, { label: LABEL });
+    await store.saveSourceDoc(b.P, s.copyConn, s.copyDoc, { label: 'Case log' }); // named for viewers, given to no team
+  });
+  const set = await W.call('boss', 'teamTables:set', { projectId: b.P, teamId: W.team, connId: s.connId, rows: [{ schema: '', table: TABLE, include: true, hidden: [FACT_CANARY] }] });
+  const mine = await W.call('east', 'teamTables:mine', { projectId: b.P });
+  ok('7. GIVEN: east\'s picker lists the table their team was given, by its label alone', set.body?.ok === true
+    && JSON.stringify(mine.body) === JSON.stringify({ ok: true, tables: [{ connId: s.connId, docId: s.docId, name: LABEL, live: true }] }), JSON.stringify(mine.body));
+  const [nobody, ed] = [await W.call('nobody', 'teamTables:mine', { projectId: b.P }), await W.call('ed', 'teamTables:mine', { projectId: b.P })];
+  ok('7. …a viewer in no team and an editor get none there (the editor\'s picker is sourceTable:list)', nobody.body?.tables?.length === 0 && ed.body?.tables?.length === 0, JSON.stringify([nobody.body, ed.body]));
+  const east = await targetCalls(b, s, 'east');
+  const editor = await targetCalls(b, s, 'ed');
+  const body = (r: Reply) => (Array.isArray(r.body) ? r.body[0] : r.body) as any; // any: each channel's own reply
+  const names = (r: Reply) => [...(body(r)?.dimensions ?? []), ...(body(r)?.dates ?? []), ...(body(r)?.measures ?? [])].map((f: { name: string }) => f.name).sort().join(',');
+  ok('7. …its fields are the table\'s less the column the team hides', body(east[0])?.ok === true && names(east[0]) === 'amount,day,reason' && names(editor[0]).includes(FACT_CANARY), `${names(east[0])} | ${names(editor[0])}`);
+  ok('7. …its chart and its batch are Object.is the editor\'s, a drill answers, filter values refuse typed', same(body(east[1]), body(editor[1])) && same(body(east[2]), body(editor[2]))
+    && body(east[4])?.ok !== false && body(east[3])?.ok === false && body(east[3]).code === body(editor[3])?.code, JSON.stringify(east.map((r) => r.body)).slice(0, 600));
+  const onColumn = (c: string) => W.call('east', 'visual:data', { projectId: b.P, datasetId: s.docId, table: s.connId, encoding: { category: c, values: [{ column: 'amount', aggregation: 'sum' }] } });
+  const [hidden, madeUp] = [await onColumn(FACT_CANARY), await onColumn('no_such_col_7e2')];
+  const other = await W.call('east', 'explore:suggest', { projectId: b.P, datasetId: s.copyDoc, table: s.copyConn });
+  const keep = await W.call('east', 'explore:keepTable', { projectId: b.P, datasetId: s.docId, table: s.connId });
+  ok('7. …a chart on the hidden column refuses as one on a made-up name does (its own words back, nothing more), a table labelled but not given is no dataset, keep is 403',
+    body(hidden)?.ok === false && JSON.stringify(hidden.body).split(FACT_CANARY).join('X') === JSON.stringify(madeUp.body).split('no_such_col_7e2').join('X')
+    && body(other)?.error === missing.liveDatasetMissing() && keep.status === 403, JSON.stringify([hidden.body, madeUp.body, other.body, keep.status]));
+  const said = JSON.stringify([mine.body, ...east.map((r) => r.body), other.body]);
+  const hits = [TABLE, CONN, FACT_CANARY, COPY_TABLE, 'Case log'].filter((w) => said.includes(w));
+  ok('7. CANARY: no reply east got holds the warehouse name, the connection\'s, the hidden column or an ungiven table', hits.length === 0, JSON.stringify(hits));
+  const list = JSON.stringify((await W.call('ed', 'sourceTable:list', { projectId: b.P })).body);
+  ok('7. NEGATIVE CONTROL: the editor\'s list and fields carry the warehouse name and the hidden column', list.includes(TABLE) && list.includes(CONN) && JSON.stringify(editor[0].body).includes(FACT_CANARY));
+}
+
 async function withoutDatabase(): Promise<void> {
   const R: typeof import('./liveRouteHarness') = require('./liveRouteHarness');
   try {
@@ -249,6 +287,7 @@ async function withDatabase(W: RP.World): Promise<void> {
   const b: Bench = { P: W.P, editor: 'ed', as: (fn) => W.as('boss', fn), call: (who, channel, payload) => W.call(who, channel, payload) };
   const s = await seed(b);
   await viewerLegs(b, s, W);
+  await givenLegs(b, s, W);
   await editorLegs(b, s);
 }
 

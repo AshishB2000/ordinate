@@ -32,7 +32,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'analysis:previewPlan': 'NET',
   'analysis:tiles': 'GATE',
   'answer:alsoOn': 'META', // dashboard ids and names the caller may open that show a dataset: no cell, label or figure of it
-  'answer:card': 'GATE',
+  'answer:card': 'GATE', // A source table given to a viewer's team (team folders E8): read in its view, named by its label, declaring no column the team hides; test-teamTables
   'answer:explain': 'GATE',
   'answer:refresh': 'GATE', // an SQL answer's turn: its SQL through sql:run's gate, refused with a column hidden (NET); over Live datasets (F3) the column gate on every table, the view without the hidden columns; test-answerSql, test-liveSqlAnswers
   'answer:rerun': 'GATE',
@@ -64,7 +64,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'connections:list': 'REDACT',
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
-  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts. An SQL answer is refused on a dataset hiding a column from the caller, before any SQL is written (NET, src/ipc/answerSql.ts); test-answerSql. Over Live datasets (F3) the second call is told the visible columns only and a statement naming a hidden one gets the gate's `hidden`; test-liveSqlAnswers
+  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts. A source table given to a viewer's team (team folders E8): read in its view, named by its label, declaring no column the team hides; test-teamTables. An SQL answer is refused on a dataset hiding a column from the caller, before any SQL is written (NET, src/ipc/answerSql.ts); test-answerSql. Over Live datasets (F3) the second call is told the visible columns only and a statement naming a hidden one gets the gate's `hidden`; test-liveSqlAnswers
   'copilot:deleteThread': 'META',
   'copilot:history': 'REDACT', // a kept answer card is not sent once a column is hidden from the caller since (src/ipc/answerSnapshots.ts `accessPrint`); test-answerSnapshots
   'copilot:newThread': 'META',
@@ -204,6 +204,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'summary:rewrite': 'NET',
   'template:list': 'NET',
   'template:plan': 'NET',
+  'teamTables:mine': 'META', // labels of a viewer's given source tables (team folders E8): no column, cell or figure; test-exploreSourceTables
   'term:get': 'REDACT',
   'term:list': 'REDACT', // values hidden from a restricted caller; one on a hidden column marked hidden: true; test-columnRedact
   'term:usage': 'META',

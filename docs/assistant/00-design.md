@@ -373,7 +373,7 @@ the dialect in `RAW_RANGE_DIALECTS`, and add it if both agree. Equal means leave
   doc's facts, the typed refusals, no JS fallback. Its provenance says *warehouse table, not a dataset*.
 - **Who.** Editors and admins only (`seesSourceNames`): a viewer's question reads no table (the role is checked before
   the picks), its prompt holds none, and a spec naming one is answered *This dataset no longer exists.*, as any unknown
-  id. Viewers get tables with team folders E8.
+  id. Viewers get the tables their teams were given, by an editor's label, less hidden columns ([team folders E8, as built](../team-folders/00-design.md#connection-tables-as-built-e8)).
 - **The card** says *Answered from ANALYTICS.RETURNS · warehouse table, not a dataset*, links no Data page, has no
   "Also on", and offers **Keep as a dataset** in place of Save as visual and Verify (`answer:saveVisual` and
   `verified:save` refuse a table's spec: *Keep this answer as a dataset first…*).
@@ -450,7 +450,11 @@ An editor explores a documented warehouse table as if it were a dataset, with no
   then opens the new dataset with the same question.
 - **Viewers** get no table in the picker (the list is never asked) and a `?table=` link opens a dataset. Every
   table-target input from a viewer is *This dataset no longer exists.*, answered before any read: `sourceView` asks
-  the role first, so no doc, connection or warehouse is read and nothing is counted. Keep is 403.
+  the role first, so no doc, connection or warehouse is read and nothing is counted. Keep is 403. **Since team folders
+  E8** a viewer's picker lists the tables their teams were given, by the label an editor wrote (`teamTables:mine`,
+  `read`: `{connId, docId, name, live}`, never the warehouse name or the connection), and those tables' five inputs
+  answer from their view less the hidden columns; Keep is still 403 and not offered
+  ([as built](../team-folders/00-design.md#connection-tables-as-built-e8)).
 - **Classified:** the five read contracts keep their row and column classes, noted with the table target
   (`scripts/rowPolicyReaders.ts`, `scripts/columnAccessReaders.ts`). `test-liveSafetyNet` §7 calls every read contract
   whose input takes `table` (found from the contracts) on a view: fields, charts and a drill answer, dated live;
@@ -467,8 +471,7 @@ An editor explores a documented warehouse table as if it were a dataset, with no
 
 **Left:** a warehouse probe for a link with a Live side; a source answer's turn is reopened under its view, so a
 caller who is no longer an editor gets no figures (a hide); filter values on a table (a sample would be a warehouse
-read per picker, so it waits for keep); viewers on tables their teams were given (E8). When shared folders merge,
-`scripts/folderReaders.ts` classifies the five changed read contracts too.
+read per picker, so it waits for keep).
 
 ## Access is given to teams
 
