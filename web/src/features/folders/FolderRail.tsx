@@ -7,7 +7,7 @@ import { useState, type DragEvent } from 'react';
 import { IconButton } from '../../ui/Button';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Menu, type MenuEntry } from '../../ui/Menu';
-import { childrenOf, editsFolder, EVERYONE, folderOfItem, type FolderNode, type FolderTree, type PlacedKind } from './api';
+import { childrenOf, editsFolder, EVERYONE, folderOfItem, FOLDERS_OFF, type FolderNode, type FolderTree, type PlacedKind } from './api';
 import { DeleteFolderDialog, depthOf, NewFolderDialog, parentsFor, RenameFolderDialog } from './FolderDialogs';
 import type { Movable } from './MoveDialog';
 import s from './Folders.module.css';
@@ -53,7 +53,7 @@ export function FolderRail({ projectId, tree, kind, ids, selected, onSelect, onD
     const f = folderOfItem(tree, projectId, kind, id);
     counts.set(f, (counts.get(f) ?? 0) + 1);
   }
-  const canMake = parentsFor(tree, projectId).length > 0;
+  const canMake = tree.enabled && parentsFor(tree, projectId).length > 0;
   const mayChange = (f: FolderNode) => (f.parentId === null ? tree.admin : f.level === 'edit' || f.level === 'manage');
   const anyLocked = tree.folders.some((f) => f.adminOnly);
 
@@ -80,8 +80,8 @@ export function FolderRail({ projectId, tree, kind, ids, selected, onSelect, onD
     const key = id ?? 'all';
     const n = id === null ? ids.length : (counts.get(id) ?? 0);
     const menu: MenuEntry[] = [];
-    if (node && editsFolder(tree, projectId, node.id) && depthOf(tree, projectId, node.id) < 5) menu.push({ label: 'New subfolder…', icon: 'plus', onSelect: () => setAsk({ what: 'new', parent: node.id }) });
-    if (!node && id === projectId && editsFolder(tree, projectId, projectId)) menu.push({ label: 'New subfolder…', icon: 'plus', onSelect: () => setAsk({ what: 'new', parent: projectId }) });
+    if (tree.enabled && node && editsFolder(tree, projectId, node.id) && depthOf(tree, projectId, node.id) < 5) menu.push({ label: 'New subfolder…', icon: 'plus', onSelect: () => setAsk({ what: 'new', parent: node.id }) });
+    if (tree.enabled && !node && id === projectId && editsFolder(tree, projectId, projectId)) menu.push({ label: 'New subfolder…', icon: 'plus', onSelect: () => setAsk({ what: 'new', parent: projectId }) });
     if (node && mayChange(node)) {
       menu.push({ label: 'Rename…', icon: 'pencil', onSelect: () => setAsk({ what: 'rename', folder: node }) });
       menu.push({ kind: 'separator' }, { label: 'Delete…', icon: 'trash', danger: true, onSelect: () => setAsk({ what: 'delete', folder: node }) });
@@ -133,6 +133,11 @@ export function FolderRail({ projectId, tree, kind, ids, selected, onSelect, onD
       </ul>
       {childrenOf(tree, null).length > 0 && <div className={s.railRule} role="presentation" />}
       <ul className={s.railList}>{childrenOf(tree, null).flatMap((f) => [row(f.id, f.name, 'folder', 0, f), ...nested(f.id, 1)])}</ul>
+      {!tree.enabled && (
+        <p className={s.railFoot}>
+          <Icon name="lock" size={12} /> {FOLDERS_OFF}
+        </p>
+      )}
       {anyLocked && (
         <p className={s.railFoot}>
           <Icon name="lock" size={12} /> Admin access: no team of yours was given it, so its members don’t see you there.

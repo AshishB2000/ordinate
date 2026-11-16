@@ -12,6 +12,7 @@ import type { PublishedDef } from '../publish/dashboardData';
 import { canStore, hasSecret, MAX_ORIGINS, readSettings, rotateSecret, saveSettings, secretOf } from '../server/embed/settings';
 import { MAX_LOCK_COLUMNS, MAX_TTL_SEC, PREVIEW_TTL_SEC, previewKey, signToken } from '../server/embed/token';
 import { embedNeedsSecret, embedNeedsSession, embedNeedsStore, embedNotFound, embedRepublish } from '../server/embedMessages';
+import { outsideCount } from '../server/authz/folderOutside';
 
 const org = (): string => ctx().org.id;
 
@@ -67,7 +68,9 @@ export function register(): void {
       }
     }
     const columns = [...cover].map(([name, c]) => ({ name, type: c.type, tiles: c.tiles })).sort((a, b) => b.tiles - a.tiles || a.name.localeCompare(b.name));
-    return { ok: true, tiles: ids.length, columns, dashboards: site.pages.filter((p) => p.kind === 'dashboard').map((p) => p.name) };
+    // "Shows data from folders N people can't open": an embed's audience is the host's (team-folders D17).
+    const outside = await outsideCount(projectId, [{ kind: 'dashboard', id: dashboardId }, ...[...metas.keys()].map((id) => ({ kind: 'dataset' as const, id }))]);
+    return { ok: true, tiles: ids.length, columns, outside, dashboards: site.pages.filter((p) => p.kind === 'dashboard').map((p) => p.name) };
   });
 
   // A preview link: signed here, for ten minutes, served only to an iframe of this server (src/server/embed/route.ts).

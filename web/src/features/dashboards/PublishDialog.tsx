@@ -42,6 +42,22 @@ export function brandsFor(list: Targets['dashboards'], picked: string[], workspa
   return out;
 }
 
+/**
+ * Shared folders: the page's dashboards or the datasets they read sit in folders `n` project members can't open, yet
+ * everyone the link is for sees them (the server's count, never names). Nothing at 0.
+ */
+export function OutsideNote({ n }: { n: number | undefined }) {
+  if (!n) return null;
+  return (
+    <p className={p.outside} role="note">
+      <Icon name="lock" size={12} />
+      <span>
+        Shows data from folders {n} {n === 1 ? 'person' : 'people'} can’t open.
+      </span>
+    </p>
+  );
+}
+
 function Group({ title, empty, items, picked, onChange }: { title: string; empty: string; items: { id: string; name: string; sheets?: number }[]; picked: string[]; onChange: (ids: string[]) => void }) {
   const all = items.length > 0 && items.every((i) => picked.includes(i.id));
   return (
@@ -99,7 +115,7 @@ export function PublishDialog({
   const [access, setAccess] = useState<Access>(site?.access ?? 'org');
   const [afterRefresh, setAfterRefresh] = useState(site?.config.options.afterRefresh === true);
   const client = useQueryClient();
-  const [plan, setPlan] = useState<{ busy: boolean; plan?: Plan; error?: string }>({ busy: false });
+  const [plan, setPlan] = useState<{ busy: boolean; plan?: Plan; outside?: number; error?: string }>({ busy: false });
   const seq = useRef(0);
 
   // Nothing picked yet and no preselect: the first dashboard, as the desktop dialog opens.
@@ -124,8 +140,8 @@ export function PublishDialog({
       rpc('publish:plan', JSON.parse(key) as typeof config).then(
         (r) => {
           if (my !== seq.current) return;
-          const res = r as { ok: boolean; plan?: Plan; error?: string };
-          setPlan(res.ok ? { busy: false, plan: res.plan } : { busy: false, error: res.error || 'Could not size the site.' });
+          const res = r as { ok: boolean; plan?: Plan; outside?: number; error?: string };
+          setPlan(res.ok ? { busy: false, plan: res.plan, outside: res.outside } : { busy: false, error: res.error || 'Could not size the site.' });
         },
         (err: unknown) => my === seq.current && setPlan({ busy: false, error: reason(err, 'Could not size the site.') }),
       );
@@ -198,6 +214,7 @@ export function PublishDialog({
                 },
               ]}
             />
+            {count > 0 && !plan.error && <OutsideNote n={plan.outside} />}
             <Input label="Site title" placeholder="The project’s name" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
             <Select
               label="Filter-bar combinations"

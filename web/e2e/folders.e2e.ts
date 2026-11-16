@@ -5,7 +5,8 @@
 //     in the UI.
 //   - On Data, the rail appears; Move to… on the sample dataset shows the warning first (who loses access, the sample
 //     dashboard that keeps showing its charts), then moves it. Under Finance the list holds it, and its page wears the
-//     chip "In Finance · Finance can view".
+//     chip "In Finance · Finance can view". The Publish dialog on the sample dashboard (in Everyone, reading that dataset)
+//     says it shows data from folders 1 person can't open.
 //   - Vera, a project viewer in team Ops analysts, no longer sees it: not in Data, and its page says it is in a folder
 //     she can't open. The admin gives Ops analysts Can view in Admin → Teams → Folders; she sees it again.
 //   - At phone width the rail is a row of pills above the list.
@@ -14,8 +15,8 @@
 //   - Dashboards: the rail beside the grid; the sample dashboard moves into Finance by Move to…; on Data the dataset
 //     goes back by a drag onto Everyone in the rail (the Move dialog opens with it picked).
 //
-// Screens: web/e2e/__screens__/folders-{share-empty,share,move,data,chip,viewer,team,phone,dashboards,everything}-{light,dark}.png.
-// Needs Postgres: without DATABASE_URL this spec prints one skip line.
+// Screens: web/e2e/__screens__/folders-{share-empty,share,move,data,chip,publish,viewer,team,phone,dashboards,everything}-{light,dark}.png.
+// Needs Postgres: without DATABASE_URL this spec prints one skip line. The server runs with ORDINATE_FOLDERS=on.
 
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,7 +39,8 @@ if (!adminUrl) {
 
   const { e2e, settled, screens, screensInPlace, configureServer, failOnConsoleError, rpcBudget } = await import('./fixtures.ts');
   configureServer({
-    env: { DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN },
+    // Folders on (ORDINATE_FOLDERS, off by default until every pod has the folder readers).
+    env: { DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN, ORDINATE_FOLDERS: 'on' },
     headers: { 'x-forwarded-email': ADMIN },
   });
   after(async () => {
@@ -121,6 +123,19 @@ if (!adminUrl) {
     await chip.waitFor();
     assert.equal((await chip.textContent())?.trim(), 'In Finance· Finance can view');
     await screens(page, 'folders-chip');
+
+    // ── Publish: the sample dashboard (in Everyone) shows Finance's dataset to everyone the link is for ──
+    const sampleBoard: string = ((await rpc(ADMIN, 'analysis:gallery', { projectId: pid })) as { id: string }[])[0].id;
+    const planned = await rpc(ADMIN, 'publish:plan', { projectId: pid, dashboardIds: [sampleBoard], options: { maxCombos: 32 } });
+    assert.equal(planned.outside, 1, 'Vera (Ops analysts) cannot open Finance; Fin can');
+    await page.goto(`/dashboards?project=${pid}&dashboard=${sampleBoard}`);
+    await settled(page);
+    const pub = page.getByRole('dialog', { name: 'Publish' });
+    const outside = pub.getByRole('note').filter({ hasText: 'Shows data from folders' });
+    await outside.waitFor();
+    assert.equal((await outside.textContent())?.trim(), 'Shows data from folders 1 person can’t open.');
+    await screensInPlace(page, 'folders-publish');
+    await page.keyboard.press('Escape');
 
     // ── Vera, outside Finance ────────────────────────────────────────────
     const vctx = await page.context().browser()!.newContext({ baseURL: server.base, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', extraHTTPHeaders: { 'x-forwarded-email': VERA } });

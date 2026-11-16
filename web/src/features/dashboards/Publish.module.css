@@ -195,6 +195,25 @@
   margin: var(--sp-4) 0 0;
   padding-left: 18px;
 }
+/* "Shows data from folders N people can't open" (shared folders): the link's audience is wider than the folders'. */
+.outside {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+}
+.outside svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
 @media (max-width: 760px) {
   .cols {
     grid-template-columns: 1fr;

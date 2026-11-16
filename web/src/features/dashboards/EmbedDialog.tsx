@@ -21,6 +21,7 @@ import { EmbedPreview } from '../embed/EmbedPreview';
 import { copy, EmbedSnippets } from '../embed/EmbedSnippets';
 import { claimsOf, pretty } from '../embed/snippets';
 import { useTargets, type HostedSite } from './api';
+import { OutsideNote } from './PublishDialog';
 import a from '../admin/Admin.module.css';
 import s from '../embed/Embed.module.css';
 
@@ -59,6 +60,7 @@ function Body({ projectId, site, status }: { projectId: string; site: HostedSite
   return (
     <div className={s.stack}>
       <Off status={status} />
+      <OutsideNote n={query.data?.ok ? query.data.outside : undefined} />
       <div className={s.dialogCols}>
         <div className={s.col}>
           {site.config.dashboardIds.length > 1 && (

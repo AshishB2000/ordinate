@@ -24,6 +24,8 @@ export interface FolderNode {
 
 export interface FolderTree {
   available: boolean;
+  /** ORDINATE_FOLDERS is on: folders may be made, shared and moved (off: those actions are hidden, FOLDERS_OFF says why). */
+  enabled: boolean;
   everyone: Level;
   admin: boolean;
   folders: FolderNode[];
@@ -32,6 +34,7 @@ export interface FolderTree {
 
 export interface FolderAccess {
   ok: true;
+  enabled: boolean;
   everyone: number;
   folders: Array<{ id: string; name: string; shareFigures: boolean; items: number; people: number; grants: Array<{ teamId: string; team: string; level: 'view' | 'edit'; people: number }> }>;
   teams: Array<{ id: string; name: string; members: number; inProject: number }>;
@@ -55,6 +58,9 @@ export type Failed = { ok: false; error: string };
 
 /** What Everyone is called on every screen. */
 export const EVERYONE = 'Everyone in the project';
+
+/** The one line shown where a folder change is hidden because the server has folders off (ORDINATE_FOLDERS). */
+export const FOLDERS_OFF = 'Making, sharing and moving folders is off on this server. An operator turns it on once every server runs this version.';
 
 export function useFolderTree(projectId: string | null | undefined) {
   return useQuery({

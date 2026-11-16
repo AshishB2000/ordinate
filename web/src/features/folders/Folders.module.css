@@ -577,6 +577,29 @@ button.chip:focus-visible {
 .rollback .hint {
   flex: 1 1 260px;
 }
+/* Folders off on this server (ORDINATE_FOLDERS): one calm line where the changes would be. */
+.offLine {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+}
+.offLine svg {
+  flex: none;
+  margin-top: 2px;
+}
+.levelText {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
 @media (max-width: 560px) {
   .addTeam {
     grid-template-columns: 1fr;

@@ -351,6 +351,7 @@
   "folderMessages.a_folder_with_that_name_is": "Un dossier porte déjà ce nom ici. Choisissez un autre nom.",
   "folderMessages.a_project_can_have_at_most": "Un projet peut avoir au plus 1 000 dossiers.",
   "folderMessages.everyone_in_the_project_is_not": "Tout le projet n'est pas un dossier que vous pouvez renommer, supprimer ou partager.",
+  "folderMessages.folders_are_off_on_this_server": "Les dossiers sont désactivés sur ce serveur : un opérateur les active dès que chaque serveur exécute cette version.",
   "folderMessages.folders_go_at_most_5_levels": "Les dossiers vont au plus à 5 niveaux de profondeur.",
   "folderMessages.folders_need_a_database_database_url": "Les dossiers nécessitent une base de données (DATABASE_URL).",
   "folderMessages.move_this_folder_s_items_out": null,

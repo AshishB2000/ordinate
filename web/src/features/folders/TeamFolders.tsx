@@ -11,7 +11,8 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useAdminProjects } from '../admin/api';
-import { people, useFolderAccess, useFolderWrite } from './api';
+import { FOLDERS_OFF, people, useFolderAccess, useFolderWrite } from './api';
+import { FoldersOff } from './FolderDialogs';
 import { LEVELS } from './SharedFolders';
 import s from './Folders.module.css';
 
@@ -28,12 +29,14 @@ function ProjectFolders({ projectId, teamId, teamName }: { projectId: string; te
   if (!access.data.folders.length) {
     return (
       <EmptyState compact heading={3} icon="folder" title="This project has no folders">
-        Everything in it is in Everyone in the project. A project admin makes folders in Share → Folders.
+        {access.data.enabled ? 'Everything in it is in Everyone in the project. A project admin makes folders in Share → Folders.' : FOLDERS_OFF}
       </EmptyState>
     );
   }
+  const on = access.data.enabled;
   return (
     <>
+      {!on && <FoldersOff />}
       <p className={s.hint}>
         {team?.inProject ? `${people(team.inProject)} of ${teamName} ${team.inProject === 1 ? 'holds' : 'hold'} a role in this project.` : `No one in ${teamName} holds a role in this project, so a folder level here opens nothing yet.`}
       </p>
@@ -49,17 +52,21 @@ function ProjectFolders({ projectId, teamId, teamName }: { projectId: string; te
                 {f.name}
                 <span className={s.teamMeta}>{f.grants.length ? f.grants.map((g) => g.team).join(', ') : 'Only project admins'}</span>
               </span>
-              <Select
-                size="sm"
-                className={s.levelSelect}
-                aria-label={`${teamName} on ${f.name}`}
-                value={mine}
-                options={OPTIONS}
-                disabled={grant.isPending}
-                onValueChange={(v) =>
-                  grant.mutate({ projectId, folderId: f.id, teamId, level: v === NONE ? null : (v as 'view' | 'edit') }, { onSuccess: (r) => !r.ok && toast(r.error, { kind: 'error' }) })
-                }
-              />
+              {on ? (
+                <Select
+                  size="sm"
+                  className={s.levelSelect}
+                  aria-label={`${teamName} on ${f.name}`}
+                  value={mine}
+                  options={OPTIONS}
+                  disabled={grant.isPending}
+                  onValueChange={(v) =>
+                    grant.mutate({ projectId, folderId: f.id, teamId, level: v === NONE ? null : (v as 'view' | 'edit') }, { onSuccess: (r) => !r.ok && toast(r.error, { kind: 'error' }) })
+                  }
+                />
+              ) : (
+                <span className={s.levelText}>{OPTIONS.find((o) => o.value === mine)?.label}</span>
+              )}
             </li>
           );
         })}

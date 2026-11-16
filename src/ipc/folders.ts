@@ -12,7 +12,8 @@ import { getStory } from '../analysis/stories';
 import { getReport } from '../analysis/reportSpec';
 import { opens } from '../server/authz/folderGate';
 import { folderRefusal, wholeProject, type PlacedKind } from '../server/authz/folders';
-import { createFolder, deleteFolder, folderAccess, folderTree, grantFolder, renameFolder, setShareFigures } from '../server/authz/folderTree';
+import { createFolder, deleteFolder, folderAccess, folderTree, foldersOn, grantFolder, renameFolder, setShareFigures } from '../server/authz/folderTree';
+import { folderOffMessage } from '../server/folderMessages';
 import { impactOf, moveItems } from '../server/authz/folderMove';
 
 export type BookmarkKind = 'dataset' | 'dashboard' | 'story' | 'report';
@@ -34,21 +35,24 @@ export async function folderOf(projectId: string, kind: BookmarkKind, id: string
 
 type Move = { projectId: string; items: Array<{ kind: PlacedKind; id: string }>; to: string; from?: string };
 
+/** ORDINATE_FOLDERS=off: what makes, shares or moves a folder answers this instead (D22's gate, src/server/env.ts). */
+const gated = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | { ok: false; error: string } => (foldersOn() ? fn(...a) : { ok: false, error: folderOffMessage() });
+
 export function register(): void {
   ipcMain.handle('folder:of', async (_e, { projectId, kind, id }: { projectId?: unknown; kind?: unknown; id?: unknown } = {}) =>
     folderOf(String(projectId ?? ''), KINDS.includes(kind as BookmarkKind) ? (kind as BookmarkKind) : 'dataset', String(id ?? '')));
   // The contracts (src/api/folders.ts) have parsed each payload.
   ipcMain.handle('folder:tree', (_e, { projectId }: { projectId: string }) => folderTree(projectId));
-  ipcMain.handle('folder:create', (_e, { projectId, parentId, name }: { projectId: string; parentId: string | null; name: string }) => createFolder(projectId, parentId, name));
+  ipcMain.handle('folder:create', gated((_e, { projectId, parentId, name }: { projectId: string; parentId: string | null; name: string }) => createFolder(projectId, parentId, name)));
   ipcMain.handle('folder:rename', (_e, { projectId, folderId, name }: { projectId: string; folderId: string; name: string }) => renameFolder(projectId, folderId, name));
   ipcMain.handle('folder:delete', (_e, { projectId, folderId }: { projectId: string; folderId: string }) => deleteFolder(projectId, folderId));
-  ipcMain.handle('folder:setShareFigures', (_e, { projectId, folderId, on }: { projectId: string; folderId: string; on: boolean }) => setShareFigures(projectId, folderId, on));
+  ipcMain.handle('folder:setShareFigures', gated((_e, { projectId, folderId, on }: { projectId: string; folderId: string; on: boolean }) => setShareFigures(projectId, folderId, on)));
   ipcMain.handle('folder:access', (_e, { projectId }: { projectId: string }) => folderAccess(projectId));
-  ipcMain.handle('folder:grant', (_e, { projectId, folderId, teamId, level }: { projectId: string; folderId: string; teamId: string; level: 'view' | 'edit' | null }) =>
-    grantFolder(projectId, folderId, teamId, level));
-  ipcMain.handle('folder:moveImpact', async (_e, { projectId, ...move }: Move) => {
+  ipcMain.handle('folder:grant', gated((_e, { projectId, folderId, teamId, level }: { projectId: string; folderId: string; teamId: string; level: 'view' | 'edit' | null }) =>
+    grantFolder(projectId, folderId, teamId, level)));
+  ipcMain.handle('folder:moveImpact', gated(async (_e, { projectId, ...move }: Move) => {
     const r = await impactOf(projectId, move);
     return r.ok ? r.impact : r; // the people behind it stay on the server
-  });
-  ipcMain.handle('folder:move', (_e, { projectId, hash, ...move }: Move & { hash: string }) => moveItems(projectId, { ...move, hash }));
+  }));
+  ipcMain.handle('folder:move', gated((_e, { projectId, hash, ...move }: Move & { hash: string }) => moveItems(projectId, { ...move, hash })));
 }

@@ -118,6 +118,25 @@
   font-size: var(--t-12);
   line-height: var(--lh-body);
 }
+/* Shared folders: email recipients the send leaves out because they can't open the dashboard. */
+.closed {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+}
+.closed svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
 .cards {
   margin: 0;
   padding: 0;

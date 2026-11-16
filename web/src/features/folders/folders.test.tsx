@@ -2,12 +2,14 @@
 // filter, counts, lock and empty folder), Move to… (the warning first, the hash on the move, the server's refusal shown
 // when access changed), the chip on an item's page, and a duplicate landing in its original's folder.
 // NEGATIVE CONTROLS: with no folder besides Everyone there is no rail, tag, chip or Move; Move is off until a
-// destination is picked and its warning has loaded.
+// destination is picked and its warning has loaded. With folders off on the server (ORDINATE_FOLDERS), the rail's New
+// folder, Move to…, the chip's Move and Share → Folders' and Admin → Teams → Folders' changes give way to one line.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
 import { impactLines } from './MoveParts';
+import { FOLDERS_OFF } from './api';
 import type { FolderTree, MoveImpact } from './api';
 
 afterEach(() => {
@@ -30,6 +32,7 @@ const ds = (id: string, name: string) => ({ id, name, sourceKind: 'csv', rowCoun
 
 const TREE: FolderTree = {
   available: true,
+  enabled: true,
   everyone: 'edit',
   admin: true,
   folders: [
@@ -110,6 +113,24 @@ describe('the Data page with folders', () => {
     expect(await screen.findByRole('heading', { name: 'No datasets in Q1 yet' }, LAZY)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Import into this folder' }).getAttribute('href')).toBe(`/data/import?project=${P}&folder=${Q1}`);
   });
+  it('with folders off on the server: the rail stays, without New folder or Move, and one line says why', async () => {
+    serve({}, { ...TREE, enabled: false });
+    renderApp(`/data/${P}`);
+    const r = await rail();
+    expect(r.getByRole('button', { name: 'Finance (1)' })).toBeTruthy();
+    expect(r.getByText(FOLDERS_OFF)).toBeTruthy();
+    expect(r.queryByRole('button', { name: 'New folder' })).toBeNull();
+    await screen.findByText('Ledger');
+    expect(screen.queryByRole('button', { name: 'Move Orders to another folder' })).toBeNull();
+  });
+  it('CONTROL: with folders on, the rail has New folder and each row its Move', async () => {
+    serve();
+    renderApp(`/data/${P}`);
+    const r = await rail();
+    expect(r.getByRole('button', { name: 'New folder' })).toBeTruthy();
+    expect(r.queryByText(FOLDERS_OFF)).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Move Orders to another folder' })).toBeTruthy();
+  });
   it('NEGATIVE CONTROL: with no folder besides Everyone there is no rail, tag or Move', async () => {
     serve({}, []);
     renderApp(`/data/${P}`);
@@ -166,6 +187,12 @@ describe('the chip on an item\'s page', () => {
     const chip = await screen.findByRole('button', { name: /In Finance/ }, LAZY);
     expect(chip.textContent).toBe('In Finance· Finance can view, Finance leads can edit');
   });
+  it('with folders off, the chip still says where it is, but is no Move button', async () => {
+    serve(routes, { ...TREE, enabled: false });
+    renderApp(`/data/${P}/${D2}`);
+    expect(await screen.findByText('In Finance', {}, LAZY)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /In Finance/ })).toBeNull();
+  });
   it('NEGATIVE CONTROL: no chip without folders', async () => {
     serve(routes, []);
     renderApp(`/data/${P}/${D2}`);
@@ -196,7 +223,7 @@ describe('the Dashboards page with folders', () => {
 
 describe('Share → Folders', () => {
   const ACCESS = {
-    ok: true, everyone: 23,
+    ok: true, enabled: true, everyone: 23,
     folders: [{ id: FIN, name: 'Finance', shareFigures: true, items: 1, people: 5, grants: [{ teamId: 't1', team: 'Finance', level: 'view', people: 3 }, { teamId: 't2', team: 'Finance leads', level: 'edit', people: 2 }] }],
     teams: [{ id: 't1', name: 'Finance', members: 3, inProject: 3 }, { id: 't2', name: 'Finance leads', members: 2, inProject: 2 }, { id: 't3', name: 'Ops analysts', members: 14, inProject: 14 }],
   };
@@ -216,6 +243,46 @@ describe('Share → Folders', () => {
     fireEvent.click(card.getByRole('switch', { name: 'Dashboards in other folders may show this folder’s data' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'folder:setShareFigures')?.payload).toEqual({ projectId: P, folderId: FIN, on: false }));
     expect(screen.getByRole('button', { name: 'Move everything to Everyone' })).toBeTruthy(); // a dataset sits in Finance
+  });
+  it('with folders off: the folders and their teams as they are, no change offered, and one line says why', async () => {
+    serve({ 'folder:access': { body: { ...ACCESS, enabled: false } } }, { ...TREE, enabled: false });
+    await mount();
+    const card = within(await screen.findByRole('listitem', { name: 'Finance' }, LAZY));
+    expect(card.getByText('Finance leads')).toBeTruthy();
+    expect(card.getByText('Can edit')).toBeTruthy();
+    expect(card.queryByRole('combobox', { name: 'Level of Finance leads' })).toBeNull();
+    expect(card.queryByRole('button', { name: 'Take Finance away from Finance' })).toBeNull();
+    expect(card.queryByRole('combobox', { name: 'Give it to a team' })).toBeNull();
+    expect(card.queryByRole('switch')).toBeNull();
+    expect(card.getByText('Dashboards in other folders may show this folder’s data.')).toBeTruthy();
+    expect(screen.getAllByText(FOLDERS_OFF)).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Move everything to Everyone' })).toBeNull();
+  });
+  it('with folders off and none made: the empty state says why, with no New folder', async () => {
+    serve({ 'folder:access': { body: { ...ACCESS, enabled: false, folders: [] } } }, { ...TREE, enabled: false, folders: [], placed: { dataset: {}, dashboard: {} } });
+    await mount();
+    expect(await screen.findByRole('heading', { name: 'No folders yet' }, LAZY)).toBeTruthy();
+    expect(screen.getAllByText(FOLDERS_OFF)).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
+  });
+  it('Admin → Teams → Folders: with folders off, each level as text, no picker, and one line says why', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    const { TeamFoldersDialog } = await import('./TeamFolders');
+    const view = (enabled: boolean) => {
+      serve({ 'admin:projects': { body: [{ id: P, name: 'Sales', archived: false }] }, 'folder:access': { body: { ...ACCESS, enabled } } });
+      return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TeamFoldersDialog team={{ id: 't2', name: 'Finance leads' }} onClose={() => undefined} /></QueryClientProvider>);
+    };
+    const off = view(false);
+    const dialog = within(await screen.findByRole('dialog', { name: 'Folders for Finance leads' }, LAZY));
+    expect(await dialog.findByText(FOLDERS_OFF)).toBeTruthy();
+    expect(dialog.getByText('Can edit')).toBeTruthy();
+    expect(dialog.queryByRole('combobox', { name: 'Finance leads on Finance' })).toBeNull();
+    off.unmount();
+    view(true);
+    const on = within(await screen.findByRole('dialog', { name: 'Folders for Finance leads' }, LAZY));
+    expect((await on.findByRole('combobox', { name: 'Finance leads on Finance' })).textContent).toBe('Can edit'); // CONTROL
+    expect(on.queryByText(FOLDERS_OFF)).toBeNull();
   });
   it('NEGATIVE CONTROL: with no folders, a designed empty state and no rollback step', async () => {
     serve({ 'folder:access': { body: { ...ACCESS, folders: [] } } }, { ...TREE, folders: [], placed: { dataset: {}, dashboard: {} } });

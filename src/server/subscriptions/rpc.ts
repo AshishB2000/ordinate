@@ -22,7 +22,7 @@ import { ctx } from '../context';
 import * as counters from '../counters';
 import { dashboardLink } from '../publicUrl';
 import { registry } from '../rpc';
-import { brandName, knownRecipients, mailReady, previewEmail } from '../mail/emailChannel';
+import { brandName, closedRecipients, knownRecipients, mailReady, previewEmail } from '../mail/emailChannel';
 import { dashboardSendRefusal, deliver } from './deliver';
 import { buildMessage, ownerIdentity, runSubscription } from './run';
 
@@ -180,12 +180,16 @@ export function register(): void {
     const slack = renderSlack(built.model);
     const teams = renderTeams(built.model);
     // The email as the first email channel picked would get it (its name is in the reason line).
-    const emailTo = mailReady() ? (await Promise.all(draft.channelIds.map(getChannel))).find((c) => c?.kind === 'email') ?? null : null;
+    const emails = mailReady() ? (await Promise.all(draft.channelIds.map(getChannel))).filter((c) => c?.kind === 'email') : [];
+    const emailTo = emails[0] ?? null;
     const email = mailReady() ? previewEmail(built.model, emailTo?.name ?? '') : null;
+    // Every email channel picked: its people who can't open the dashboard won't get it (team-folders D17).
+    const closed = await closedRecipients(emails.flatMap((c) => (c?.to ? [c.to] : [])), projectId, a.id);
     return {
       ok: true as const,
       ...frame,
       empty: null,
+      closedRecipients: closed,
       slack: { model: slack.model, bytes: slack.bytes, size: formatBytes(slack.bytes), blocks: slack.payload.blocks.length, notes: slack.notes },
       teams: { model: teams.model, bytes: teams.bytes, size: formatBytes(teams.bytes), notes: teams.notes },
       email: email && { model: email.model, bytes: email.bytes, size: formatBytes(email.bytes), notes: email.notes, brand: brandName(), reason: emailTo ? say.emailReason(emailTo.name) : null },

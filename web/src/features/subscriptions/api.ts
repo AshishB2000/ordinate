@@ -133,6 +133,8 @@ export interface Preview {
   teams: PlatformPreview | null;
   /** Null when this server sends no email. */
   email: EmailPreview | null;
+  /** Of every email list picked, the recipients who can't open the dashboard and won't get it (shared folders; a count). */
+  closedRecipients?: number;
 }
 /** The email as the first email channel picked would get it. */
 export interface EmailPreview extends PlatformPreview {

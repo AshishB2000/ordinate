@@ -181,6 +181,37 @@ describe('Subscribe dialog', () => {
     await waitFor(() => expect(lastPreview(calls).channelIds).toEqual([EMAIL.id]));
   });
 
+  it('the preview is asked for every email list picked, so their people who can\'t open the dashboard are counted', async () => {
+    const other = { ...EMAIL, id: '77777777-7777-4777-8777-777777777777', name: 'Board members' };
+    const { calls } = openDialog({ 'channel:list': { body: { ok: true, channels: [SLACK, EMAIL, other], canStore: true, canEmail: true, canManage: false } } });
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('preview-slack');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Where/ }));
+    for (const name of [/#sales-weekly/, /Sales leads/, /Board members/]) fireEvent.click(within(dialog).getByRole('checkbox', { name }));
+    await waitFor(() => expect(lastPreview(calls).channelIds).toEqual([EMAIL.id, other.id]));
+  });
+
+  it('Where: says how many recipients can\'t open this dashboard, from the server\'s count', async () => {
+    openDialog({ 'channel:list': { body: { ok: true, channels: [SLACK, EMAIL], canStore: true, canEmail: true, canManage: false } }, 'subscription:preview': preview({ closedRecipients: 2 }) });
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('preview-slack');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Where/ }));
+    expect(within(dialog).queryByText(/can’t open this dashboard/)).toBeNull(); // no email list picked yet
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Sales leads/ }));
+    expect((await within(dialog).findByRole('note')).textContent).toBe('2 recipients can’t open this dashboard and won’t get it.');
+  });
+
+  it('NEGATIVE CONTROL: with every recipient able to open it, the Where step says nothing of it', async () => {
+    openDialog({ 'channel:list': { body: { ok: true, channels: [SLACK, EMAIL], canStore: true, canEmail: true, canManage: false } }, 'subscription:preview': preview({ closedRecipients: 0 }) });
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('preview-slack');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Where/ }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Sales leads/ }));
+    expect(within(dialog).getByText('Send to · 1 chosen')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 500));
+    expect(within(dialog).queryByText(/can’t open this dashboard/)).toBeNull();
+  });
+
   it('NEGATIVE CONTROL: with email null (no relay) there is no Email tab', async () => {
     openDialog();
     const dialog = await screen.findByRole('dialog');

@@ -22,6 +22,16 @@ import type { PoolClient } from 'pg';
 
 export const MAX_FOLDERS = 1000;
 
+let creating = false;
+/**
+ * ORDINATE_FOLDERS (../env.ts), from buildApp: whether folders may be made, shared and moved. Off by default, until every
+ * pod runs a release with the folder readers (D22); the tree, rename, delete and Share → Folders' list work either way.
+ */
+export function useFolders(on: boolean): void {
+  creating = on;
+}
+export const foldersOn = (): boolean => creating;
+
 type Open = Exclude<FolderLevel, 'none'>;
 export interface FolderNode {
   readonly id: string;
@@ -41,6 +51,8 @@ export interface FolderNode {
 export interface FolderTree {
   /** False without Postgres: no teams, so no folders. */
   readonly available: boolean;
+  /** ORDINATE_FOLDERS is on: folders may be made, shared and moved here (else the screens hide those actions). */
+  readonly enabled: boolean;
   /** The caller's level on Everyone in the project (the project id). */
   readonly everyone: Open;
   /** A project admin: makes top-level folders, gives them to teams. */
@@ -87,7 +99,7 @@ export async function folderTree(projectId: string): Promise<FolderTree> {
   const p = projectId.toLowerCase();
   const rank = await rankOn(p);
   const everyone: Open = rank >= 3 ? 'manage' : rank === 2 ? 'edit' : 'view';
-  if (!orgDb()) return { available: false, everyone, admin: rank >= 3, folders: [], placed: { dataset: {}, dashboard: {} } };
+  if (!orgDb()) return { available: false, enabled: creating, everyone, admin: rank >= 3, folders: [], placed: { dataset: {}, dashboard: {} } };
   const access = await folderAccessOn(p);
   const email = ctx().user.email;
   const { rows, grants, items } = await inOrg(async (c, org) => ({
@@ -125,7 +137,7 @@ export async function folderTree(projectId: string): Promise<FolderTree> {
   for (const it of items) {
     if ((it.kind === 'dataset' || it.kind === 'dashboard') && levelOf(access, it.folder_id) !== 'none') placed[it.kind][it.item_id] = it.folder_id.toLowerCase();
   }
-  return { available: true, everyone, admin: rank >= 3, folders, placed };
+  return { available: true, enabled: creating, everyone, admin: rank >= 3, folders, placed };
 }
 
 /** Refuses below Edit on `id` (the project id: Everyone): `closed` when the caller cannot open it, `edit` at view. */
@@ -291,6 +303,8 @@ export async function dropFolders(projectId: string): Promise<void> {
 
 export interface FolderAccessReply {
   readonly ok: true;
+  /** ORDINATE_FOLDERS is on (FolderTree.enabled). */
+  readonly enabled: boolean;
   /** Project members who are not admins: Everyone in the project opens at their role. */
   readonly everyone: number;
   readonly folders: ReadonlyArray<{
@@ -330,6 +344,7 @@ export async function folderAccess(projectId: string): Promise<FolderAccessReply
     const opens = (root: string) => people.filter((m) => personLevel(m, root, p, grantsOn(root)) !== 'none').length;
     return {
       ok: true as const,
+      enabled: creating,
       everyone: people.length,
       folders: rows.map((r) => {
         const id = r.id.toLowerCase();

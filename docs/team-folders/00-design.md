@@ -85,8 +85,8 @@ above is how a folder like HR gets Metabase's stricter behaviour.
 | D18 | **Writes check the item's folder at Edit**; creating needs Edit on the target folder. Saved visuals, metrics, terms and verified questions are written with Edit on their dataset's folder; adding a card to a dashboard needs its dataset open (view). New items land in the folder the request names, else their first parent dataset's folder (a copy, a SQL or composed dataset, a duplicate), else Everyone. | "Can edit: also add, change and move items in it." A derived dataset never leaks a restricted parent into Everyone. |
 | D19 | **Connection tables are per team, per project, apart from folders** (`team_tables`, 0036). Nothing is ticked by default. They decide what a project **viewer** may ask about; editors and admins answer from every table, as in phase D. | Metabase keeps data access apart from collections. Tables are where data comes from; folders hold what people made. |
 | D20 | **Dashboard requests are Postgres rows** (`dashboard_requests`, 0037) holding the answers' chart forms, never a figure. Nothing is created until an editor approves. | A request is a per-person item listed across projects by state, like a mention. "Nothing else is created yet" stays literally true, and no dashboard reader learns a card that points at a table with no dataset. |
-| D21 | **No setting.** Readers are inert until a folder exists; the channels that make folders merge only after a release with the readers is tagged (D22). Nothing is ticked by default; request email is off until a person turns it on. | A flag would not make a rollback safe; release order does. |
-| D22 | **The readers ship a release before the writers.** E1–E6 make every reader apply folders while nothing can create one; E7 (the folder channels and screens) merges after a release with E1–E6 is tagged. | The p4-01a pattern in `docs/server/upgrade.md`: a pod that cannot apply a folder must never run beside one that can make it. |
+| D21 | **One operator setting, `ORDINATE_FOLDERS`, off by default** (revised at E7). Readers are inert until a folder exists; with the setting off, nothing makes, shares or moves one (D22). Nothing is ticked by default; request email is off until a person turns it on. | The setting does not make a rollback safe (Move everything to Everyone does); it stands in for the release order, so E7 can merge before a release is cut. |
+| D22 | **The readers run on every pod before anyone can make a folder.** E1–E6 make every reader apply folders while nothing can create one. E7 merged without a release in between, so its channels that make, share or move a folder refuse until `ORDINATE_FOLDERS=on`, which an operator sets only once every pod runs a release with E1–E6. | The p4-01a pattern in `docs/server/upgrade.md`: a pod that cannot apply a folder must never run beside one that can make it. |
 
 ## The model
 
@@ -504,9 +504,33 @@ index to the reference, now per caller.
   - **Where creates land** (D18): the rail's folder, when the caller edits it, goes as `folderId` on `analysis:create`
     (New dashboard), `analysis:buildPlan` (Draft with AI), `dataset:composeSave` (import, paste, combine) and
     `input:create`; a duplicated dashboard is created in its original's folder.
+- **The setting (D21, D22)**: `ORDINATE_FOLDERS` (`on`/`off`, default `off`), parsed once at startup in
+  `src/server/env.ts` (a typo stops it) and handed to `folderTree.useFolders` by `buildApp`. Off, `folder:create`,
+  `folder:grant`, `folder:setShareFigures`, `folder:moveImpact` and `folder:move` answer `{ok:false, error}` with the
+  catalog's *Folders are off on this server: an operator turns them on once every server runs this version.* (the
+  handlers' `gated`, `src/ipc/folders.ts`); `folder:tree`, `folder:rename`, `folder:delete` and `folder:access` work,
+  since a folder exists only if it was made while on. `folder:tree` and `folder:access` carry `enabled`, so the web hides
+  the rail's New folder and New subfolder, Move to… (rows, cards, the chip, drags), Share → Folders' New folder, team,
+  level and reach controls and *Move everything to Everyone*, and Admin → Teams → Folders' levels, each with one line
+  instead — no extra call. Operators: `docs/server/configuration.md#shared-folders`.
+- **Who can't open a page** (`src/server/authz/folderOutside.ts`, D16, D17): `outsideCount(project, items)` — the
+  project members folders restrict (`membersOn`) for whom `levelAt` is `none` on the root of at least one item's folder;
+  one query when every item is in Everyone, else one transaction (`folderMove.worldOf`). `publish:plan` adds `outside`
+  over the picked dashboards and every dataset the fan-out build read; `embed:columns` over the embedded dashboard and
+  its tiles' datasets. The Publish and Embed dialogs say *Shows data from folders N people can't open* (nothing at 0).
+  `subscription:preview` adds `closedRecipients`: of every email list picked, the recipients `audience` would leave out
+  (`emailChannel.closedRecipients`: `recipients` minus `openers` of the dashboard); the web now sends every email list
+  in the preview's draft (Slack and Teams stay out of its key), and the Where step says *N recipients can't open this
+  dashboard and won't get it.* Counts only; no new contract, so no reader table changed.
 - **Cost**: each page with the rail, the chip or Share → Folders asks `folder:tree` once (one transaction, three
-  statements); a project without folders shows nothing new. Initial JS 206 KB gzip.
-- **Tests**: `test-folderChannels` (both modes): the per-person rule against the resolver; admin-only top level,
+  statements); a project without folders shows nothing new. `publish:plan` and `embed:columns` add one query (a
+  transaction of five with an item placed), `subscription:preview` one per email list and one for the openers.
+  Initial JS 206 KB gzip.
+- **Tests**: `test-folderChannels` (both modes): `ORDINATE_FOLDERS` off by default, `on` turns it on, a typo refuses;
+  off, each of the five changes answers the off sentence and nothing is written, while the tree, Share → Folders'
+  list, rename and delete work (CONTROL: turned on, the same create lands, and every section below runs on); who can't
+  open a page, `Object.is`-equal to the resolver run as each member, through `publish:plan` and `embed:columns`, and
+  `closedRecipients` equal to what `audience` leaves out (NEGATIVE CONTROLS: Everyone's items, 0); the per-person rule against the resolver; admin-only top level,
   subfolders by Edit, depth 5 under a root and under Everyone, names, delete-empty with the Trash, grants and the
   switch, the tree naming nothing closed, the hash refusing a stale warning and a made-up one, Edit on both ends,
   *Move everything to Everyone*, a deleted project leaving nothing — each with its NEGATIVE CONTROL. **Safety net 11**
@@ -514,10 +538,11 @@ index to the reference, now per caller.
   that Ops and Ops leads lose it and the Finance board stops showing it; after a grant changed, the warning's hash
   refuses and nothing moves; the move's change, per person over `folder:of` on the next request, is exactly the
   warning's people, and finViewer's reach goes as warned; NEGATIVE CONTROL: moving back reopens it to the same people.
-  Vitest `folders.test.tsx`; e2e `folders.e2e.ts` (Postgres, both themes, phone width).
-- **Left for later**: the Publish and embed dialogs' *shows data from folders …* list and *including people who can't
-  open Finance*, and the subscription dialog's *2 recipients can't open this dashboard* (E5's, still to do: the move
-  warning already says both); folder search in the rail; moving folders themselves (only items move).
+  Vitest `folders.test.tsx` (with the off line in the rail, Share → Folders and Admin → Teams → Folders), the Publish,
+  Embed and Subscribe dialogs' lines and their absence; e2e `folders.e2e.ts` (Postgres, `ORDINATE_FOLDERS=on`, both
+  themes, phone width).
+- **Left for later**: naming the folders in the Publish and Embed line (it counts people, it names none); folder search
+  in the rail; moving folders themselves (only items move).
 
 ### Pushes, mentions and recipients (D17)
 
@@ -979,10 +1004,10 @@ placed kind needs no constraint change.
 - **Upgrade changes nothing anyone sees.** No placement rows means everything is in Everyone at the
   project role; the per-dashboard audience rule gives every project member today's audience; ⌘K
   rebuilds each source once (`INDEX_VERSION` 3); `dashboard_reads` builds per project on first need.
-- **The release that lets anyone make a folder needs the readers' release first (D22).** The owner
-  tags a release containing E1–E6 before E7 merges, and `docs/server/upgrade.md` gets a section in
-  its usual shape: go through that release, or stop every pod and start the new ones. A pod older
-  than it shows every folder's items to every project member.
+- **Nobody can make a folder until every pod has the readers (D22).** E7 merged without a release
+  after E1–E6, so `ORDINATE_FOLDERS` is off by default and an operator turns it on once every pod
+  runs a release with the readers; `docs/server/upgrade.md` says so. A pod older than the readers
+  shows every folder's items to every project member.
 - **Never roll back below that release once a project has a folder besides Everyone.** An older pod
   ignores the tables and shows everything. If a rollback is unavoidable, a project admin first moves
   every item back to Everyone (**Share → Folders → Move everything to Everyone**, part of E7), which
@@ -1002,7 +1027,7 @@ Each PR is one review, with its tests in the same PR, and classifies the contrac
 | E4 | Indexes: 0034 and ⌘K anchors, the WHERE on `assistant_search` and `verified_keys`, counts | safety net 6; `test-searchIndex`, `test-assistantSearch`, `test-verifiedIndex` per caller; `test-askBudget` ceilings (+1 at most); `test-askNoProjectLists` with an Ops viewer |
 | E5 | Reach: `publishedReads`, `published.reads`, 0035 and its trigger and rebuild, the publish refusal, `share_figures` | `test-dashboardReads`; safety net 4 |
 | E6 | Writes: every `EDIT` and `CREATE` contract, `folderId` on create inputs, derived defaults, model import and export, pipelines, relationships | safety net 8 |
-| — | **Release tag** with E1–E6 (D22), and the upgrade.md section | |
+| — | ~~**Release tag** with E1–E6 (D22)~~: replaced at E7 by `ORDINATE_FOLDERS`, off by default, and the upgrade.md section | |
 | E7 | `src/api/folders.ts`: `folder:tree`, `folder:create`, `folder:rename`, `folder:delete`, `folder:setShareFigures`, `folder:access`, `folder:grant`, `folder:moveImpact`, `folder:move`; the rail, chips, Move dialog, Share → Folders, Admin → Teams → Folders, empty states; *Move everything to Everyone* | `test-folderChannels` (depth, names, delete-empty, admin-only top level, the move hash); safety net 11; `folders.e2e.ts` in both themes |
 | E8 | Connection tables: 0036, `teamTables:*`, the Tables screen, index keys for tables, the viewer answer and Explore path (with or after phase D) | `test-teamTables` (include, exclude, schema, union, hidden columns); safety net: an unticked table's name in no viewer reply or prompt |
 | E9 | Dashboard requests: 0037, `src/api/requests.ts`, Home rows, the review page, pushes and email | `test-dashboardRequests`; `requests.e2e.ts` |

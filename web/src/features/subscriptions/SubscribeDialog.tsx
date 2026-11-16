@@ -45,11 +45,13 @@ export default function SubscribeDialog({ projectId, dashboard, existing, onClos
   const gallery = useQuery({ ...galleryQuery(projectId), enabled: !locked });
   const channels = useChannels();
   // Channels do not change the message: keeping them out of the preview's key saves a round trip per tick —
-  // all but the first email list, whose name the email's last line says it was sent to.
-  const firstEmail = draft.channelIds.find((id) => channels.data?.channels.find((c) => c.id === id)?.kind === 'email');
+  // all but the email lists: the first one's name ends the email, and each one's people who can't open the dashboard
+  // are counted (shared folders).
+  const emails = draft.channelIds.filter((id) => channels.data?.channels.find((c) => c.id === id)?.kind === 'email');
+  const emailKey = emails.join(',');
   const previewDraft = useMemo(
-    () => (draft.analysisId ? { ...draft, channelIds: firstEmail ? [firstEmail] : [], name: draft.name.trim() || 'Subscription' } : null),
-    [draft, firstEmail],
+    () => (draft.analysisId ? { ...draft, channelIds: emailKey ? emailKey.split(',') : [], name: draft.name.trim() || 'Subscription' } : null),
+    [draft, emailKey],
   );
   const preview = usePreview(projectId, previewDraft, existing?.id);
   const { save } = useSubscriptionWrites(projectId);
@@ -137,7 +139,15 @@ export default function SubscribeDialog({ projectId, dashboard, existing, onClos
             {step === 'what' && <WhatStep draft={draft} set={set} preview={preview.data} dashboards={gallery.data} locked={locked} />}
             {step === 'when' && <WhenStep draft={draft} set={set} preview={preview.data} />}
             {step === 'where' && (
-              <WhereStep draft={draft} set={set} channels={channels.data} pending={channels.isPending} error={channels.isError ? channels.error.message : null} onRetry={() => void channels.refetch()} />
+              <WhereStep
+                draft={draft}
+                set={set}
+                channels={channels.data}
+                pending={channels.isPending}
+                error={channels.isError ? channels.error.message : null}
+                onRetry={() => void channels.refetch()}
+                closed={emails.length ? preview.data?.closedRecipients : undefined}
+              />
             )}
             {step === 'message' && <MessageStep draft={draft} set={set} preview={preview.data} dashboardName={dashboardName} />}
           </div>

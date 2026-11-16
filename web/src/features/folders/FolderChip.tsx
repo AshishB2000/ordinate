@@ -27,7 +27,7 @@ export function FolderChip({ projectId, kind, id, name }: { projectId: string; k
       <span className={s.chipWho}>· {whoLine}</span>
     </>
   );
-  if (!editsFolder(tree, projectId, folder)) {
+  if (!tree.enabled || !editsFolder(tree, projectId, folder)) {
     return (
       <span className={s.chip} title={`In ${where}: ${whoLine}.${asAdmin}`}>
         {inner}

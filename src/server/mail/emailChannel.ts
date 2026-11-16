@@ -120,6 +120,17 @@ export async function audience(to: EmailTo, d: Exclude<Delivery, { kind: 'test' 
   return all.filter((e) => open.has(e));
 }
 
+/**
+ * How many of the channels' recipients `audience` would leave out of a dashboard's send because they cannot open it
+ * (D17): the Subscribe dialog's "N recipients can't open this dashboard". A count, never an address.
+ */
+export async function closedRecipients(tos: readonly EmailTo[], projectId: string, analysisId: string): Promise<number> {
+  const all = new Set((await Promise.all(tos.map((to) => recipients(to, projectId)))).flat());
+  if (!all.size) return 0;
+  const open = new Set(await openers(db(), ctx().org.id, projectId, { kind: 'dashboard', id: analysisId }, 'view'));
+  return [...all].filter((e) => !open.has(e)).length;
+}
+
 /** How many people the channel names today (no project asked): what a test reports. */
 export async function reach(to: EmailTo): Promise<number> {
   const r = await db().query<{ email: string }>(`SELECT u.email ${PICKED}`, [ctx().org.id, to.userIds, to.teamIds]);

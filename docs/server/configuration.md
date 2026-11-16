@@ -134,6 +134,14 @@ model in Admin → AI and Postgres has pgvector ([upgrade.md](upgrade.md#pgvecto
 |---|---|---|---|---|
 | `MEANING_MIN_SIMILARITY` | The least cosine similarity (0 to 1) an item needs to be found by meaning, for every fingerprint model. Below it, meaning neither adds nor moves an item; words still find it. Raise it if questions bring back unrelated items, lower it if synonyms are missed. An agent's outside-the-topic offer and "Did you mean" never name an item found by meaning alone, whatever this is. | unset: per model, 0.35 for OpenAI `text-embedding-3-*` and Gemini embeddings, 0.5 for a gateway's model | — | no |
 
+## Shared folders
+
+[Shared folders](folders.md) let project admins give a folder of datasets and dashboards to chosen teams.
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `ORDINATE_FOLDERS` | `on` lets project admins make folders, give them to teams and set their reach switch, and editors move datasets and dashboards into them. `off` refuses those changes ("Folders are off on this server: an operator turns them on once every server runs this version.") and the screens hide them. A folder made while it was on keeps applying either way, and can still be seen, renamed and deleted. **Turn it on only after every pod runs a release that has the folder readers** (shared folders E1–E6): a pod older than that ignores folders and shows a folder's items to every project member. Set it on every pod in one rollout. Before rolling back below the readers' release, keep it on and use Share → Folders → Move everything to Everyone in each project with folders ([folders.md](folders.md#upgrading-and-rolling-back)). | `off` | — | no |
+
 ## DuckDB
 
 Each org gets its own DuckDB worker, locked to that org's directory and S3 prefix before it answers.

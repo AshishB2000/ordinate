@@ -10,12 +10,22 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { Icon } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
-import { byId, childrenOf, editsFolder, EVERYONE, pathOf, useFolderWrite, type FolderNode, type FolderTree } from './api';
+import { byId, childrenOf, editsFolder, EVERYONE, FOLDERS_OFF, pathOf, useFolderWrite, type FolderNode, type FolderTree } from './api';
 import { Destinations, ImpactPanel, useImpact } from './MoveParts';
 import s from './Folders.module.css';
 
 const MAX_DEPTH = 5;
 const why = (e: unknown, fallback: string) => (e instanceof RpcError || e instanceof Error ? e.message : fallback);
+
+/** Folders off on this server (ORDINATE_FOLDERS): the one line shown where a folder change would be. */
+export function FoldersOff() {
+  return (
+    <p className={s.offLine} role="note">
+      <Icon name="lock" size={12} />
+      <span>{FOLDERS_OFF}</span>
+    </p>
+  );
+}
 
 /** How deep `id` is below its root (Everyone and a top-level folder: 0). */
 export function depthOf(t: FolderTree, projectId: string, id: string | null): number {
@@ -160,7 +170,7 @@ export function DeleteFolderDialog({ projectId, tree, folder, onClose, onDeleted
   const [to, setTo] = useState<string | null>(null);
   const del = useFolderWrite('folder:delete');
   const move = useFolderWrite('folder:move');
-  const impact = useImpact(projectId, [], to, folder.id, held > 0);
+  const impact = useImpact(projectId, [], to, folder.id, held > 0 && tree.enabled);
   const [error, setError] = useState<string | null>(null);
   const remove = () =>
     del.mutate({ projectId, folderId: folder.id }, {
@@ -202,7 +212,7 @@ export function DeleteFolderDialog({ projectId, tree, folder, onClose, onDeleted
             <Button>Cancel</Button>
           </DialogClose>
           {held ? (
-            <Button variant="danger" loading={move.isPending || del.isPending} disabled={!impact.data?.ok} onClick={moveThenDelete}>
+            <Button variant="danger" loading={move.isPending || del.isPending} disabled={!tree.enabled || !impact.data?.ok} onClick={moveThenDelete}>
               Move {held === 1 ? 'it' : `${held} items`} and delete
             </Button>
           ) : (
@@ -213,7 +223,8 @@ export function DeleteFolderDialog({ projectId, tree, folder, onClose, onDeleted
         </>
       }
     >
-      {held > 0 && (
+      {held > 0 && !tree.enabled && <FoldersOff />}
+      {held > 0 && tree.enabled && (
         <div className={s.body}>
           <p className={s.label}>Move them to</p>
           <Destinations projectId={projectId} tree={tree} value={to} onChange={setTo} exclude={(id) => inside.includes(id) || pathOf(tree, id).some((f) => f.id === folder.id)} />

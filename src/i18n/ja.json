@@ -351,6 +351,7 @@
   "folderMessages.a_folder_with_that_name_is": "ここには同じ名前のフォルダーがすでにあります。別の名前を選んでください。",
   "folderMessages.a_project_can_have_at_most": "1 つのプロジェクトに作成できるフォルダーは最大 1,000 個です。",
   "folderMessages.everyone_in_the_project_is_not": "「プロジェクトの全員」は、名前変更、削除、共有ができるフォルダーではありません。",
+  "folderMessages.folders_are_off_on_this_server": "このサーバーではフォルダーがオフです。すべてのサーバーがこのバージョンを実行したら、運用担当者がオンにします。",
   "folderMessages.folders_go_at_most_5_levels": "フォルダーの階層は最大 5 段までです。",
   "folderMessages.folders_need_a_database_database_url": "フォルダーにはデータベース（DATABASE_URL）が必要です。",
   "folderMessages.move_this_folder_s_items_out": null,

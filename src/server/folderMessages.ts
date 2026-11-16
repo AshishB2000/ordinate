@@ -35,6 +35,11 @@ export function folderNotEmptyMessage(): string {
 
 // ── The folder channels (E7): what they answer besides a refusal ────────────
 
+/** ORDINATE_FOLDERS is off: making, sharing and moving folders waits until every pod has the folder readers (D22). */
+export function folderOffMessage(): string {
+  return t('folderMessages.folders_are_off_on_this_server');
+}
+
 /** Without Postgres there are no teams and no folders. */
 export function folderNeedsDatabaseMessage(): string {
   return t('folderMessages.folders_need_a_database_database_url');

@@ -48,7 +48,7 @@ export function useFolderView(projectId: string, kind: PlacedKind): FolderView {
     setSelected,
     folderOf,
     filter: (items, idOf) => (selected ? items.filter((x) => folderOf(idOf(x)) === selected) : [...items]),
-    canMove: (id) => has && editsFolder(tree, projectId, folderOf(id)),
+    canMove: (id) => has && tree.enabled && editsFolder(tree, projectId, folderOf(id)),
     landing: has && selected && selected !== projectId && editsFolder(tree, projectId, selected) ? selected : undefined,
     move: (items, to) => setMoving({ items, to }),
     dialog: moving && tree && <MoveDialog projectId={projectId} tree={tree} items={moving.items} to={moving.to} onClose={() => setMoving(null)} />,
@@ -131,7 +131,7 @@ export function FolderEmpty({ view, noun, actions }: { view: FolderView; noun: s
   return (
     <EmptyState icon="folder" heading={3} title={`No ${noun}s in ${name} yet`} actions={adds ? actions : undefined}>
       {adds
-        ? `Move ${noun}s here with Move to… or by dragging one onto ${name} in the rail. Anything you make while ${name} is picked lands here.`
+        ? `${view.tree?.enabled ? `Move ${noun}s here with Move to… or by dragging one onto ${name} in the rail. ` : ''}Anything you make while ${name} is picked lands here.`
         : `Nobody has put ${noun}s in ${name} yet. You can view this folder; ask someone who can edit it to add one.`}
     </EmptyState>
   );

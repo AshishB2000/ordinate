@@ -60,9 +60,10 @@ type Failed = { ok: false; error: string };
 const fail = (error: string): Failed => ({ ok: false, error });
 
 interface Grant { teamId: string; team: string; level: 'view' | 'edit' }
-interface World { byId: Map<string, FolderRow>; names: Map<string, string>; grants: Map<string, Grant[]>; members: Member[] }
+export interface World { byId: Map<string, FolderRow>; names: Map<string, string>; grants: Map<string, Grant[]>; members: Member[] }
 
-async function worldOf(c: PoolClient, org: string, p: string): Promise<World> {
+/** The project's folders, their grants and the members folders restrict: what the per-person rule runs over. */
+export async function worldOf(c: PoolClient, org: string, p: string): Promise<World> {
   const rows = (await c.query<{ id: string; parent_id: string | null; name: string; share_figures: boolean }>(
     'SELECT id::text AS id, parent_id::text AS parent_id, name, share_figures FROM folders WHERE org_id = $1 AND project_id = $2', [org, p],
   )).rows;
@@ -79,7 +80,7 @@ async function worldOf(c: PoolClient, org: string, p: string): Promise<World> {
 }
 
 /** A folder's root as an id (the project id: Everyone), or null — the resolver's `rootOf`. */
-const rootId = (p: string, id: string, w: World): string | null => {
+export const rootId = (p: string, id: string, w: World): string | null => {
   const r = rootOf(p, id, w.byId);
   return r === null ? null : r === 'everyone' ? p : r.id;
 };
