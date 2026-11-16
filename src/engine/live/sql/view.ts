@@ -22,7 +22,7 @@ import { calcFrom, namesCalc } from '../calcLayers';
 import type { LiveFilter } from '../liveSpec';
 import { adaptFilter, columnOf, isRefusal, refuse } from '../liveSpec';
 import { hasNul } from '../sqlParams';
-import type { ViewUse } from './ir';
+import type { LiveSqlIR, ViewUse } from './ir';
 import { Refused } from './scope';
 
 /** What one dataset read needs: the target's compile env (source, every column with its calcs, base filters) and the caller's lock. */
@@ -44,6 +44,31 @@ export function lockFilters(lock: readonly FilterStep[], env: ViewInput['env']):
     const f = orThrow(adaptFilter(s, env.columns, {}, []));
     if (!f) throw new Refused(refuse('unknownColumn', s.column));
     out.push(f);
+  }
+  return out;
+}
+
+/**
+ * Per dataset read (`ir.views[i]`), the record columns some WHERE of the statement names — in any query, CTE or
+ * subquery. A required date range goes into the view of a table only where none names its column (./liveDateRange),
+ * as a chart question that filters it is left as it came.
+ */
+export function whereColumns(ir: LiveSqlIR): Set<string>[] {
+  const viewOf = new Map<number, number>();
+  const named: Array<{ t: number; c: number }> = [];
+  const walk = (n: unknown, where: boolean): void => {
+    if (Array.isArray(n)) return n.forEach((x) => walk(x, where));
+    if (!n || typeof n !== 'object') return;
+    const o = n as Record<string, unknown>;
+    if (o.k === 'view') viewOf.set(o.t as number, o.v as number);
+    if (o.k === 'col' && o.q === null && where) named.push({ t: o.t as number, c: o.c as number });
+    for (const [key, v] of Object.entries(o)) walk(v, o.k === 'select' ? key === 'where' : where);
+  };
+  walk([ir.rels, ir.main], false);
+  const out = ir.views.map(() => new Set<string>());
+  for (const { t, c } of named) {
+    const v = viewOf.get(t);
+    if (v !== undefined) out[v].add(ir.views[v].columns[c]);
   }
   return out;
 }

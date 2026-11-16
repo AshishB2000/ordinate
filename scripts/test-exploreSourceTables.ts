@@ -16,7 +16,9 @@
 //      code, same reason; never a list), in the table's own sentence, with no warehouse call. A drill
 //      (`visual:drillDown`) is the Live dataset's, step for step.
 //   4. COPY FIRST: a table on a connection not asked live: every input refuses with `needs: 'copy'`, no warehouse call.
-//   5. KEEP: `explore:keepTable` makes exactly one Live dataset of the table; its fields and figures are the table's.
+//   5. KEEP: `explore:keepTable` re-points at a Live dataset of the same connection and table (the fixture's twin) and
+//      makes none; with none, it makes exactly one Live dataset of the table, and a second Keep the same one; its fields
+//      and figures are the table's.
 // DATABASE_URL only:
 //   6. VIEWERS: every table-target input from a project viewer is "This dataset no longer exists." before ANY read: no
 //      doc read, no connection read, no warehouse statement, nothing counted; no reply holds the table's name, its
@@ -174,11 +176,16 @@ async function editorLegs(b: Bench, s: Seeded): Promise<void> {
   ok('4. COPY FIRST: every input on a table not asked live refuses with needs "copy" and its sentence', copies.every((r) => r?.ok === false && r.needs === 'copy' && r.error === say.copyFirst(COPY_TABLE)), JSON.stringify(copies));
   ok('4. …with no warehouse call and no dataset made', fakeMod.fake.calls.length === 0 && (await b.as(() => datasets.listDatasets(b.P))).length === before);
 
-  // 5. Keep.
+  // 5. Keep. "Refunds live" is a Live dataset of the same connection and table already: Keep opens it, makes none.
+  const reused = (await ed('explore:keepTable', onTable)).body;
+  ok('5. KEEP of a table a Live dataset already reads (same connection, same table) re-points at it: none made', reused?.ok === true && reused.datasetId === s.liveId && (await b.as(() => datasets.listDatasets(b.P))).length === before, JSON.stringify(reused));
+  await b.as(() => datasets.deleteDataset(b.P, s.liveId));
   const kept = (await ed('explore:keepTable', onTable)).body;
   const after = await b.as(() => datasets.listDatasets(b.P));
   const made = after.filter((d) => d.id === kept?.datasetId);
-  ok('5. KEEP creates exactly one dataset, Live, of the table', kept?.ok === true && after.length === before + 1 && made.length === 1 && made[0].mode === 'live', JSON.stringify({ kept, n: after.length - before }));
+  ok('5. NEGATIVE CONTROL: with no Live dataset of the table, KEEP creates exactly one, Live', kept?.ok === true && after.length === before && made.length === 1 && made[0].mode === 'live', JSON.stringify({ kept, n: after.length - before }));
+  const twice = (await ed('explore:keepTable', onTable)).body;
+  ok('5. …and keeping it twice makes no second: the same dataset', twice?.ok === true && twice.datasetId === kept.datasetId && (await b.as(() => datasets.listDatasets(b.P))).length === before, JSON.stringify(twice));
   const keptMeta = await b.as(() => datasets.getDatasetMeta(b.P, kept.datasetId));
   ok('5. …its origin is the table on its connection, named as the table', keptMeta?.origin?.kind === 'connection' && keptMeta.origin.connId === s.connId && (keptMeta.origin as { table?: string }).table === TABLE && keptMeta.name === TABLE);
   const kf = (await ed('explore:suggest', { datasetId: kept.datasetId })).body;

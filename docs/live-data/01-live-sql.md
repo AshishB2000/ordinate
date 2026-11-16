@@ -175,9 +175,10 @@ SELECT … FROM q0 … ORDER BY …, o_0, o_1 LIMIT 501
 ```
 
 The lock column may itself be hidden: the WHERE applies before the projection. A required date
-filter on a source table (`partition.required`, phase A) is not added silently: the second call is
-told the table needs one; BigQuery refuses a statement without it (a typed failure), and elsewhere
-the cost limits below apply.
+filter on a table (`partition.required`, or an editor's "required filters", phase A) follows the
+chart's rule: the second call is told the table needs one, and where neither the lock, the base
+filters nor a WHERE of the statement names the column, the view gets *Last 12 months* and the card
+says so in the chart's sentence (follow-ups as built, below).
 
 ## Cost limits
 
@@ -295,8 +296,8 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   `7.0`); arithmetic on a `date_trunc` result (an INTERVAL in DuckDB); `CROSS JOIN` and comma joins;
   `SELECT *` over `USING`; HAVING, WHERE or window clauses naming a returned column's alias; a FROM
   subquery or CTE body reading an enclosing query's column (DuckDB would read it as LATERAL); a frame on
-  a rank or a shift. On **ClickHouse** the printer refuses a correlated subquery and
-  lag/lead/first_value/last_value (`lagInFrame` reads frames and NULL its own way) until F7 pins them.
+  a rank or a shift. On **ClickHouse** the printer refuses a correlated subquery (CH1); lag/lead/first_value/
+  last_value were refused too until pin CH2 was lifted (follow-ups as built, below).
 - **Choices the note left open:** a view projects only the columns the statement reads, not every
   visible one, so a calculated field it does not read is never computed (a broken one refuses only the
   statements that read it) and BigQuery reads less. Relations' outputs are `o<i>_<j>`, the statement's
@@ -375,8 +376,9 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   before the second call. Refresh and a verified re-ask take none: they write no statement, and the daily limit and
   the cache bound them. No new environment variable.
 - **A viewer** gets the same lane under their lock, with the hidden columns out of the facts, the vocabulary, the
-  view and `SELECT *` (F-D14; open question 3's default). A required date filter is not added for SQL (the note's
-  rule for source tables); BigQuery refuses a statement without it, typed.
+  view and `SELECT *` (F-D14; open question 3's default). A required date filter was not added for SQL here; it is
+  now, as for a chart (follow-ups as built, below). The gate's question was every word of the text; it is now the
+  columns the translator resolves (the same section).
 - **Tests:** `test-liveSqlAnswers` — without a database 34 checks: the corpus through `copilot:ask` Object.is-equal
   to F2's reference for an admin (61/61), an editor and a viewer from whom `amt` is hidden (12/12 each); one counted
   statement per answer (the fake's calls = `live_usage`), a cache hit none; the dry run over the ceiling sends nothing
@@ -474,8 +476,7 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
 - **Viewers** are unchanged: no table is offered (`askSourceTables`), looked up (`sourceVocabulary` asks the role before
   any read) or read for them. A model that names one anyway gets the lane's *"…" is not the name of one dataset.*,
   quoting its own word, with no table doc read, no second call and no statement.
-- **Left:** the second call is not told a table's required date filter (F3's rule for Live datasets stands); its line
-  says "the dataset" for a table; a Keep that fails on a second table leaves the first one made (a code `shortcut:`);
+- **Left:** its line says "the dataset" for a table (the required date filter is told now: follow-ups as built); a Keep that fails on a second table leaves the first one made (a code `shortcut:`);
   Verify before Keep says the gate's sentence, not *Keep this answer as a dataset first* (Verify sends the text only).
 - **Tests:** `test-liveSqlSources` — without a database 25 checks: the corpus over two tables through `copilot:ask`, the
   admin as editor, `Object.is` to F2's reference (61/61), the first call's block typed from the facts, the second call's
@@ -533,7 +534,7 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   looser comparison (a BigQuery that refuses `NULLS LAST` in a window would be a printer refusal of its
   own, BQ1).
 
-**Follow-up, its own PR: lifting CH1 and CH2.** The ClickHouse step prints `LIFT PROBE CH1 …` and
+**Follow-up, its own PR: lifting CH1 and CH2** (CH2 is lifted: follow-ups as built, below). The ClickHouse step prints `LIFT PROBE CH1 …` and
 `LIFT PROBE CH2 …` (log and run summary): the held cases printed with the refusal widened, run
 unlocked and locked, compared with `Object.is`; reported, never failing the run. A pin whose runs all
 agree is lifted by deleting its entry from `OFF_CLICKHOUSE` and `DIALECT_PINS`, so its cases join the
@@ -579,6 +580,50 @@ first difference (an unknown `lag`, a frame read differently).
   echoed and the canary fails; without `keepView`'s refusal the viewer's Keep reaches the warehouse's catalog.
 - **Left:** a 2-part column reference whose qualifier is no table (`f6_orders_canary.region`) still quotes the model's
   words in `"…" is not a column here.`; a log line is no viewer's to read, so the canary greps replies and prompts only.
+
+### Follow-ups as built (`feat/live-sql-more`)
+
+- **A required date filter** (`src/engine/live/liveDateRange.ts` `requiredRange`, shared with the chart's
+  `withRequiredRange`; `liveSql.ts` `inputsOf`; `sql/view.ts` `whereColumns`) takes the chart path's rule, not a
+  refusal. Each table read whose doc requires a filter on a date column (`requiredDates` from `liveTarget`) gets
+  REQUIRED_RANGE (*Last 12 months*) in its view's WHERE, through `predicates` as a base filter (raw on a key column, so
+  BigQuery prunes), unless its lock, its base filters or a WHERE of the statement (any query, CTE or subquery) names that
+  column. The card's bullets carry the chart's sentence (`liveRequiredRange`). The range is printed, so it is in the cache
+  key, and `checkLiveSql` prints the same. The second call's TABLES line says `needs a WHERE filter on d (without one,
+  only last 12 months are read)`, unless the column is hidden from the caller. No new sentence. Shortcut: a column named
+  anywhere in a WHERE counts as filtered, even as a correlation only (`t2.d = o.d`); BigQuery then refuses an unfiltered
+  scan, typed. `test-liveSqlAnswers` §10 (the fake connector, a doc requiring `d`, `ORDINATE_TODAY` 2025-03-15): with no
+  filter the view binds [2024-03-01, 2025-02-28] and the card says so, `Object.is` to the reference with that range written
+  by hand; the prompt says it; the translate-only check passes. NEGATIVE CONTROLS: a statement filtering `d` itself sends
+  its own date only, with no sentence; a table with no such fact sends none.
+- **The column gate reads the IR, not words.** `prepared` takes `withLockOf` on every table with no question (the rules'
+  fail-closed refusals) and translates over the VISIBLE columns. On a refusal it translates again over every declared
+  column, and the columns THAT IR reads from each table are `withLockOf`'s question: a statement reading a hidden column
+  gets the gate's `hidden` sentence (no code: the caller's access, F4), and a word that is no column reference refuses
+  nothing. The second IR is never printed. `test-liveSqlAnswers` §9, a column `sum` hidden from the viewer: their
+  `sum(qty)` answers, `Object.is` to the reference (NEGATIVE CONTROL: F3's words-as-question check refuses it); bare,
+  qualified, aliased, quoted in another case, through `*` in a subquery and in a CTE, in WHERE and in an aggregate, all
+  seven are the gate's sentence with nothing sent; the admin reads it.
+- **Pin CH2 lifted, unproven until the nightly runs it.** On ClickHouse `lag`/`lead` print as
+  `lagInFrame(toNullable(x), n, NULL) OVER (… ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)`: `*InFrame`
+  reads the frame, and SQL's lag ignores frames, so the frame is the whole partition. `first_value`/`last_value` print as
+  `first_value_respect_nulls(toNullable(x))` with the statement's frame. Past the frame is then NULL, as in DuckDB, not
+  the type's default 0. `OFF_CLICKHOUSE.shifts` is empty (a name put back is refused again). `DIALECT_PINS` holds CH1
+  only; `LIFTED_PINS` holds CH2. On every `npm test`, its two cases must print in that form on ClickHouse
+  (`dialectPins`); on the ClickHouse leg they must agree with `Object.is`, unlocked and locked (`liftedPins`), and they
+  join that leg's corpus run (118 runs). NEGATIVE CONTROL (`test-warehouseLiveSql`): the four put back in
+  `OFF_CLICKHOUSE.shifts` fail lifted CH2 and the held-back count. CH1 (a correlated subquery, HTTP 501) stays refused.
+  **Nothing here has run on ClickHouse** (no Docker locally). The next nightly must show `PIN CH2 (clickhouse, lifted) …
+  agree` and every corpus run agreeing; a disagreement puts CH2 back in `OFF_CLICKHOUSE.shifts` and `DIALECT_PINS`.
+- **Keeping a table twice makes one dataset** (`src/ipc/sourceKeep.ts` `keptAlready`). `keepView`, so `answer:keepTable`
+  on a chart or an SQL turn and `explore:keepTable`, first looks among the Live datasets the caller can open for one on
+  the same connection and table (the origin's `table`, no defining query, no base filter, no semantic layer) and
+  re-points at it. An SQL turn's Keep takes one only if the gate names it as the table's view was named (its slug is the
+  table's), since the kept text reads it by that name; a renamed one makes a new dataset, as before. Tests:
+  `test-liveSqlSources` §6, a second turn over the same two tables, asked before Keep, is re-pointed at the kept ids with
+  none made (NEGATIVE CONTROL: the two tables make two); `test-exploreSourceTables` §5, Keep opens the fixture's Live twin
+  of the table and makes none, then with the twin deleted makes exactly one, and a second Keep returns it;
+  `test-sourceAnswers` §5, a chart turn's Keep re-points at the twin.
 
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15

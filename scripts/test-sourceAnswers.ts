@@ -14,8 +14,9 @@
 //      with no warehouse call.
 //   4. SAFETY NET: inside the view, getDataset throws LiveDatasetError and a write is refused; outside it the id is no
 //      dataset.
-//   5. KEEP: `answer:keepTable` creates exactly one Live dataset of the table and re-points the turn at it (no `table`);
-//      a second keep makes none; the kept answer's figures are the view's. Save as visual and Verify of a table's
+//   5. KEEP: `answer:keepTable` re-points the turn (no `table`) at the Live dataset already over the table on its
+//      connection (the fixture's twin; one is made when there is none: test-exploreSourceTables); a second keep makes
+//      none; the kept answer's figures are the view's. Save as visual and Verify of a table's
 //      answer are refused until it is kept.
 //   6. LINK (outcome E): an answer naming a column of an unlinked dataset gets the checked-link card (the key pair, names
 //      and types, the sampled share found, TO's key unique), kept on the turn; Approve (`relationship:save`) saves one
@@ -186,15 +187,14 @@ async function editorLegs(b: Bench, s: Seeded): Promise<void> {
   const threadId = first.reply.threadId as string;
   const kept = (await b.call(b.editor, 'answer:keepTable', { projectId: b.P, threadId, turnId: turn.id })).body;
   const after = await b.as(() => datasets.listDatasets(b.P));
-  const made = after.filter((d) => d.id === kept?.datasetId);
-  ok('5. KEEP creates exactly one dataset, Live, of the table', kept?.ok === true && after.length === before + 1 && made.length === 1 && made[0].mode === 'live', JSON.stringify({ kept, n: after.length - before }));
+  ok('5. KEEP re-points at the Live dataset already over that table on that connection ("Returns live"): none made', kept?.ok === true && kept.datasetId === s.liveId && after.length === before, JSON.stringify({ kept, n: after.length - before }));
   const keptMeta = await b.as(() => datasets.getDatasetMeta(b.P, kept.datasetId));
   ok('5. …its origin is the table on its connection', keptMeta?.origin?.kind === 'connection' && keptMeta.origin.connId === s.connId && (keptMeta.origin as { table?: string }).table === TABLE);
   const repointed = (kept?.turns ?? []).find((t: { id: string }) => t.id === turn.id);
   ok('5. …and the turn\'s answer points at it, no longer at the table, its provenance a Live dataset\'s', repointed?.id === turn.id && repointed.answer?.datasetId === kept.datasetId && !repointed.answer.table
     && repointed.provenance?.note === 'chart computed live by the warehouse' && turn.provenance?.note === say.tableNote(), JSON.stringify([repointed?.answer, repointed?.provenance, turn.provenance]));
   const again = (await b.call(b.editor, 'answer:keepTable', { projectId: b.P, threadId, turnId: turn.id })).body;
-  ok('5. a second keep makes none', again?.ok === false && (await b.as(() => datasets.listDatasets(b.P))).length === before + 1, JSON.stringify(again));
+  ok('5. a second keep makes none', again?.ok === false && (await b.as(() => datasets.listDatasets(b.P))).length === before, JSON.stringify(again));
   const onKept = (await b.call(b.editor, 'answer:refresh', { projectId: b.P, threadId, turnId: turn.id })).body as Card;
   ok('5. the kept answer\'s figures are the table\'s', same(onKept, fromTable), JSON.stringify(onKept).slice(0, 300));
 

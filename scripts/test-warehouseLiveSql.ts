@@ -3,8 +3,9 @@
 // BigQuery on real accounts) only the nightly runs.
 //
 //   1. Its leg on the FAKE warehouse (scripts/liveFakeConnector.ts, through the connector registry
-//      and runLiveBound): every case agrees, the pins hold (CH1/CH2 still refused on ClickHouse).
-//      CONTROL: with the CH1 refusal lifted, pin CH1 fails.
+//      and runLiveBound): every case agrees, the pins hold (CH1 still refused on ClickHouse; CH2,
+//      lifted, printed in ClickHouse's own form). CONTROLS: with the CH1 refusal lifted, pin CH1
+//      fails; with lag/lead/first_value/last_value refused on ClickHouse again, lifted CH2 fails.
 //   2. A set but UNUSABLE account fails: the same leg over a warehouse that refuses every statement
 //      fails its verdict and agrees on nothing (CONTROL: 1 passes); and run on its own, a
 //      CLICKHOUSE_URL that is not http(s), or that nothing answers, exits non-zero.
@@ -58,6 +59,17 @@ async function main(): Promise<void> {
   }
   const failed = pinChecks.filter((c) => !c.cond).map((c) => c.label);
   ok('NEGATIVE CONTROL: a lifted CH1 refusal fails pin CH1 and the held-back count, and nothing else', failed.length === 2 && /^PIN CH1 .* still refuses/.test(failed[0]) && /hold back exactly/.test(failed[1]), failed);
+  // NEGATIVE CONTROL: the shifts refused on ClickHouse again (CH2 before it was lifted): the lifted pin says so.
+  const shiftChecks: { label: string; cond: boolean }[] = [];
+  const shifts = print.OFF_CLICKHOUSE.shifts;
+  print.OFF_CLICKHOUSE.shifts = new Set(['lag', 'lead', 'first_value', 'last_value']);
+  try {
+    await pins.dialectPins(kit, sources, (label, cond) => shiftChecks.push({ label, cond }));
+  } finally {
+    print.OFF_CLICKHOUSE.shifts = shifts;
+  }
+  const shiftFailed = shiftChecks.filter((c) => !c.cond).map((c) => c.label);
+  ok('NEGATIVE CONTROL: lag/lead/first_value/last_value refused on ClickHouse again fails lifted pin CH2 and the held-back count', shiftFailed.length === 2 && /hold back exactly/.test(shiftFailed[0]) && /^PIN CH2 .*lifted/.test(shiftFailed[1]), shiftFailed);
 
   // 2. A set but unusable account: every statement refused, as a wrong key or a dropped grant would be.
   const seen: { label: string; cond: boolean }[] = [];

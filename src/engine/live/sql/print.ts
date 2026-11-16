@@ -20,8 +20,9 @@
 //         (DuckDB's default: last), then LIMIT 501 — or the model's own LIMIT when smaller.
 //
 // Refused per dialect (each a named pin until its engine is verified in the nightly, F7): on
-// ClickHouse a correlated subquery, and lag/lead/first_value/last_value (`lagInFrame` and friends
-// read the frame and NULL differently). Pins CH1 and CH2 in scripts/liveSqlPins.ts.
+// ClickHouse a correlated subquery (pin CH1 in scripts/liveSqlPins.ts). lag/lead/first_value/
+// last_value (pin CH2, lifted) print there as `lagInFrame(toNullable(x), n, NULL)` over the whole
+// partition and `first_value_respect_nulls(toNullable(x))`, so past the frame is NULL, as DuckDB's.
 
 import type { CompiledQuery } from '../sqlParams';
 import { ParamSink } from '../sqlParams';
@@ -42,8 +43,12 @@ export const LIVE_SQL_ROWS = 500;
 /** The join keywords — a table so a negative control can print LEFT as INNER and watch the differential catch it. */
 export const JOIN_WORDS: Record<string, string> = { inner: 'INNER JOIN', left: 'LEFT JOIN', right: 'RIGHT JOIN', full: 'FULL JOIN' };
 
-/** What the printer refuses on ClickHouse (pins CH1, CH2) — a table, so the nightly's lift probe can widen it and run what it holds back. */
-export const OFF_CLICKHOUSE = { correlated: true, shifts: new Set(['lag', 'lead', 'first_value', 'last_value']) };
+/**
+ * What the printer refuses on ClickHouse (pin CH1) — a table, so the nightly's lift probe can widen it and run what it
+ * holds back. `shifts` is empty since CH2 was lifted (lag/lead/first_value/last_value print in ClickHouse's own form);
+ * a window function named in it is refused there again.
+ */
+export const OFF_CLICKHOUSE = { correlated: true, shifts: new Set<string>() };
 
 class Printer {
   private subs = 0;
@@ -129,11 +134,20 @@ class Printer {
       }
       case 'win': {
         if (d.id === 'clickhouse' && OFF_CLICKHOUSE.shifts.has(e.fn)) fail('dialect', msg.sqlConstructOn(`${e.fn}()`, 'ClickHouse'));
-        const args = e.fn === 'count' && e.x === null ? '*' : [e.x ? x(e.x) : '', e.offset === null ? '' : sqlInt(e.offset)].filter(Boolean).join(', ');
+        const shift = e.fn === 'lag' || e.fn === 'lead';
+        // ClickHouse (pin CH2, lifted): nothing there is the argument type's default (0) unless it is Nullable, so the
+        // argument is made Nullable and a shift's default is NULL; `lagInFrame`/`leadInFrame` read the frame, so a shift
+        // gets the whole partition; first_value/last_value skip NULLs unless told to respect them.
+        const ch = d.id === 'clickhouse' && (shift || e.fn === 'first_value' || e.fn === 'last_value');
+        const fn = !ch ? e.fn : shift ? `${e.fn}InFrame` : `${e.fn}_respect_nulls`;
+        const args = e.fn === 'count' && e.x === null ? '*'
+          : ch ? [`toNullable(${x(e.x as Expr)})`, ...(shift ? [sqlInt(e.offset ?? 1), 'NULL'] : [])].join(', ')
+          : [e.x ? x(e.x) : '', e.offset === null ? '' : sqlInt(e.offset)].filter(Boolean).join(', ');
         const over: string[] = [];
         if (e.part.length) over.push(`PARTITION BY ${e.part.map(x).join(', ')}`);
         if (e.order.length) over.push(`ORDER BY ${e.order.map((o) => this.order(o)).join(', ')}`);
-        const call = `${e.fn}(${args}) OVER (${over.join(' ')}${e.frame ? this.frame(e.frame) : ''})`;
+        const frame = e.frame ?? (ch && shift ? { start: null, end: null } : null); // a frame on a shift is refused (F1)
+        const call = `${fn}(${args}) OVER (${over.join(' ')}${frame ? this.frame(frame) : ''})`;
         // Ranks and counts are integers on every engine, sums of DOUBLEs stay DOUBLE; F-D5 casts them all alike.
         return e.fn === 'min' || e.fn === 'max' || e.fn === 'lag' || e.fn === 'lead' || e.fn === 'first_value' || e.fn === 'last_value' ? call : d.toDouble(call);
       }
