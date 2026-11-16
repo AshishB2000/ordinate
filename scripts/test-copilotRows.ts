@@ -192,32 +192,46 @@ withServer('copilot-rows', {}, async (b) => {
       !(await as(ANN)(() => recordFs.exists(fileOf(bad)))) && (await as(ANN)(() => recordFs.readFile(fileOf(bad) + '.corrupt', 'utf8'))) === '{ not json');
 
     // Clear history while a move is half done — its first look at the file (`pause` 1) or its read
-    // under the lock (2) held back until the clear has started: the cleared conversations never come back.
-    const clearMidMove = async (pause: 1 | 2): Promise<{ moved: number; left: number }> => {
+    // under the lock (2) held back until the clear has gone as far as it can: into the lock's queue
+    // behind the held move (pause 2 with the lock), else to its end. A barrier on each, never a timer:
+    // under load a clear given 300 ms had not ended, and the control read {moved:0,left:0}.
+    const clearMidMove = async (pause: 1 | 2, withLock = true): Promise<{ moved: number; left: number }> => {
       const p = (await run(BOSS, () => projects.createProject('Clear race'))).id;
       await as(ANN)(() => recordFs.writeFile(fileOf(p), JSON.stringify(fixture(p))));
       const real = recordFs.readFile;
+      const realLocked = recordFs.locked;
       let reached!: () => void;
       let go!: () => void;
+      let queued!: () => void;
       const atGate = new Promise<void>((r) => (reached = r));
       const gate = new Promise<void>((r) => (go = r));
+      const clearQueued = new Promise<void>((r) => (queued = r));
       let reads = 0;
+      let clearOn = false;
       (recordFs as { readFile: unknown }).readFile = async (f: string, enc: BufferEncoding) => {
         const out = await real(f, enc);
         if (f === fileOf(p) && ++reads === pause) { reached(); await gate; }
         return out;
       };
+      (recordFs as { locked: unknown }).locked = (f: string, fn: () => Promise<unknown>) => {
+        if (!withLock) return fn(); // the negative control: no record lock at all
+        const out = realLocked(f, fn); // in the lock's queue from this call on
+        if (clearOn && f === fileOf(p)) queued();
+        return out;
+      };
       try {
         const moving = as(ANN)(() => copilot.listThreads(p));
         await atGate;
+        clearOn = true;
         const clearing = as(ANN)(() => copilot.clearHistory(p));
-        await Promise.race([clearing, new Promise((r) => setTimeout(r, 300))]);
+        await (pause === 2 && withLock ? clearQueued : clearing);
         go();
         const [list] = await Promise.all([moving, clearing]);
         const left = (await b.pool.query<{ n: number }>('SELECT count(*)::int AS n FROM assistant_threads WHERE project_id = $1', [p])).rows[0].n;
         return { moved: list.length, left };
       } finally {
         (recordFs as { readFile: unknown }).readFile = real;
+        (recordFs as { locked: unknown }).locked = realLocked;
       }
     };
     const early = await clearMidMove(1);
@@ -225,14 +239,7 @@ withServer('copilot-rows', {}, async (b) => {
     const locked = await clearMidMove(2);
     ok('move: a clear during a half-done move leaves no conversation — control: the move did move Ann\'s 3',
       locked.moved === 3 && locked.left === 0, show(locked));
-    const realLocked = recordFs.locked;
-    (recordFs as { locked: unknown }).locked = (_p: string, f: () => Promise<unknown>) => f();
-    let bare: { moved: number; left: number };
-    try {
-      bare = await clearMidMove(2);
-    } finally {
-      (recordFs as { locked: unknown }).locked = realLocked;
-    }
+    const bare = await clearMidMove(2, false);
     ok('move NEGATIVE CONTROL: without the record lock, the half-done move brings the cleared conversations back', bare.left > 0, show(bare));
   }
 

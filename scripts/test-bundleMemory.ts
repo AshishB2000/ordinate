@@ -28,7 +28,7 @@
 //   npm run build:ts && node scripts/test-bundleMemory.js
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, finish } from './selfcheck';
+import { ok, finish, threadCpuMs } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -528,25 +528,45 @@ async function main(adminUrl: string | undefined): Promise<void> {
       if (want.join() === got.join()) same++;
     }
     ok(`stall: the anchored id scan finds exactly what the global regex finds (differential, ${same} of ${cases.length} texts)`, same === cases.length);
-    const { monitorEventLoopDelay } = require('perf_hooks') as typeof import('perf_hooks');
     const plain = await deflatedOf(Buffer.alloc(MB, 0x61), 32 * MB); // 32 MiB of "a": no id anywhere
     const dsId = U();
     const bad: Body = { body: zlib.deflateRawSync(Buffer.from('x')), crc: 0, usize: 1 };
-    const stalls = async (n: number): Promise<{ maxMs: number; value: import('../src/app/bundleImport').ImportResult }> => {
+    // The longest run of main-thread CPU between two turns of the loop (a 1 ms timer reads it): what
+    // the code held the loop for. A timer's lateness also counts the time the OS ran other processes,
+    // and under the parallel `npm test` it read 129 ms for an import that holds the loop ~6 ms.
+    const longestTurn = async <T>(fn: () => Promise<T>): Promise<{ maxMs: number; value: T }> => {
+      let last = threadCpuMs();
+      let maxMs = 0;
+      const turn = (): void => {
+        const now = threadCpuMs();
+        maxMs = Math.max(maxMs, now - last);
+        last = now;
+      };
+      const t = setInterval(turn, 1);
+      try {
+        const value = await fn();
+        turn();
+        return { maxMs, value };
+      } finally {
+        clearInterval(t);
+      }
+    };
+    const stalls = (n: number): Promise<{ maxMs: number; value: import('../src/app/bundleImport').ImportResult }> => {
       const names = Array.from({ length: n }, (_, i) => `history/dataset/${dsId}/2026-02-01T00-00-${String(i).padStart(2, '0')}-000Z.json`);
       const file = path.join(DATA, `stall-${n}.ordinate`);
       zipOf(file, [{ name: 'manifest.json', body: manifestOf({ versions: n, parquet: 1 }) }, ...names.map((name) => ({ name, body: plain })), { name: `datasets/${dsId}.parquet`, body: bad }]);
-      const h = monitorEventLoopDelay({ resolution: 5 });
-      h.enable();
-      const value = await inOrg(A, () => bundle.importBundle({ file }));
-      h.disable();
-      return { maxMs: h.max / 1e6, value };
+      return longestTurn(() => inOrg(A, () => bundle.importBundle({ file })));
     };
+    const regex = await longestTurn(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      return Buffer.alloc(32 * MB, 0x61).toString('latin1').match(new RegExp(rules.UUID, 'gi'));
+    });
+    ok(`stall NEGATIVE CONTROL: the global regex the scan replaced holds the loop past 50 ms by the same meter (${regex.maxMs.toFixed(0)} ms)`, regex.maxMs > 50 && regex.value === null, regex.maxMs);
     const one = await stalls(1);
-    console.log(`     measured: one 32 MiB record with no id — longest event-loop stall ${one.maxMs.toFixed(0)} ms`);
+    console.log(`     measured: one 32 MiB record with no id — longest loop turn ${one.maxMs.toFixed(0)} ms of CPU`);
     ok(`stall: a 32 MiB record with no id never blocks the event loop past 50 ms (${one.maxMs.toFixed(0)} ms)`, one.maxMs < 50 && one.value.ok === false, `${one.maxMs} ${one.value.error}`);
     const many = await stalls(16);
-    console.log(`     measured: 16 such records (a ${(16 * plain.body.length / 1024).toFixed(0)} KB upload) — longest stall ${many.maxMs.toFixed(0)} ms`);
+    console.log(`     measured: 16 such records (a ${(16 * plain.body.length / 1024).toFixed(0)} KB upload) — longest loop turn ${many.maxMs.toFixed(0)} ms of CPU`);
     ok(`stall: 16 of them (a ~${(16 * plain.body.length / 1024).toFixed(0)} KB upload) never stall past 50 ms (${many.maxMs.toFixed(0)} ms)`, many.maxMs < 50, many.maxMs);
   }
 

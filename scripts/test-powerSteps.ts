@@ -12,7 +12,7 @@
 // the unchanged build.
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, finish } from './selfcheck';
+import { ok, finish, threadCpuMs } from './selfcheck';
 import type { Cell, TableData, TransformStep } from '../src/data/transforms';
 
 const crypto: typeof import('crypto') = require('crypto');
@@ -200,17 +200,18 @@ async function main(): Promise<void> {
     ok('trimSpaceTab agrees with the regex it replaced', shapes.every((s) => Object.is(clean.trimSpaceTab(s), oldTrim(s))));
     const run1 = (n: number, f: (s: string) => string): number => {
       const s = 'x' + ' '.repeat(n) + 'x';
-      const t0 = performance.now();
+      const t0 = threadCpuMs(); // CPU, not wall: under load a stopwatch read 99 ms for this
       f(s);
-      return performance.now() - t0;
+      return threadCpuMs() - t0;
     };
     const fast = run1(200_000, clean.trimSpaceTab);
     const slow = run1(10_000, oldTrim); // negative control: the old regex, at a twentieth of the length
-    ok('an interior run of 200k spaces trims in linear time (old regex: slower at 10k)', fast < 50 && slow > fast, `${fast.toFixed(1)} ms vs ${slow.toFixed(1)} ms`);
-    const t0 = performance.now();
+    ok('an interior run of 200k spaces trims in linear time (old regex: slower at 10k)', fast < 50 && slow > fast, `${fast.toFixed(1)} ms vs ${slow.toFixed(1)} ms CPU`);
+    const t0 = threadCpuMs();
     const big = clean.parseDatePreview({ columns: [{ name: 'd', type: 'text' }], rows: [['x' + ' '.repeat(200_000) + 'x']] },
       { type: 'parse_date', column: 'd', format: 'YYYY-MM-DD' });
-    ok('…through the preview too', big.failed === 1 && performance.now() - t0 < 100);
+    const previewMs = threadCpuMs() - t0;
+    ok('…through the preview too', big.failed === 1 && previewMs < 100, `${previewMs.toFixed(1)} ms CPU`);
   }
 
   // ── 5. the other steps' semantics ─────────────────────────────────────────
@@ -225,10 +226,11 @@ async function main(): Promise<void> {
     // NV-52: one row of 9,000 columns, half chosen, would build 4,500 rows × 4,502 cells.
     const names = Array.from({ length: 9000 }, (_, k) => `c${k}`);
     const wide: TableData = { columns: names.map((name) => ({ name, type: 'text' as const })), rows: [names.slice()] };
-    const t0 = performance.now();
+    const t0 = threadCpuMs();
     const wu = run([{ type: 'unpivot', columns: names.slice(0, 4500) }], wide);
+    const ms = threadCpuMs() - t0;
     ok('an unpivot past the cell budget is skipped before it builds a row', wu.rowCount === 1 &&
-      /^Unpivot skipped: it would make 20,259,000 cells; the limit is 20,000,000$/.test(wu.warnings[0] || '') && performance.now() - t0 < 500, JSON.stringify(wu.warnings));
+      /^Unpivot skipped: it would make 20,259,000 cells; the limit is 20,000,000$/.test(wu.warnings[0] || '') && ms < 500, `${ms.toFixed(1)} ms CPU ${JSON.stringify(wu.warnings)}`);
     const fits = run([{ type: 'unpivot', columns: names.slice(0, 2) }], wide);
     ok('negative control: a small unpivot of the same table runs', fits.rowCount === 2 && fits.warnings.length === 0);
     const pv = run([{ type: 'pivot', key: 'region', value: 'units', fn: 'count', groupBy: ['sku'] }]);
