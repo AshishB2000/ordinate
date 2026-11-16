@@ -34,15 +34,23 @@ const refusal = (f: () => unknown): string => {
 };
 
 // ── 1. The real budget bounds a heavy formula over a big table ───────────────
+// Counted in rows evaluated, as the budget counts work: a stopwatch read 1.3 s alone and 6–7 s
+// under the parallel `npm test`, which is the machine, not the budget.
 {
   const heavy = fnOf(Array.from({ length: 1000 }, () => '[a]').join(' + ')); // 1,999 tokens
-  const t0 = Date.now();
+  const evaluate = heavy.evaluate;
+  let evaluated = 0;
+  heavy.evaluate = (row) => {
+    evaluated++;
+    return evaluate(row);
+  };
   const got = refusal(() => evaluateTable(heavy, COLS, rowsOf(400_000)));
-  const ms = Date.now() - t0;
+  const paidFor = Math.floor(budget.FORMULA_WORK_BUDGET / (heavy.cost ?? 1));
   ok('a 2,000-token formula over 400k rows stops at the budget', got === 'budget', got);
-  ok('…within seconds, not the ~10 s the whole table would take', ms < 6000, `${ms} ms`);
+  ok(`…after the ${paidFor.toLocaleString('en-US')} rows the budget pays for, a quarter of the table, not the whole of it`,
+    evaluated === paidFor && paidFor < 400_000 / 3, `${evaluated} rows`);
   const small = evaluateTable(heavy, COLS, rowsOf(1000));
-  ok('negative control: the same formula over 1,000 rows runs and adds up', small.length === 1000 && small[7] === 7000);
+  ok('negative control: the same formula over 1,000 rows runs and adds up', small.length === 1000 && small[7] === 7000 && evaluated === paidFor + 1000);
 }
 
 // ── 2. Text: a call pays for what it reads and writes, and the pieces it splits ──

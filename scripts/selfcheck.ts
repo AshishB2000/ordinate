@@ -27,6 +27,16 @@ export function failureCount(): number {
 }
 
 /**
+ * This thread's CPU time in ms. A suite times its own synchronous work with it, never the wall
+ * clock: under the parallel `npm test` the OS runs other processes in between, and a stopwatch
+ * counts that as the code's.
+ */
+export function threadCpuMs(): number {
+  const u = process.threadCpuUsage();
+  return (u.user + u.system) / 1000;
+}
+
+/**
  * Exit the process with the suite's verdict. The last line every suite ends on.
  * A bare exit around a DuckDB worker — busy, and sometimes even idle — aborts
  * the process (`Napi::Error`, src/engine/duckdbClose.ts), so when the
