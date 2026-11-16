@@ -9,7 +9,9 @@
 //     search, its spelling, its counts, Home's counts, the exact verified match and the examples.
 //   - opsViewer, opsLead and ed never find a Finance canary — nor HR's — by ⌘K, words, spelling (a typo sharing no word,
 //     and the "Did you mean" it makes), meaning (a fake embedder, as test-meaningSearch), the counts, the verified lookup
-//     or their history. NEGATIVE CONTROLS: finViewer and padmin do;
+//     or their history — a prose answer (no chart) about Finance's dataset leaves it with its question, by the datasets
+//     its facts were built from, and a conversation of only such turns leaves the list and reads as missing by id.
+//     NEGATIVE CONTROLS: finViewer and padmin do; a stored turn without that record (an older release's) keeps its words;
 //     with the WHERE condition removed (folderGate's seam), opsViewer's index answers carry them and differ from the
 //     reference; a ⌘K row with no anchor (an older pod's) is not returned to opsViewer but is to padmin; an anchor
 //     written in another case is still filtered, in ⌘K and in step 3's index.
@@ -24,6 +26,8 @@ const model: typeof import('../src/ipc/assistantSearch') = require('../src/ipc/a
 const lookup: typeof import('../src/ipc/verifiedLookup') = require('../src/ipc/verifiedLookup');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const answerCheck: typeof import('../src/ipc/answerCheck') = require('../src/ipc/answerCheck');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 
 const FIN = /fincanary/i;
 const CANARIES = /fincanary|hrcanary/i;
@@ -125,6 +129,72 @@ async function fingerprinted(W: H.World): Promise<(() => void) | null> {
 
 let restore = (): void => undefined;
 
+/** Per person, two conversations of prose answers (a fake model, no chart) had while Finance's dataset was in Everyone. */
+type Prose = Map<H.Person, { mixed: string; fin: string }>;
+
+/** `mixed`: a prose answer on Plain, then one on Finance's dataset; `fin`: only the one on Finance's dataset. */
+async function proseThreads(W: H.World, fin: Fin): Promise<Prose> {
+  const { P } = W;
+  const real = { ask: analyze.askCopilot, ready: execConfig.executionReady };
+  (analyze as { askCopilot: unknown }).askCopilot = async (_prior: unknown, _facts: string, q: string) =>
+    ({ ok: true, text: FIN.test(q) ? 'FINCANARY prose answer.' : 'Plain prose answer.', suggestedAction: { kind: 'none', intent: '' } });
+  (execConfig as { executionReady: unknown }).executionReady = async () => true;
+  try {
+    const out: Prose = new Map();
+    const thread = async (who: H.Person, asks: Array<[string, string]>): Promise<string> => {
+      const id = (await W.call(who, 'copilot:newThread', { projectId: P })).body?.thread?.id as string;
+      for (const [ds, question] of asks) {
+        const r = await W.call(who, 'copilot:ask', { projectId: P, threadId: id, context: { kind: 'dataset', id: ds }, question });
+        if (r.body?.ok !== true) throw new Error(`setup: a prose answer for ${who}: ${r.text.slice(0, 300)}`);
+      }
+      return id;
+    };
+    for (const who of ['opsViewer', 'finViewer'] as H.Person[]) {
+      out.set(who, { mixed: await thread(who, [[W.plain, 'plain prose question'], [fin.ds, 'fincanary prose question']]), fin: await thread(who, [[fin.ds, 'fincanary prose question']]) });
+    }
+    return out;
+  } finally {
+    (analyze as { askCopilot: unknown }).askCopilot = real.ask;
+    (execConfig as { executionReady: unknown }).executionReady = real.ready;
+  }
+}
+
+/** With Finance's dataset in Finance: the prose answers about it, and the conversation of only those, as each person sees them. */
+async function proseChecks(W: H.World, prose: Prose): Promise<void> {
+  const { P, pool } = W;
+  const texts = async (who: H.Person, threadId: string) => {
+    const r = (await W.call(who, 'copilot:history', { projectId: P, threadId })).body ?? {};
+    return { threadId: r.threadId as string | null, texts: ((r.turns ?? []) as Array<{ text: string }>).map((t) => t.text), raw: JSON.stringify(r) };
+  };
+  const listed = async (who: H.Person) => ((await W.call(who, 'copilot:threads', { projectId: P })).body?.threads ?? []).map((t: { id: string }) => t.id) as string[];
+  const ops = prose.get('opsViewer')!;
+  const fins = prose.get('finViewer')!;
+  const mixed = await texts('opsViewer', ops.mixed);
+  ok('history: opsViewer\'s prose answer on Finance\'s dataset (no chart) is gone with its question; the one on Plain before it stays', JSON.stringify(mixed.texts) === JSON.stringify(['plain prose question', 'Plain prose answer.']), mixed.raw.slice(0, 300));
+  const finMixed = await texts('finViewer', fins.mixed);
+  ok('NEGATIVE CONTROL: finViewer is shown all four, Finance\'s prose answer included, and no reply names what the facts came from', finMixed.texts.length === 4 && finMixed.texts.includes('FINCANARY prose answer.') && !/factsFrom/.test(finMixed.raw), finMixed.raw.slice(0, 300));
+  const gone = await texts('opsViewer', ops.fin);
+  ok('history: a conversation whose every turn is hidden is not in opsViewer\'s list, and answers by id as none (no turns, no id, no title)', !(await listed('opsViewer')).includes(ops.fin) && gone.threadId === null && gone.texts.length === 0 && !CANARIES.test(gone.raw), gone.raw.slice(0, 300));
+  const empty = ((await W.call('opsViewer', 'copilot:threads', { projectId: P })).body?.threads ?? []).filter((t: { turnCount: number }) => t.turnCount === 0).map((t: { id: string }) => t.id) as string[];
+  const stored = (await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM assistant_turns WHERE project_id = $1 AND thread_id = ANY($2::uuid[])', [P, empty])).rows[0].n;
+  ok(`history: each of opsViewer's ${empty.length} listed conversations shown with no turn has none stored (a new one): none whose every turn is hidden is listed`, stored === 0, String(stored));
+  ok('NEGATIVE CONTROL: finViewer lists theirs and opens it', (await listed('finViewer')).includes(fins.fin) && (await texts('finViewer', fins.fin)).texts.length === 2);
+  gate.setIndexWhereForTest(false);
+  const unfiltered = await listed('opsViewer').finally(() => gate.setIndexWhereForTest(true));
+  ok('NEGATIVE CONTROL: without the folders in the list\'s WHERE, opsViewer\'s list carries it', unfiltered.includes(ops.fin));
+  // A turn stored without the record (as before this release): its words stay, as the design says. Then put back.
+  const turn = (await pool.query<{ id: string; body: string }>('SELECT id::text, body FROM assistant_turns WHERE project_id = $1 AND thread_id = $2 AND text = $3', [P, ops.mixed, 'FINCANARY prose answer.'])).rows[0];
+  ok('setup: opsViewer\'s stored prose answer records the datasets its facts were built from', !!turn && Array.isArray(JSON.parse(turn.body).factsFrom), turn?.body.slice(0, 200));
+  await pool.query(`UPDATE assistant_turns SET body = (body::jsonb - 'factsFrom')::text WHERE project_id = $1 AND id = $2`, [P, turn.id]);
+  let old: Awaited<ReturnType<typeof texts>>;
+  try {
+    old = await texts('opsViewer', ops.mixed);
+  } finally {
+    await pool.query('UPDATE assistant_turns SET body = $3 WHERE project_id = $1 AND id = $2', [P, turn.id, turn.body]);
+  }
+  ok('NEGATIVE CONTROL: the same turn without the record keeps its words for opsViewer (a turn stored before it)', old.texts.includes('FINCANARY prose answer.'), old.raw.slice(0, 300));
+}
+
 export async function indexSections(W: H.World): Promise<void> {
   const { P, pool } = W;
   const fin = await finance(W);
@@ -136,6 +206,7 @@ export async function indexSections(W: H.World): Promise<void> {
     const sql = await W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question: fin.sqlQuestion });
     if (!((sql.body?.turns ?? []) as Array<{ sql?: unknown }>).some((t) => t.sql)) throw new Error(`setup: an SQL answer for ${who}: ${sql.text.slice(0, 300)}`);
   }
+  const prose = await proseThreads(W, fin);
   const place = (kind: string, id: string) => pool.query('INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, $3, $4, $5, $6)', ['acme', P, kind, id, W.folders.fin, 'boss@acme.test']);
   await place('dataset', fin.ds);
   await place('dashboard', fin.board);
@@ -186,11 +257,12 @@ export async function indexSections(W: H.World): Promise<void> {
       return Promise.all(threads.map(async (t) => [t.turnCount, ((await W.call(who, 'copilot:history', { projectId: P, threadId: t.id })).body?.turns ?? []).length] as [number, number]));
     };
     const [opsCounts, finCounts] = [await counts('opsViewer'), await counts('finViewer')];
-    ok('history: each of opsViewer\'s conversations counts the turns they are shown — none of the hidden ones', opsCounts.length >= 2 && opsCounts.every(([n, shown]) => n === shown) && opsCounts.some(([n]) => n === 0), JSON.stringify(opsCounts));
+    ok('history: each of opsViewer\'s conversations counts the turns they are shown — none of the hidden ones', opsCounts.length >= 2 && opsCounts.every(([n, shown]) => n === shown), JSON.stringify(opsCounts));
     ok('NEGATIVE CONTROL: finViewer\'s count every turn of theirs', finCounts.length >= 2 && finCounts.every(([n, shown]) => n === shown && n > 0), JSON.stringify(finCounts));
     gate.setIndexWhereForTest(false);
     const unfiltered = await counts('opsViewer').finally(() => gate.setIndexWhereForTest(true));
     ok('NEGATIVE CONTROL: counted without the folders, opsViewer\'s list would say how many turns are hidden', unfiltered.some(([n, shown]) => n > shown), JSON.stringify(unfiltered));
+    await proseChecks(W, prose);
 
     // ── NEGATIVE CONTROL: the WHERE removed ──
     gate.setIndexWhereForTest(false);

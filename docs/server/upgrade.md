@@ -968,6 +968,22 @@ CHECK by one value (`withdrawn`) and adds two nullable columns (`target_id`, `fo
 row. **Rolling out or back:** an older pod reads a withdrawn request as decided, and approves a request for an
 existing dashboard as a new dashboard of its own.
 
+## The Assistant's history follows what an answer was built from (`0039_turn_facts`)
+
+Part of shared folders ([design](../team-folders/00-design.md#indexes-as-built-e4)): each new Assistant answer records
+the datasets its facts were built from (`factsFrom` in the stored turn; never sent to a browser), so an answer about a
+dataset in a folder someone cannot open, a prose one with no chart included, is hidden from their history with its
+question, and a conversation whose every turn is hidden leaves their list. Nothing changes for anyone without a folder
+besides Everyone, or without `DATABASE_URL`.
+
+**Rolling out.** The migration adds one function (`ordinate_turn_shows`, which the conversation list reads). It reads and
+rewrites no turn: an answer stored before this release has no such record, and its words stay as they were.
+
+**What a pod of an older release does** (a rolling update, or a rollback): it ignores `factsFrom` and keeps 0034's
+function, so for a caller a folder restricts it shows such a prose answer, as it did before (no new leak), and lists a
+conversation of only hidden turns. A chart answer it refreshes or saves as a visual is stored again without the record;
+its chart's dataset still hides it.
+
 ## Compose
 
 From a checkout:

@@ -23,6 +23,7 @@ import { listInsights } from './insights';
 import { isSharePath, type SharePath } from '../app/privacyStore';
 import { resolveChartOverlays } from './visualsAnalytics';
 import * as scorecards from '../analysis/scorecards';
+import * as metrics from '../analysis/metrics';
 import { computeScorecard } from './scorecards';
 import { scorecardFacts } from '../ai/scorecardFacts';
 import * as drivers from './drivers';
@@ -159,6 +160,11 @@ function reasonLedger(reason: string): LedgerEntry[] {
 import { factMetrics, questionMetrics } from './factMetrics';
 export { factMetrics }; // for scripts/test-askDatasetFacts.ts
 
+/** The datasets of the metrics a scorecard or scenario shows (read already by its figures: memo hits inside an ask). */
+async function metricDatasets(projectId: string, ids: readonly string[]): Promise<string[]> {
+  return (await Promise.all(ids.map((id) => metrics.getMetric(projectId, id)))).flatMap((m) => (m?.datasetId ? [m.datasetId] : []));
+}
+
 /** The conversation without what verified question `id` answered, its question and its card: "Not what I asked" sets them aside. */
 function withoutAnswer(turns: copilot.CopilotTurn[], id: string | undefined): copilot.CopilotTurn[] {
   if (!id) return turns;
@@ -270,7 +276,7 @@ export async function buildFacts(
         computeColumnSummary(col, draft.rows.map((row) => (row ? row[c] ?? null : null))),
       );
       emit({ kind: 'compute', label: 'Summarised ' + plural(draft.columns.length, 'column'), count: draft.columns.length });
-      return copilot.captureFacts(thread.title || 'Capture', draft.columns, summaries, draft.rows);
+      return { ...copilot.captureFacts(thread.title || 'Capture', draft.columns, summaries, draft.rows), ...(thread.datasetId ? { datasetIds: [String(thread.datasetId)] } : {}) };
     }
   }
 
@@ -306,7 +312,7 @@ export async function buildFacts(
       }
       // Statistics tiles (src/ipc/stats.ts): their results, recomputed under the same filters, as facts.
       const filteredBy = [...new Set(scope.filters.flatMap((f) => (isKeptStep(f) ? [] : [f.column])))];
-      return withStatsTiles(projectId, a.sheets, copilot.analysisFacts(a, cards, tiles, defined, filteredBy), scope.filters);
+      return withStatsTiles(projectId, a.sheets, { ...copilot.analysisFacts(a, cards, tiles, defined, filteredBy), datasetIds: [...own] }, scope.filters);
     }
   }
 
@@ -326,9 +332,9 @@ export async function buildFacts(
   if (kind === 'drivers' && id) {
     const asked = await drivers.recall(projectId, id);
     const res = asked ? await drivers.driversFor(projectId, asked.spec, asked.params) : null;
-    if (res && res.ok) {
+    if (asked && res && res.ok) {
       emit({ kind: 'compute', label: 'Explained the change across ' + plural(res.dimensions.length, 'dimension'), count: res.dimensions.length });
-      return driversFacts(res);
+      return { ...driversFacts(res), datasetIds: [asked.spec.datasetId] };
     }
   }
 
@@ -342,9 +348,11 @@ export async function buildFacts(
       const offset = typeof context.offset === 'number' && Number.isFinite(context.offset) ? context.offset : 0;
       const res = await computeScorecard(projectId, sc, offset);
       emit({ kind: 'compute', label: 'Scored ' + plural(res.rows.length, 'metric') + ' for ' + res.window.label, count: res.rows.length });
-      return scorecardFacts({
-        name: res.name, period: res.period, windowLabel: res.window.label, rows: res.rows, groups: res.groups,
-      });
+      const shown = sc.rows.flatMap((r) => [r.metricId, ...(r.target && typeof r.target === 'object' ? [r.target.metricId] : [])]);
+      return {
+        ...scorecardFacts({ name: res.name, period: res.period, windowLabel: res.window.label, rows: res.rows, groups: res.groups }),
+        datasetIds: await metricDatasets(projectId, shown),
+      };
     }
   }
 
@@ -362,7 +370,7 @@ export async function buildFacts(
       });
       if (res) {
         emit({ kind: 'compute', label: 'Recomputed ' + plural(res.metrics.length, 'metric') + ' under ' + plural(res.drivers.length, 'driver'), count: res.metrics.length });
-        return scenarioFacts(res);
+        return { ...scenarioFacts(res), datasetIds: await metricDatasets(projectId, sc.baseMetricIds) };
       }
     }
   }
@@ -386,6 +394,8 @@ export function register() {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       const stored = await copilot.loadHistory(projectId, tid);
       const turns = await turnsForBrowser(projectId, stored); // without the answers on a dataset in a folder the caller cannot open (./turnsOpen)
+      // Every turn hidden: as for no conversation, as the list leaves it out (../ai/copilotRows listPage).
+      if (stored.length && !turns.length) return { ok: true, turns, threadId: null, title: null, agent: null };
       // Which thread the turns actually CAME from: an absent or stale id resolves
       // to the most recent thread, so the renderer learns what it is now looking
       // at instead of guessing. Its title too: a renamed conversation's name is
@@ -543,6 +553,8 @@ export function register() {
       // latest replayed, but nobody is looking at that chart and nothing continues it.
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
       const ledger = facts.ledger.concat(linked.ledger, tables.ledger, sources.ledger, guided.ledger, prev ? prev.ledger : []);
+      // The datasets those facts came from, kept on the answer: its words, a prose one's too, leave history with them (./turnsOpen).
+      const factsFrom = [...about, ...linked.metas].map((m) => m.id).concat(facts.datasetIds ?? [], prev ? [prev.spec.datasetId] : []);
       // The real model call — a 'model' step, bracketing the one narration this app
       // makes. No agent loop; only an SQL answer (below) makes a second call, which writes SQL.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
@@ -614,6 +626,7 @@ export function register() {
           // What an editor must add first (outcome E's checked link, a table to copy): kept so a reload still offers it.
           ...(answer && !answer.ok && 'needs' in answer ? { needs: answer.needs, link: answer.link } : {}),
           guidance: guided.used,
+          factsFrom,
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question
         // wanted (src/ai/suggestedAction.ts) — a whitelisted kind plus an intent
