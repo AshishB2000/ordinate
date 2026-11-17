@@ -14,10 +14,10 @@
 // which chains `buildValueIndex` onto that dataset's write chain once the record is saved: the caller does not wait for
 // it, the dataset's next write does, so a build never races one. A build never fails a write. A sidecar built from
 // another write (its stamp) is never read, so nothing depends on when it lands.
-// A build: the record (its stamp), the catalog's marks, two DuckDB statements over the table (the text columns not
-// marked personal or financial, nor carrying a marked value, at or under MAX_DISTINCT distinct values), each value's
-// word keys in JS (../engine/valueSearchResident valueKeys), then the sidecar written as the table is. Nothing is kept
-// in this pod's memory.
+// A build: the record (its stamp), the catalog's marks, two or three DuckDB statements over the table (the text columns
+// not marked personal or financial, nor carrying a marked value, at or under MAX_DISTINCT distinct values; and which
+// past it are id-like), each value's word keys in JS (../engine/valueSearchResident valueKeys), then the sidecar written
+// as the table is. Nothing is kept in this pod's memory.
 //
 // THE JOB (`values:index`, a row per org in the jobs table, every VALUES_JOB_EVERY_MS on whichever pod claims it): per
 // project, the datasets whose sidecar is missing (made before this release, a pod killed mid-build) or stale, built
@@ -62,15 +62,18 @@ export async function buildValueIndex(projectId: string, datasetId: string): Pro
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     // A Live dataset has no table (its sidecar went with it: ../data/liveRecord), a v2 record's is inline: nothing to index.
     if (!meta || isLive(meta) || !meta.resident || !(await parquetStore.isSupportedAsync())) return false;
-    const set: ValueSet = { version: VALUE_INDEX_VERSION, stamp: stampOf(meta), indexed: [], marked: marksOf(await catalog.getColumns(projectId, datasetId, true)) };
+    const set: ValueSet = { version: VALUE_INDEX_VERSION, stamp: stampOf(meta), indexed: [], idLike: [], marked: marksOf(await catalog.getColumns(projectId, datasetId, true)) };
     const withheld = await withheldColumns(projectId, datasetId);
     const cols = meta.columns.flatMap((c, i) => (c.type === 'text' && !withheld.has(c.name) ? [i] : []));
     const found = await distinctValuesResident(tablePath(projectId, datasetId, meta.storageVersion), meta.columns, cols, MAX_DISTINCT);
     trace.record('valueIndex', found ? 'resident' : 'failed', found ? undefined : 'the dataset stays unindexed: its asks scan it');
     if (!found) return false;
     const rows: ValueRow[] = [];
-    for (const { col, values } of found) {
-      if (!values) continue;
+    for (const { col, values, idLike } of found) {
+      if (!values) {
+        if (idLike) set.idLike.push(col); // past the cap: the ask scans it only for an id the question names
+        continue;
+      }
       set.indexed.push(col);
       for (const [value, ord] of values) for (const word of valueKeys(value)) rows.push({ col, word, value, ord });
     }

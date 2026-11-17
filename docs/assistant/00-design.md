@@ -124,8 +124,8 @@ VALUES THE QUESTION NAMES — words of the question found in the datasets above,
 ```
 
 - **Words:** ⌘K's (`wordsOf`), at most 6 a dataset: none with a digit (numbers and dates are not
-  matched), no question or period word ("what", "in", "last", "quarter", "total"), none of the
-  dataset's own name or column names. A word of 4 letters or more matches the start of a word of a
+  matched, except an id token in an id-like column: below), no question or period word ("what",
+  "in", "last", "quarter", "total"), none of the dataset's own name or column names. A word of 4 letters or more matches the start of a word of a
   value ("tech" finds Technology), a shorter one only a whole word ("EU", not Europe). Case is ignored
   by Unicode simple case folding, in the pattern itself (`(?i)`): `lower()` on every value cost twice
   as much.
@@ -140,13 +140,22 @@ VALUES THE QUESTION NAMES — words of the question found in the datasets above,
   sidecars of another build version or other marks are deleted then. It holds each text column's distinct values of up to 60
   bytes and the first row holding each, for a column of at most 10,000 of them (`MAX_DISTINCT`, ⌘K's
   cap too); never a column marked personal or financial, nor one carrying a marked value. A column
-  hidden from some callers is held and left out per caller on the ask. Each value is one row per word,
-  under the word's key: every letter of a case class folded to one string (upper, lower, upper again,
-  a code point at a time: ß and ẞ both "SS", ſ, s and S all "S"), so a question word is a range of
+  hidden from some callers is held and left out per caller on the ask. A column past the cap is
+  **id-like** when at least 95% of its values are distinct (`ID_DISTINCT`: an id is unique, while a
+  customer's email on an orders table repeats and stays scanned for its words) and at least 90% of its
+  values are ONE token carrying a digit or an @ (`ID_SHAPED`: ORD-48213, CUST00012345, a UUID, an
+  email). A name with a number in it is several words ("Widget 3000 Pro"), so a products table's names
+  stay name-like: a false id-like would lose a name, a false name-like only costs the scan. The
+  distinct count's statement also counts the values (no cost measured), and the shape is one more
+  statement over the near-distinct columns past the cap alone, over the whole column (9 to 13 ms a
+  column on 1,000,000 rows; a sample of the first 10,000 rows was 1 to 2 ms, but a head sample can
+  call a column of names ids). Each value is one row per word, under the word's key: every letter of
+  a case class folded to one string (upper, lower, upper again, a code point at a time: ß and ẞ both "SS", ſ, s and S all "S"), so a question word is a range of
   keys (a short word its key, a longer one a prefix) and the rule itself (the same pattern, JS's
-  engine) picks from what that finds. A first row holds the set: the build version, the stamp of the
-  write it read (the record's `updatedAt` and `rowCount`), the columns it holds whole and the catalog
-  marks then. Nothing of it is in a pod's memory.
+  engine) picks from what that finds. A first row holds the set: the build version (2 since
+  `idLike`), the stamp of the write it read (the record's `updatedAt` and `rowCount`), the columns it
+  holds whole, the columns past the cap that are id-like, and the catalog marks then. Nothing of it is
+  in a pod's memory.
 - **Built after each write, off its path.** Every data write (an import, a refresh, an incremental
   append, Prepare, a column edit, an input table's edit, a snapshot restore, Live → extract) goes
   through `datasets.persist`, which chains the build onto that dataset's write chain once the record
@@ -163,10 +172,21 @@ VALUES THE QUESTION NAMES — words of the question found in the datasets above,
   the values found are confirmed under the lock: one bounded DuckDB statement a dataset with any
   (`v IN (…)` after the lock), so a value that only rows outside the lock hold, or one a stale sidecar
   still has, never reaches the prompt. The rest is scanned as below, within the same budget: a
-  dataset with no sidecar or one from another write, a column past the cap (`shortcut:` an id or
-  email column is scanned on every ask while the budget lasts), and, for a locked caller, a word that
-  finds more than 100 values in a column. A failed lookup scans everything. `askValueIndex` on
-  `/metrics` counts datasets answered from the index (`resident`) and not (`skipped`).
+  dataset with no sidecar or one from another write, a name-like column past the cap (`shortcut:`
+  scanned on every ask while the budget lasts), and, for a locked caller, a word that finds more than
+  100 values in a column. A failed lookup scans everything. **An id-like column** is scanned only when
+  the question has an id token (`idTokens`: a token, between spaces and `, ; ' "` and brackets,
+  holding an @, a UUID, or a digit with a letter or 5 digits in a row, `ID_DIGITS`; none that is only
+  the dataset's own names), and for those tokens alone, in the same one statement as the rest. A
+  number of fewer digits is a count, a year or a quarter ("top 10", "2024"): as a token it filled the
+  12-line block with ORD-2024 lines and pushed 6 of the bench's 12 datasets' values out. A token is
+  matched as its words in that order, each whole, so "order 48213" finds ORD-48213 and not
+  ORD-482130, and jane.doe@acme.com that address and not every address at acme.com. A question
+  with no id token sends no statement at all for it. A question of an id alone
+  ("48213?") is still looked for, in the datasets whose set has an id-like column. The loss, pinned
+  by a test: a word of a value in an id-like column is no longer found by a word ("acme" no longer
+  lists an email at acme.com); a dataset with no sidecar, or a stale one, is scanned as before.
+  `askValueIndex` on `/metrics` counts datasets answered from the index (`resident`) and not (`skipped`).
 - **Kept current:** the `values:index` job (a row per org in the jobs table, every 10 minutes on any
   pod, never at startup) builds each dataset whose sidecar is missing (made before this release, a
   pod killed mid-build) or stale, so a column marked personal leaves the index on its next run
@@ -197,10 +217,13 @@ VALUES THE QUESTION NAMES — words of the question found in the datasets above,
   | | index | scan (before) |
   |---|---|---|
   | an ask over the 12, every column it may search held | 18 to 22 ms: the lookup, no other statement; 12 of 12 datasets answered | about 0.5 s, 4 of 12 searched before the budget |
-  | the same, each dataset's id column (past the cap) scanned | 0.37 to 0.41 s, 11 to 12 scans within the budget, 12 of 12 answered for the other columns | as above |
+  | the same, "sales in south", with each dataset's id column (`order_id`, 1,000,000 values, past the cap) | 22 to 26 ms: the lookup alone, `order_id` id-like and not scanned; 12 of 12 answered (before id-like columns: 383 to 393 ms, 12 scans within the budget) | 0.41 to 0.54 s, 3 to 4 of 12 searched |
+  | a year in the question, "sales in south in 2024" | 24 to 26 ms, no statement: a year is no id token (with every digit one, 222 to 239 ms and 6 of 12 answered, the block full of ORD-2024) | as above |
+  | an id in the question, "sales of order 48213" | 396 to 423 ms: each `order_id` scanned for 48213 alone within the budget, 11 to 12 scans | as above |
+  | east, a row lock on each, "sales in east for order 48212" | 175 to 185 ms: the confirmation and the id scan in one statement a dataset, 6 before the block was full (before: "sales in east" with `order_id` scanned, 313 ms; now 83 to 92 ms, the confirmations alone) | as above |
   | a row lock on each of the 12, every column held | 87 to 89 ms: the lookup and 12 confirmations | as above |
   | the lookup alone, 12 sidecars | 15 to 16 ms for words naming a few values; 31 to 35 ms for a word naming all 8,000 values of a column in each | none |
-  | build, after the write, one dataset | 0.1 to 0.2 s, the first up to 0.7 s (its two DuckDB statements over the table, then the file); a sidecar of 28,254 rows, 48 KiB beside a table of 6.8 MiB | none |
+  | build, after the write, one dataset | 0.1 to 0.2 s, the first up to 0.7 s (its DuckDB statements over the table: 83 ms before id-like columns, 108 ms with the shape of `order_id` read whole; then the file); a sidecar of 28,254 rows, 48 KiB beside a table of 6.8 MiB | none |
   | what a write still costs | nothing on its own path (a 200,000-row write returned before its 60 to 65 ms build); the dataset's next write waits for that build (of two at once, the second took 1.06 s against the first's 0.51 s), and the build's statements take the org's DuckDB worker as any query does | none |
 
   One scan of one such dataset was 0.13 s on the same machine (the 0.7 to 1 s measured before was a
@@ -217,7 +240,16 @@ VALUES THE QUESTION NAMES — words of the question found in the datasets above,
   one, each dataset alone and all together) and the prompt byte for byte through `copilot:ask`; the
   index alone hands a viewer West's customer values, and no prompt of theirs ever carries one
   (NEGATIVE CONTROL), nor a value planted in the sidecar the table lacks; no sidecar, a stale one or a
-  column past the cap: the scan, the same block; the job, the Trash and the deletes.
+  column past the cap: the scan, the same block; the job, the Trash and the deletes. Id-like columns
+  (section 8): a 50,000-name column still finds Acme, and a model name with a number is still scanned
+  (near-distinct but names; an id-shaped code that repeats: NEGATIVE CONTROLS); ZIP codes under the
+  cap stay held; "sales in south for acme" sends no statement against a 1,000,000-row table of ids
+  and emails (CONTROL: the scan reads it and finds an email by its domain, the loss), nor does "in
+  2024"; "order 48213", "48213?" alone and an email at row 777,777 are found, that value alone; east
+  is never told an id of West's rows, also when the id scan shares her confirmation's statement; a
+  stale sidecar with the flag set, or none, is scanned as before. On S3
+  (`test-storageS3` section 7) the set row carries the flag the same way. The second pattern is held
+  equal to its JS reference in `test-askValueSearch` (384 cases).
 
 **Table facts.** For a source table or Live dataset, the facts stored on its source table doc
 (`facts`, `src/app/sourceTables.ts`; shape `TableFacts`, `src/connectors/tableFacts.ts`) go in as a

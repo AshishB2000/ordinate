@@ -9,13 +9,15 @@
 // 2. AFTER THE WRITE: a save returns before its dataset's build (its sidecar is not there yet, the build is tracked work),
 //    and the dataset's next write waits for that build (the order of the Parquet writes); then every dataset saved has a
 //    sidecar built from its last write; a column past MAX_DISTINCT is not held, nor a personal one, whose values are not
-//    in the file at all.
+//    in the file at all. (Wide.code is names with a number, `Lot <n>`, so no column of sections 2 to 6 is id-like and the
+//    differential below holds as before: an id-like column is section 8's.)
 // 3. DIFFERENTIAL: the VALUES block from the index equals the scan's (the reference: `_setValueIndex(false)`) with
 //    Object.is, over questions × callers (the admin, an editor, east and west with row locks on Orders, east's on Mixed,
 //    nobody with Plain's region hidden) × scopes (each dataset alone, all at once); and through `copilot:ask`, the prompt
 //    byte for byte. Cost: where the index holds every column, an admin's ask sends ONE DuckDB statement (the lookup over
 //    every sidecar of the ask) and no other; east one confirmation a locked dataset with candidates; a confirmed value
-//    keeps its leading BOM.
+//    keeps its leading BOM. Compared with VALUES_BUDGET_MS lifted on both sides (`_setValuesBudget`) and ⌘K's index
+//    timers held, so a loaded machine cannot cut one side short (CONTROL after: the budget is back, a slow scan stops).
 // 4. LOCK: NEGATIVE CONTROL: the index holds West's customer values (its lookup returns them: it knows no lock) and the
 //    admin is told one; east never is, anywhere in the prompt. A value planted in the sidecar that the table does not
 //    have (a stale index): east is never told it (no row confirms it); the admin is (without a lock the index is used as
@@ -27,13 +29,21 @@
 //    fresh; a purge, deleteDataset and a project delete remove it; one whose dataset is gone is removed by the job.
 // 7. BENCH (VALUE_INDEX_BENCH=1, slow; ./valueIndexHarness bench): 12 datasets of 1,000,000 rows and five text columns: a build, the lookup, the
 //    scan and the confirmation, and what a write still costs, timed and printed (the numbers in the design doc).
+// 8. ID-LIKE COLUMNS (./valueIndexHarness idLike): past the cap, the build marks a column id-like when nearly every value
+//    is distinct and one token with a digit or an @; the ask scans it only for an id token of the question. A 50,000-name
+//    column still finds Acme (scanned), as does a model name with a number (NEGATIVE CONTROLS: near-distinct, but names;
+//    an id-shaped code that repeats); a ZIP code column under the cap stays held; a question with no digit or @ sends no
+//    statement at all against a 1,000,000-row table of ids and emails (CONTROL: the scan does, and finds an email by its
+//    domain: the loss, pinned), nor does a year ("in 2024"); "order 48213", "48213" alone and an email far down are found,
+//    the id alone; east is never told an id of West's rows (CONTROL: the admin is, and east its own), also in the
+//    statement that confirms her index values; a stale sidecar with the flag set, or none, is scanned as before.
 //
 //   npm run build:ts && [DATABASE_URL=…] [VALUE_INDEX_BENCH=1] node scripts/test-askValueIndex.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import * as RP from './rowPolicyHarness';
-import { bench, counted, metasOf, rowsIn, setsOf, sidecarOf } from './valueIndexHarness';
+import { bench, counted, idLike, metasOf, rowsIn, setsOf, sidecarOf, withoutSearchIndex } from './valueIndexHarness';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -137,7 +147,7 @@ async function seed(W: RP.World): Promise<Seeded> {
     // A second lock for east, on Mixed's `b`: its confirmations then carry a leading BOM, accents and folded case.
     const rule = await W.call('boss', 'dataset:setRowPolicy', { projectId: W.P, datasetId: mixed, policy: { column: 'b', rules: [{ teamId: W.team, values: ['\uFEFFWest', 'Westfield', 'EU', 'Straße', 'Acme Corp', 'Δέλτα west', 'İstanbul'] }] } });
     if (rule.body?.ok !== true) throw new Error(`fixture: Mixed's rule ${rule.text}`);
-    const wide = await save('Wide', [T('code'), T('kind')], Array.from({ length: WIDE_ROWS }, (_, i) => [i === 5017 ? WIDE_CODE : `K-${i}`, ['Westgate', 'Other', 'Acme'][i % 3]]));
+    const wide = await save('Wide', [T('code'), T('kind')], Array.from({ length: WIDE_ROWS }, (_, i) => [i === 5017 ? WIDE_CODE : `Lot ${i}`, ['Westgate', 'Other', 'Acme'][i % 3]]));
     await lifecycle.settleWork();
     return { mixed, wide, all: [W.orders, W.east, W.west, W.plain, mixed, wide] };
   });
@@ -201,7 +211,7 @@ async function afterWrite(W: RP.World, s: Seeded): Promise<void> {
   ok('built: every dataset saved has a sidecar built from its last write', fresh && metas.length === s.all.length, JSON.stringify([...sets.entries()]));
   ok('built: Orders holds its text columns (region, customer), not its number or date ones', sets.get(W.orders)?.indexed.join() === '0,3', JSON.stringify(sets.get(W.orders)));
   ok('built: a column marked personal is not held (Mixed.contact), its marks recorded', sets.get(s.mixed)?.indexed.join() === '0,1' && sets.get(s.mixed)?.marked.join() === 'contact', JSON.stringify(sets.get(s.mixed)));
-  ok(`built: a column past ${vir.MAX_DISTINCT} distinct values is not held (Wide.code), the other is`, sets.get(s.wide)?.indexed.join() === '1', JSON.stringify(sets.get(s.wide)));
+  ok(`built: a column past ${vir.MAX_DISTINCT} distinct values is not held (Wide.code), the other is; names, so not id-like`, sets.get(s.wide)?.indexed.join() === '1' && sets.get(s.wide)?.idLike.join() === '', JSON.stringify(sets.get(s.wide)));
   const all = await rowsIn(W, s.mixed);
   const personal = await rowsIn(W, s.mixed, "c2 = 'Westley Smith'");
   ok('built: a personal column\'s values are not in the sidecar at all', all > 50 && personal === 0, `${all} ${personal}`);
@@ -210,6 +220,30 @@ async function afterWrite(W: RP.World, s: Seeded): Promise<void> {
 // ── 3. The differential ──────────────────────────────────────────────────────
 
 async function differential(W: RP.World, s: Seeded): Promise<void> {
+  // Complete results on both sides: under load the reference's scans ran past VALUES_BUDGET_MS and skipped datasets the
+  // index answered (seen at a load average of 24). The budget itself: the control at the end.
+  askValues._setValuesBudget(Infinity);
+  try {
+    await compared(W, s);
+  } finally {
+    askValues._setValuesBudget();
+  }
+  const real = vs.searchValuesResident;
+  (vs as { searchValuesResident: unknown }).searchValuesResident = async (...a: Parameters<typeof real>) => {
+    const r = await real(...a);
+    await new Promise((done) => setTimeout(done, askValues.VALUES_BUDGET_MS + 50));
+    return r;
+  };
+  try {
+    const slow = await both(() => block(W, 'boss', [W.plain, s.mixed], 'west'));
+    ok('DIFFERENTIAL: CONTROL: the budget is back after it: a first statement past VALUES_BUDGET_MS, the dataset after it skipped',
+      slow.off.includes('- Plain.region = "West"') && !slow.off.includes('Mixed.') && slow.on.includes('- Mixed.a = "West"'), JSON.stringify(slow));
+  } finally {
+    (vs as { searchValuesResident: unknown }).searchValuesResident = real;
+  }
+}
+
+async function compared(W: RP.World, s: Seeded): Promise<void> {
   await hide(W, true);
   try {
     const scopes = [...s.all.map((id) => [id]), s.all];
@@ -305,7 +339,7 @@ async function fallbacks(W: RP.World, s: Seeded): Promise<void> {
   const none = await counted(() => block(W, 'boss', [s.mixed], q));
   ok('fallback: a dataset with no sidecar is scanned (one statement), the same block', none.scans === 1 && none.value === want && want.includes(HEAD), JSON.stringify(none));
   const [mixedMeta] = await metasOf(W, 'boss', [s.mixed]);
-  const older: import('../src/engine/valueIndexResident').ValueSet = { version: vir.VALUE_INDEX_VERSION, stamp: 'older', indexed: [0, 1], marked: [] };
+  const older: import('../src/engine/valueIndexResident').ValueSet = { version: vir.VALUE_INDEX_VERSION, stamp: 'older', indexed: [0, 1], idLike: [], marked: [] };
   await W.as('boss', async () => parquetStore.writeTableAsync(await sidecarOf(W, s.mixed), vir.SIDECAR_COLUMNS, vir.sidecarRows(older, [])));
   const stale = await counted(() => block(W, 'boss', [s.mixed], q));
   ok('fallback: a sidecar built from another write is not read: scanned, the same block', stale.scans === 1 && stale.value === want && vir.stampOf(mixedMeta) !== 'older', JSON.stringify(stale));
@@ -373,11 +407,17 @@ async function job(W: RP.World, s: Seeded): Promise<void> {
   const W = await RP.world('value index');
   if (!W) return;
   try {
-    const s = await seed(W);
-    await afterWrite(W, s);
-    await differential(W, s);
+    // ⌘K's index timers, set off by these saves, would otherwise land in the differential's asks.
+    const s = await withoutSearchIndex(async (held) => {
+      const seeded = await seed(W);
+      await afterWrite(W, seeded);
+      await differential(W, seeded);
+      ok('DIFFERENTIAL: CONTROL: the saves did schedule ⌘K\'s index builds (Mixed, Wide, Brief twice at least), held until it is done', held() >= 4, String(held()));
+      return seeded;
+    });
     await lock(W);
     await fallbacks(W, s);
+    await idLike(W);
     await job(W, s);
     if (process.env.VALUE_INDEX_BENCH === '1') await bench(W);
   } finally {
