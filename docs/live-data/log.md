@@ -1680,3 +1680,51 @@ follows.)
   previous join's column, and whether BigQuery treats the related table's partition filter inside its scan as pruning.
   Still refused: a KPI across a link (`liveCardMetric` keeps `related`), a related measure. The Assistant's chart form
   follows the same links through this door (docs/assistant/00-design.md, "Joins in the chart form, as built").
+
+## 2026-11-17 — Live joins in the warehouse nightly
+
+(Follows the 2026-11-16 Live joins entry: until now only DuckDB, the fake connector, had run a joined statement.)
+
+- **What runs.** `scripts/warehouseLiveJoins.ts` asks one fixture's charts across links of each nightly warehouse:
+  Snowflake and BigQuery in the `live` job (`test-warehouseLive.ts`), ClickHouse 25.8 in the `clickhouse` job after its
+  matrix (`test-liveParityClickhouse.ts`). The cases are a related category, a related split, a related filter (`!=`),
+  two hops and a drill-across measure. Each is asked through `vizDataFor`, the executor and the real connector, and
+  compared with `Object.is` against joinJs over the seeded rows. joinJs runs on the copy's own plan (`vizJoin`), and a
+  drill-across runs through `fanOutVizData`'s line-up with joinJs at each question.
+- **The edge cases, in the rows.** Orders → Customers → Zones, many to one, with these keys:
+  - a key repeated with identical rows (c2);
+  - two keys repeated with different rows: c3 `'east'` then `'West'`, which is smaller by bytes; c6 a NULL row, then
+    `'Alpha'`;
+  - NULL, `''` and whitespace keys on both sides;
+  - `C1` beside `c1`;
+  - a zone key of −0 beside 0, which BigQuery partitions through `FORMAT('%.17g')`, and a zone repeated across that fold.
+
+  ClickHouse's `join_use_nulls` and its multi-hop `ON` come with the two-hop case. The row Live keeps is smaller on every
+  column, so the pick is the same row whichever columns a case reads. joinJs is fed that row first, and a pick check
+  asserts the divergence from a copy: joinJs in file order shows `'east'`.
+- **How each warehouse holds the rows.**
+  - Snowflake: literal defining queries (`liveParityLiteral`). The role stays read-only and needs no new secret.
+  - BigQuery: three tables rewritten by `CREATE OR REPLACE … OPTIONS (expiration_timestamp)` in
+    `BIGQUERY_SCRATCH_DATASET`, through the partition-time case's `bigquery`-scope token and script runner (now
+    exported). Without the variable, one skip line; set to no dataset name, a failure.
+  - ClickHouse: MergeTree tables in the job's scratch database.
+
+  Every record carries its warehouse's type names, as a schema sync writes them, because Snowflake's safe casts read them.
+- **The door.** The connector's `runBound` is watched and `warehouse()`'s admissions counted (`setDailyCheckForTest`).
+  The two counts must agree. On BigQuery, each statement must bill at most 30 MB: the 10 MB minimum for each of up to
+  three tables.
+- **On every `npm test`.** `scripts/test-warehouseLiveJoins.ts` runs the whole thing on the DuckDB fake. Its negative
+  controls:
+  - without the `row_number() = 1` cut, the cases and the pick fail;
+  - a statement billed past the bound fails the bytes check, and only it;
+  - one statement sent straight to the connector fails the door check, and only it;
+  - BigQuery's gate asks nothing when the variable is unset, and fails when it is malformed.
+- **Not verified yet.** No warehouse has run the cases; the first nightly with the secrets will be the first run. The
+  stand-in cannot check:
+  - the −0 key, because DuckDB stores −0 as 0;
+  - BYTES, `TO_BINARY` or `binary` orderings;
+  - the pruning of a related table's required range.
+
+  Databricks and Redshift have no nightly, and Postgres, which runs on every pull request, does not run the joins yet.
+  Measures on a related table and KPIs across a link are still refused on Live. They stay a named TODO list in the
+  script (`TODO_RELATED_MEASURE_AND_KPI_CASES`); the fixture already holds a related measure, `Customers.credit`.

@@ -43,6 +43,13 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube, dbt)
 # SQL on Live through the real executor. Each must answer, and its bytes billed
 # are bounded. Without that secret it prints one skip line.
 #
+# Each warehouse also runs the Live join cases (scripts/warehouseLiveJoins.ts): charts across saved links — a
+# related category, split and filter, two hops, drill-across and a dirty repeated key's pick — through the real
+# door, executor and connector, each Object.is joinJs over the same rows, every statement through warehouse().
+# Snowflake holds the three tables as literal defining queries (its role is read-only); BigQuery rewrites them in
+# BIGQUERY_SCRATCH_DATASET each run (they expire in three days; without that secret, one skip line), each
+# statement billed at most 30 MB; the `clickhouse` job writes them in its scratch database, after the matrix.
+#
 # The `live` job also measures date-filter pruning (scripts/warehousePruning.ts):
 # one date-filtered count in the cast form Live sends today and in the raw-range
 # form, by a BigQuery dry run and a Snowflake EXPLAIN (neither runs the query).
@@ -92,7 +99,7 @@ jobs:
       - run: npm ci
       - name: Type-check + compile TypeScript
         run: npm run build:ts
-      - name: Real-account checks (connectors, live parity, Live SQL, partition time, pruning)
+      - name: Real-account checks (connectors, live parity, Live SQL, joins, partition time, pruning)
         run: node scripts/test-warehouseLive.js
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -155,7 +162,7 @@ jobs:
         run: |
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:8123/ping && exit 0; sleep 2; done
           echo "ClickHouse never answered on 8123"; exit 1
-      - name: Live parity on ClickHouse
+      - name: Live parity on ClickHouse (and the join cases)
         run: node scripts/test-liveParityClickhouse.js
         env:
           CLICKHOUSE_URL: http://parity:parity@127.0.0.1:8123

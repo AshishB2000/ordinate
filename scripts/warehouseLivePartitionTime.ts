@@ -140,11 +140,7 @@ export async function runPartitionTime(cfg: BigqueryConfig, inner: Transport = h
   });
   try {
     // ── The fixture, with a token that may write ─────────────────────────
-    const write = await auth.accessToken(key, auth.CANCEL_SCOPES, async (assertion) => {
-      const req = auth.tokenRequest(assertion);
-      const res = await bq.send({ url: req.url, method: 'POST', headers: req.headers, body: req.body, timeoutMs: 15_000, maxBytes: 65_536 });
-      return auth.readTokenReply(res.status, res.body);
-    });
+    const write = await writeToken(key);
     if (!write.ok) return ok('partition time: a token that may write the fixture', false, keep(write).error);
     const written = await runScript(write.token, project, fixtureScript(table, rows, new Date(Date.now() + 3 * 86_400_000).toISOString()), cfg.location);
     ok(`partition time: the fixture rewritten (${rows.reduce((a, r) => a + r.n, 0)} rows in four partitions)`, written === '', written);
@@ -231,25 +227,34 @@ export async function runPartitionTime(cfg: BigqueryConfig, inner: Transport = h
     bq.setTransport(null);
     configSecrets.useSecretStore(null);
   }
+}
 
-  /** One script through jobs.query, waited for: '' when it finished, else what Google said. */
-  async function runScript(token: string, billing: string, script: string, location?: string): Promise<string> {
-    const api = async (method: 'GET' | 'POST', url: URL, body?: Record<string, unknown>): Promise<{ status: number; json: unknown }> => {
-      const r = await bq.send({ url, method, headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), timeoutMs: 30_000, maxBytes: 1 << 20 });
-      let json: unknown;
-      try { json = JSON.parse(r.body); } catch { json = undefined; }
-      return { status: r.status, json };
-    };
-    const said = (r: { status: number; json: unknown }): string => `HTTP ${r.status}: ${String(shape.prop(shape.prop(r.json, 'error'), 'message') ?? '').slice(0, 300)}`;
-    let r = await api('POST', shape.queriesUrl(billing), { query: script, useLegacySql: false, timeoutMs: 20_000, labels: { ordinate: 'nightly-fixture' }, ...(location ? { location } : {}) });
-    if (r.status !== 200) return said(r);
-    const job = shape.jobOf(r.json, location);
-    if (!job) return 'BigQuery did not say which job runs the fixture script';
-    const done = await until(async () => {
-      if (r.status !== 200 || shape.prop(r.json, 'jobComplete') === true) return true;
-      r = await api('GET', shape.resultsUrl(job, { timeoutMs: 10_000, maxResults: 0 }));
-      return r.status !== 200 || shape.prop(r.json, 'jobComplete') === true;
-    }, 180_000, 1_000);
-    return r.status !== 200 ? said(r) : done ? '' : 'the fixture script did not finish in 3 minutes';
-  }
+/** A token of the `bigquery` scope, for a fixture script only (the connector's own token is read-only). */
+export function writeToken(key: import('../src/connectors/bigqueryAuth').ServiceAccountKey): ReturnType<typeof auth.accessToken> {
+  return auth.accessToken(key, auth.CANCEL_SCOPES, async (assertion) => {
+    const req = auth.tokenRequest(assertion);
+    const res = await bq.send({ url: req.url, method: 'POST', headers: req.headers, body: req.body, timeoutMs: 15_000, maxBytes: 65_536 });
+    return auth.readTokenReply(res.status, res.body);
+  });
+}
+
+/** One script through jobs.query, waited for: '' when it finished, else what Google said. */
+export async function runScript(token: string, billing: string, script: string, location?: string): Promise<string> {
+  const api = async (method: 'GET' | 'POST', url: URL, body?: Record<string, unknown>): Promise<{ status: number; json: unknown }> => {
+    const r = await bq.send({ url, method, headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), timeoutMs: 30_000, maxBytes: 1 << 20 });
+    let json: unknown;
+    try { json = JSON.parse(r.body); } catch { json = undefined; }
+    return { status: r.status, json };
+  };
+  const said = (r: { status: number; json: unknown }): string => `HTTP ${r.status}: ${String(shape.prop(shape.prop(r.json, 'error'), 'message') ?? '').slice(0, 300)}`;
+  let r = await api('POST', shape.queriesUrl(billing), { query: script, useLegacySql: false, timeoutMs: 20_000, labels: { ordinate: 'nightly-fixture' }, ...(location ? { location } : {}) });
+  if (r.status !== 200) return said(r);
+  const job = shape.jobOf(r.json, location);
+  if (!job) return 'BigQuery did not say which job runs the fixture script';
+  const done = await until(async () => {
+    if (r.status !== 200 || shape.prop(r.json, 'jobComplete') === true) return true;
+    r = await api('GET', shape.resultsUrl(job, { timeoutMs: 10_000, maxResults: 0 }));
+    return r.status !== 200 || shape.prop(r.json, 'jobComplete') === true;
+  }, 180_000, 1_000);
+  return r.status !== 200 ? said(r) : done ? '' : 'the fixture script did not finish in 3 minutes';
 }
