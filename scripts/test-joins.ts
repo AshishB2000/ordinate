@@ -154,6 +154,10 @@ async function main(): Promise<void> {
       filters: [{ type: 'filter', column: 'units', op: '>', value: 0 }, { type: 'filter', column: 'bonus', op: 'not_empty' }] },
     { label: 'a numeric category bins over the join', enc: { category: 'target', categoryDatasetId: targets.id,
       values: [{ column: 'revenue', aggregation: 'sum' }] } },
+    // The mask never moves a row out of its group: tier is both the category and a related measure, and every East
+    // order reaches the same Targets row, so only its first keeps the count — and every one keeps its revenue in A.
+    { label: 'a related measure that IS the category (count of tier by tier, and sum of revenue)', enc: { category: 'tier', categoryDatasetId: targets.id,
+      values: [{ column: 'tier', aggregation: 'count', datasetId: targets.id }, { column: 'revenue', aggregation: 'sum' }] } },
   ];
   for (const c of cases) {
     const j = jp.resolveVizJoin(orders.id, c.enc, c.filters || [], RELS, infos);

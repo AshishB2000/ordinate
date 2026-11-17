@@ -23,6 +23,7 @@ import { computeMetric } from './metricValue';
 import type { MetricAggregation } from './metricValue';
 import { buildVizData } from './vizData';
 import type { VizDataResult } from './vizData';
+import type { VizEncoding } from './visuals';
 import type { DsInfo, JoinLayout, JoinPlan, VizJoin } from './joinPlan';
 
 /** The hidden per-table ordinal column. NUL-prefixed, so no header can collide with it. */
@@ -130,13 +131,37 @@ export function maskFanIn(table: TableData, keyCols: string[], measureTable: Map
   return { columns: table.columns, rows };
 }
 
+/**
+ * Rule 3 never touches a key: a related measure that is also the category or the split ("count of region by region")
+ * is masked in its own column while the key reads a hidden copy of it, so a masked row keeps its group — as
+ * joinResident keys the cell before it masks. Every other encoding is returned as it came.
+ */
+function keyCopies(table: TableData, encoding: VizEncoding, measureTable: Map<string, number>): { table: TableData; encoding: VizEncoding } {
+  const fields = (['category', 'series'] as const).filter((f) => {
+    const col = encoding[f];
+    return typeof col === 'string' && (measureTable.get(col) ?? 0) > 0;
+  });
+  if (fields.length === 0) return { table, encoding };
+  const columns = table.columns.slice();
+  const from: number[] = [];
+  const enc: VizEncoding = { ...encoding };
+  for (const f of fields) {
+    const ci = table.columns.findIndex((c) => c.name === encoding[f]);
+    if (ci < 0) continue;
+    const name = `\u0000k${f}`; // NUL-prefixed, as ordName: no header can collide with it
+    columns.push({ ...table.columns[ci], name });
+    from.push(ci);
+    enc[f] = name;
+  }
+  return { table: { columns, rows: table.rows.map((r) => r.concat(from.map((ci) => r[ci] ?? null))) }, encoding: enc };
+}
+
 /** The joined visual, JS reference: join, then the ordinary buildVizData with the fan-in mask. */
 export function joinedVizDataJs(join: VizJoin, tables: Map<string, TableData>, infos: Map<string, DsInfo>): VizDataResult {
-  const joined = joinTables(join.plan, join.layout, tables, infos);
-  const out = buildVizData(joined.columns, joined.rows, join.encoding, join.filters, {
+  const { table, encoding } = keyCopies(joinTables(join.plan, join.layout, tables, infos), join.encoding, join.measureTable);
+  return buildVizData(table.columns, table.rows, encoding, join.filters, {
     afterKey: (t, keyCols) => maskFanIn(t, keyCols, join.measureTable),
   });
-  return out;
 }
 
 /**
