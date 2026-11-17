@@ -36,6 +36,7 @@ import { manySideColumnGroups } from '../analysis/fanOutPlan';
 import { liveLinkStats } from './linkLive';
 import { isLive } from '../data/liveDataset';
 import { liveJoinMixed } from '../engine/liveRefusals';
+import { LiveFigureError } from '../engine/live/liveFigureError';
 
 type Infos = Map<string, DsInfo>;
 
@@ -78,7 +79,7 @@ export async function projectModel(projectId: string, primary: string): Promise<
   return { rels: live(list, infos), infos };
 }
 
-async function residentSources(projectId: string, plan: JoinPlan): Promise<JoinSource[] | null> {
+export async function residentSources(projectId: string, plan: JoinPlan): Promise<JoinSource[] | null> {
   if (!isResident()) return null;
   const out: JoinSource[] = [];
   for (const t of plan.tables) {
@@ -173,7 +174,7 @@ export async function joinedVizDataFor(
 }
 
 /** The join a metric's column and filters need (analysis/joinPlan planMetricJoin), or null when every one is the dataset's own. */
-async function metricJoin(projectId: string, datasetId: string, column: string, filters: FilterStep[]) {
+export async function metricJoin(projectId: string, datasetId: string, column: string, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
   // A via with no relationship left: no value, never a total. A term's other-table filter is refused, not skipped.
   if (list.length === 0 && !filters.some((f) => f && (f.via || f.datasetId))) return null;
@@ -211,6 +212,9 @@ export async function joinedMetricFor(
   const { infos, planned } = mj;
   if (!planned.ok) return { ok: true, value: null };
   const { plan, layout, column, table, filters: flt } = planned.value;
+  // A copy's KPI whose join reaches a Live dataset (a Live KPI's drill-across on a copy many side, ./metricFanOut): typed, as the chart's.
+  const live = await liveInCopyJoin(projectId, datasetId, plan);
+  if (live) throw new LiveFigureError(live);
 
   const sources = await residentSources(projectId, plan);
   if (sources) {

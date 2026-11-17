@@ -26,13 +26,15 @@ export interface LiveJoinRequest {
   /** The question over MERGED names, every dataset reference gone (`VizJoin.encoding`, `.filters`). */
   encoding: VizEncoding;
   filters: FilterStep[];
+  /** A KPI across links (ipc/liveJoin `liveMetricJoinOf`): its measure over a MERGED name; the encoding is then empty. */
+  metric?: { column: string; aggregation: string };
 }
 
 /** The joined env and the related sides' range sentences, or why it cannot be asked. `ts[i]` is `req.tables[i]`'s target. */
 export function joinedEnv(ts: LiveTarget[], req: LiveJoinRequest): { ok: true; env: CompileEnv & { join: LiveJoin }; notes: string[] } | LiveRefusal {
   const t0 = ts[0];
   const at = new Map(req.columns.map((c) => [c.name, c]));
-  const named = encodingNames(req.encoding, req.filters).flatMap((n) => (at.has(n) ? [at.get(n)!] : []));
+  const named = [...encodingNames(req.encoding, req.filters), ...(req.metric ? [req.metric.column] : [])].flatMap((n) => (at.has(n) ? [at.get(n)!] : []));
   const sides: JoinSide[] = [];
   const notes: string[] = [];
   for (let i = 0; i < req.tables.length; i++) {

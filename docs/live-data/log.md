@@ -1728,3 +1728,66 @@ follows.)
   Databricks and Redshift have no nightly, and Postgres, which runs on every pull request, does not run the joins yet.
   Measures on a related table and KPIs across a link are still refused on Live. They stay a named TODO list in the
   script (`TODO_RELATED_MEASURE_AND_KPI_CASES`); the fixture already holds a related measure, `Customers.credit`.
+
+## 2026-11-17 — Related measures and KPIs across a saved link (L4)
+
+(00-plan.md L4, "Joins across datasets"; follows 2026-11-16's charts across a link.)
+
+- **What works.** A Live chart may total a measure on a related ("one") table: sum, avg, count, min, max and countd,
+  by a primary or a related category, under a split and related filters. A Live KPI may follow a link: a filter on a
+  related column, a related measure, or both. A drill-across KPI (a measure on a MANY side) is that table's own KPI,
+  as a copy's and as a Live chart's drill-across: `computeCardMetricUnlocked` now asks `fanOutMetricFor` before the
+  Live split, and `metricFanOut` no longer refuses a Live many side; that KPI's filters across its link are asked of
+  the warehouse when every table is Live on one connection, else refused `related` — from either side: a copy's KPI
+  join that reaches a Live table now says so typed (`relationships.joinedMetricFor` asks `liveInCopyJoin`, as the
+  chart's join does) before any table is read, instead of the safety net's 409 `live_dataset`. A copy primary's KPI on
+  a Live many side, unfiltered, is that table's own Live KPI (it used to refuse). So a dashboard filter on a related
+  column now answers on a Live KPI tile as on its charts.
+- **The mask (joinJs rule 3, `compileJoin.fanInMask`).** After rule 2 a related row IS its key, so `lv_src` exposes
+  `lv_r<t>` (table t's `lv_k`) for each table a measure sits on — only then, so every statement without a related
+  measure is byte-identical to before. The measure's input is kept on the first row of its partition and NULL on the
+  rest: `CASE WHEN row_number() OVER (PARTITION BY <keys> ORDER BY <keys>) = 1 THEN <input> END`, over the FILTERED
+  rows. Every row of a partition holds the same related row, so which survives is irrelevant: rule 2's pick chooses the
+  row (the measure column is read, so it is in the pick's order), the mask counts it once. Count, sum and avg change;
+  min, max and countd are mask-invariant (the mask never removes a value's last copy).
+  - KPI: `SELECT <parts>(lv_v0) FROM (SELECT <mask by lv_r<t>> AS lv_v0 FROM <join> WHERE …) AS lv_m` — one group.
+  - Chart, no fold (dates, bins, a text axis of ≤ 50): `lv_raw` (the keys, the raw inputs `lv_u<i>`, `lv_r<i>`), then
+    `lv_base` masks per (`lv_g`, `lv_s`, `lv_r<i>`) — joinJs's (group key, split, related row) — and the rest of the
+    statement is unchanged.
+  - Chart, a folded text axis: joinJs runs `capText` BEFORE the mask, so its top 50 are ranked on the UNMASKED first
+    measure and "Other" is masked as ONE group. Re-adding masked categories into "Other" would count a related row
+    reached from two tail categories twice, so here the rank reads the unmasked rows as today, the fold's key map is
+    joined back onto the rows (`lv_kmap`, `lv_kb`, null-safe), the mask runs per (folded key, split, related row)
+    (`lv_bk`), and every part is aggregated ONCE from those rows (`lv_out`; a countd needs no recount).
+  - BigQuery partitions by no float: a number key's row id and a number split go in as `FORMAT('%.17g', …)`, as the cut's.
+  - Pinned by hand per dialect in `scripts/liveCompileJoins.ts` (`KPI_MASK`, `CHART_MASK`, `FOLD_MASK`).
+- **Refused, typed:** a related measure by week-calendar periods (`relatedMeasure`, a new sentence in four languages):
+  days roll up into periods in `shape.ts`, past any mask, as a distinct count does (`distinctByWeekCalendar`).
+- **The KPI's path.** `ipc/liveJoin.liveMetricJoinOf` plans as a copy's KPI (`ipc/relationships.metricJoin`,
+  `joinPlan.planMetricJoin`, metadata only), refuses a mix in the chart's sentences, and `liveJoinedKpi` takes each
+  related table's lock (`underLocks`, the chart's nested `withLockOf`, its column gate first). The executor's
+  `askJoined` is now shared by `liveJoinedVizData` and `liveJoinedMetric`: every target, `joinedEnv` (lock, base
+  filters, `lookupRequired`), the primary's required range, then ONE `ask` under every table's epoch at the lowest
+  cache age, its statement counted once, under the primary. A plan that fails is thrown typed `related` (the copy shows
+  no figure); a locked caller is refused `related` at the KPI door, as for a copy. A KPI filter on a column only a
+  reverse hop reaches is no join on either side: the copy skips it with its warning, and so does Live.
+- **A copy divergence, found and pinned, not followed.** When a related measure IS the category (count of region by
+  region), joinJs's `maskFanIn` nulls the group key's own cells, so later rows of a related row move to the blank
+  category with every other measure of the chart. joinResident masks a copy and keeps the key; Live agrees with it
+  (`test-liveJoinMeasures`). joinJs's to fix.
+- **Tests.** `test-liveJoinMeasures`: every aggregation of a related measure by a primary and a related category,
+  under a related split and filters, a 60-category fold, KPIs with a related filter, a related measure (each
+  aggregation) and both, a KPI under a lock, the KPI's one statement, cache hit and related Refresh, the drill-across
+  KPI, the fold under every aggregation and under a primary first measure — Object.is three ways (Live, joinResident called directly and asserted non-null, joinJs); NEGATIVE CONTROLS:
+  without the mask, sum and count by the primary category and the KPI take the by-hand unmasked figures (318, 6, 550)
+  and differ from joinJs; a chart across a reverse hop refuses; a KPI beside a copy, across two connections, through a
+  deleted relationship, or drill-across over a mix either way round refuses typed, nothing sent; no Live dataset hydrated.
+  `test-rowPolicyLiveJoins`: a related-measure KPI refused `related` for a locked caller and `hidden` for a hidden
+  column, as the copy's, with its negative controls. `test-liveJoins`' refusal of a related measure became an answer;
+  `test-rowPolicyFanOutJoins`' Live many-side KPI (a copy primary) answers unfiltered and refuses filtered on the copy;
+  `test-liveRouteAnswers`' copilot card on a copy whose filter reaches a Live table reads `live_refused` (related), not
+  the safety net's `live_dataset`, and is still n/a in the facts.
+- **Not verified on a real engine.** The mask's `row_number()` partitioned by a BYTES key (BigQuery), a `binary` one
+  (Snowflake `TO_BINARY`, Databricks `BINARY`) or an md5 (Redshift), and ClickHouse's window over a `join_use_nulls`
+  join, have run only on the fake warehouse (DuckDB). Cost: one window per related measure; a fold adds a join of the
+  rows back onto at most 51 keys.

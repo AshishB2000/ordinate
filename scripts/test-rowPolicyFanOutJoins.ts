@@ -12,7 +12,8 @@
 //      `related` before Orders is asked. NEGATIVE CONTROL: without the many-side measure in reachesOther, the
 //      locked caller gets a figure. Restricted on Orders: refused (metricReads names Orders). A publish
 //      records both tables.
-//   5. LIVE: a Live many side is refused, typed, never a figure — for a chart and for a KPI.
+//   5. LIVE: a Live many side is refused, typed, never a figure, for a chart by a Customers category and a KPI filtered
+//      on Customers; an unfiltered KPI is the Live many side's own KPI.
 //   6. A HIDDEN MANY-SIDE COLUMN (part 4, cross-part item 6): Orders hides `amount` from viewers; east's chart on
 //      Customers with a measure over it is refused `hidden` at the column gate, before any sub-question. NEGATIVE
 //      CONTROLS: the editor gets the figure; east's fan-out over Returns' refund answers, Object.is-equal to the editor's.
@@ -198,8 +199,12 @@ const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
     });
     const live = await chart('ed', { category: 'segment', values: [M('id', 'count'), M('amount', 'sum', liveOrders)] });
     ok('a Live many side: refused, typed (live_refused), never a figure', live.body?.ok === false && live.body.code === 'live_refused', show(live));
+    // A KPI over it is that table's own Live KPI (live-data log 2026-11-17), as its chart's question would be; a filter on
+    // Customers (a copy) would join the two engines, so it is refused, typed, as the chart above.
     const liveKpi = await W.call('ed', 'dashboard:metric', { projectId: P, datasetId: C, column: 'paid', aggregation: 'sum' });
-    ok('a KPI over a Live many side\'s column: refused, typed (live_refused), never a figure', liveKpi.body?.ok === false && liveKpi.body.code === 'live_refused' && liveKpi.body.reason === 'related', show(liveKpi));
+    ok('a KPI over a Live many side\'s column: Live orders\' own KPI, asked of the warehouse (2 + 3)', liveKpi.body?.ok === true && liveKpi.body.value === 5, show(liveKpi));
+    const mixedKpi = await W.call('ed', 'dashboard:metric', { projectId: P, datasetId: C, column: 'paid', aggregation: 'sum', filters: [{ type: 'filter', column: 'segment', op: '=', value: 'x' }] });
+    ok('…filtered on Customers (a copy): refused, typed (live_refused, related), never a figure', mixedKpi.body?.ok === false && mixedKpi.body.code === 'live_refused' && mixedKpi.body.reason === 'related', show(mixedKpi));
   } finally {
     (fan as { fanOutVizData: typeof real }).fanOutVizData = real;
     (mf as { fanOutMetricFor: typeof realKpi }).fanOutMetricFor = realKpi;

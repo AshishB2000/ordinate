@@ -459,9 +459,12 @@ Sizes: **S** ≈ one small PR, **M** ≈ a normal PR, **L** ≈ a large PR or tw
   [log](log.md)):** a Live chart's category, split and filters may come from related Live datasets on the SAME
   connection, planned as a copy's (`joinPlan.resolveVizJoin`), asked as ONE statement (`engine/live/compileJoin.ts`),
   each table under its own base filters, lock and required range; a measure on a many side by drill-across, each
-  question across its link. Any other mix refuses, typed. Still to do: a measure on a related (one) table, a KPI or
-  an AI answer across a link (the Assistant's chart form is its own change); a copy beside a Live dataset is
-  refused in a sentence, from either side.
+  question across its link. Any other mix refuses, typed. **Then (2026-11-17, [log](log.md)):** a measure on a
+  related (one) table, each related row counted once per group (joinJs rule 3, a window mask in the statement), and a
+  KPI across a link (a related filter, a related measure, both), planned as a copy's (`joinPlan.planMetricJoin`) and
+  asked as one statement under the same protections; a drill-across KPI is the many side's own KPI on Live too.
+  Still to do: an AI answer across a link beyond the Assistant's chart form; a related measure by week-calendar
+  periods (refused, typed); a copy beside a Live dataset is refused in a sentence, from either side.
 - **AI notes and synonyms per dataset** ("revenue means `net_amount`, completed orders only"):
   Omni's `ai_context`.
 - **Server requery:** roll up or re-filter a cached live result in our DuckDB without a warehouse

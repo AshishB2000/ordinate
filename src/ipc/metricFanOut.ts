@@ -5,7 +5,8 @@
 // repeat per order). It is Orders' own KPI: analysis/fanOutPlan.planFanOutMetric routes the dashboard's filters
 // onto Orders by the pinned paths charts use (D11), and the figure is `computeCardMetric` on Orders — so its row
 // access rules, the answer cache, fx and the resident-or-JS decision are whatever the door does for a plain KPI
-// there. Nothing is summed here. A Live many side refuses, typed, as a fan-out chart's does (D15).
+// there. Nothing is summed here. A Live many side's KPI is asked of its warehouse, its filters across the link there
+// when every table is Live on one connection, else refused `related` (./liveJoin) — as a fan-out chart's (./vizFanOut).
 //
 // A caller locked on Customers never gets here: rowDoors.reachesOther refuses a many-side measure first, since
 // Orders' KPI run inside Customers' lock scope would read Customers as open (D14).
@@ -17,10 +18,8 @@ import type { VizMeasure } from '../analysis/visuals';
 import { measureLabel } from '../analysis/vizData';
 import { planFanOutMetric } from '../analysis/fanOutPlan';
 import * as msg from '../analysis/fanOutMessages';
-import { refuse } from '../engine/live/liveSpec';
 import * as datasets from '../data/datasets';
 import { metricReads, projectModel } from './relationships';
-import { LiveFigureError, liveMetaOf } from './liveRoute';
 
 type Spec = { column: string; aggregation: MetricAggregation };
 type Kpi = { ok: boolean; value: number | null; notes?: string[] };
@@ -40,10 +39,6 @@ export async function fanOutMetricFor<R extends Kpi>(projectId: string, datasetI
   if (!planned) return null;
   if (!planned.ok) return { ok: true, value: null, notes: [planned.error] }; // no one table to total it on: no figure, and why
   const { plan } = planned;
-  if (await liveMetaOf(projectId, plan.datasetId)) {
-    const r = refuse('related');
-    throw new LiveFigureError({ ok: false, code: 'live_refused', error: r.message, reason: r.code });
-  }
   const res = await ask(projectId, plan.datasetId, spec, plan.filters, params);
   if (!res.ok) return res;
   const name = `“${measureLabel(spec as VizMeasure)}”`;

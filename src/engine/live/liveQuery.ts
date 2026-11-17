@@ -12,6 +12,7 @@
 //
 //   liveVizData(projectId, datasetId, encoding, filters)   ← vizDataFor (charts, publish, export)
 //   liveJoinedVizData(projectId, request)                  ← the same, across links (ipc/liveJoin, L4)
+//   liveJoinedMetric(projectId, request)                   ← a KPI across links (ipc/liveJoin, L4)
 //   liveMetric(projectId, datasetId, spec, filters)        ← metricFor / computeCardMetric (KPI tiles)
 //   liveAnswer(projectId, spec)                            ← computeCard (AI answers)
 //   liveLookup(projectId, datasetId, build)                ← computeCard's case fix (L2.4)
@@ -55,7 +56,7 @@ import type { Compiled, CompiledQuery } from './compile';
 import type { LiveOutcome, LiveRunner } from './evaluate';
 import { evaluateLive } from './evaluate';
 import { fly } from './liveFlight';
-import type { AdaptOpts, LiveAdapted, LiveIR, LiveRefusal, LiveRefusalCode } from './liveSpec';
+import type { AdaptOpts, LiveAdapted, LiveColumn, LiveIR, LiveRefusal, LiveRefusalCode } from './liveSpec';
 import { fromAnswerSpec, fromMetric, fromVizEncoding, isRefusal, refuse } from './liveSpec';
 import type { LiveRows } from './shape';
 import type { LiveTarget, TargetProblem } from './liveTarget';
@@ -321,12 +322,11 @@ export async function liveVizData(projectId: string, datasetId: string, encoding
 }
 
 /**
- * A chart whose category, split or filters come from related Live datasets on the primary's connection (L4,
- * ./compileJoin): every table's target, the joined env (./liveJoin), the primary's required range as any question
- * of it takes one, then ONE question — cached under every table's epoch at the lowest cache age, its statements
- * counted under the primary (`warehouse()`), as `liveVizData`'s.
+ * A question across links (L4, ./compileJoin): every table's target, the joined env (./liveJoin), the primary's
+ * required range as any question of it takes one, then ONE question — cached under every table's epoch at the lowest
+ * cache age, its statements counted under the primary (`warehouse()`). What the chart and the KPI below share.
  */
-export async function liveJoinedVizData(projectId: string, req: LiveJoinRequest, opts: AdaptOpts = {}): Promise<LiveVizReply> {
+async function askJoined(projectId: string, req: LiveJoinRequest, adapt: (columns: LiveColumn[]) => LiveAdapted): Promise<{ asked: Asked; t: LiveTarget; columns: LiveColumn[]; warnings: string[]; notes: string[] } | LiveFailure> {
   const byId = new Map<string, LiveTarget>();
   const ts: LiveTarget[] = [];
   for (const tb of req.tables) {
@@ -340,7 +340,7 @@ export async function liveJoinedVizData(projectId: string, req: LiveJoinRequest,
   const t = ts[0];
   const j = joinedEnv(ts, req);
   if (!j.ok) return refused(dialectOf(t), j);
-  const a = fromVizEncoding(req.encoding, req.filters, j.env.columns, opts);
+  const a = adapt(j.env.columns);
   if (!a.ok) return refused(dialectOf(t), a);
   // The primary's merged names are its own, so its range reads the question as its own questions are read.
   const [own, ...rest] = j.env.join.sides;
@@ -348,19 +348,35 @@ export async function liveJoinedVizData(projectId: string, req: LiveJoinRequest,
   if (!r.ok) return refused(dialectOf(t), r);
   const env = { ...j.env, join: { ...j.env.join, sides: [{ ...own, env: r.env }, ...rest] } };
   const asked = await ask({ ...t, env }, r.ir, [...byId.values()].filter((o) => o !== t));
-  if (!asked.ok) return asked;
-  const o = asked.outcome;
-  if (o.kind !== 'chart') return refused(dialectOf(t), refuse('badQuery'));
-  const notes = [...new Set([...r.notes, ...j.notes])];
+  return { asked, t, columns: env.columns, warnings: a.warnings, notes: [...new Set([...r.notes, ...j.notes])] };
+}
+
+/** A chart whose category, split, filters or measures come from related Live datasets on the primary's connection. */
+export async function liveJoinedVizData(projectId: string, req: LiveJoinRequest, opts: AdaptOpts = {}): Promise<LiveVizReply> {
+  const r = await askJoined(projectId, req, (columns) => fromVizEncoding(req.encoding, req.filters, columns, opts));
+  if (!('asked' in r)) return r;
+  if (!r.asked.ok) return r.asked;
+  const o = r.asked.outcome;
+  if (o.kind !== 'chart') return refused(dialectOf(r.t), refuse('badQuery'));
   return {
     ok: true,
     data: o.chart.data,
-    recommendedShape: recommendChartType(env.columns, req.encoding).shape,
-    warnings: a.warnings.concat(o.warnings),
+    recommendedShape: recommendChartType(r.columns, req.encoding).shape,
+    warnings: r.warnings.concat(o.warnings),
     category: o.chart.category,
-    asOf: asked.asOf,
-    ...(notes.length ? { notes } : {}),
+    asOf: r.asked.asOf,
+    ...(r.notes.length ? { notes: r.notes } : {}),
   };
+}
+
+/** A KPI whose measure or filters come from related Live datasets on the primary's connection (`req.metric`). */
+export async function liveJoinedMetric(projectId: string, req: LiveJoinRequest & { metric: { column: string; aggregation: string } }, opts: AdaptOpts = {}): Promise<LiveMetricReply> {
+  const r = await askJoined(projectId, req, (columns) => fromMetric(req.metric, req.filters, columns, opts));
+  if (!('asked' in r)) return r;
+  if (!r.asked.ok) return r.asked;
+  const o = r.asked.outcome;
+  if (o.kind !== 'metric') return refused(dialectOf(r.t), refuse('badQuery'));
+  return { ok: true, value: o.value, warnings: r.warnings.concat(o.warnings), asOf: r.asked.asOf, ...(r.notes.length ? { notes: r.notes } : {}) };
 }
 
 /** One KPI number: `metricFor`'s question on a Live dataset. */

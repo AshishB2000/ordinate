@@ -501,7 +501,10 @@ labelled one for its category (the block lists each dataset by its default path;
 `categoryVia`); a bare linked name repaired to its dataset (rejection, not repair); a Live join beside a copy or across two
 connections (the door's sentence, above). A caller whom
 row rules lock on the asked dataset is still shown its LINKED DATASETS (a linked dataset can be answered on its own),
-though the door refuses them a join (`related`); the block does not say so for them.
+though the door refuses them a join (`related`); the block does not say so for them. On Live the door itself is no
+longer what leaves a related measure out: since 2026-11-17 (docs/live-data/log.md) a Live chart counts a related
+measure once per related row per group, as a copy's, and a Live KPI follows a link, so a related measure here waits on
+the spec alone; by week-calendar periods it is still refused (`relatedMeasure`).
 
 **Left as they are:** an SQL answer cannot be refined by a follow-up chip. The Assistant check
 (`verified:check`) compares the model's chart spec with a verified one, so it asks no SQL question, and

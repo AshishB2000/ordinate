@@ -23,8 +23,8 @@
 //   - an "as of" read: the warehouse answers now, and a Live dataset keeps no
 //     snapshots to read the past from;
 //   - currency conversion (./fxQuery): the warehouse would sum unconverted amounts;
-//   - a column or filter reached through a relationship to a copy, or to a Live dataset on another connection, and a
-//     measure on a related table (./liveJoin): a join of Live datasets on ONE connection is asked of that warehouse (L4).
+//   - a column or filter reached through a relationship to a copy, or to a Live dataset on another connection
+//     (./liveJoin): a join of Live datasets on ONE connection is asked of that warehouse (L4), a chart's or a KPI's.
 // LOD and parameter replay cannot arise — both live in prepare steps, and a
 // Live dataset has none — and pivots, cohorts, funnels, drivers, maps, facets
 // and raw points are the adapter's own refusals (engine/live/liveSpec.ts).
@@ -47,7 +47,7 @@ import { fxContext, fxVizContext } from './fxQuery';
 import type { VizDataReply } from './visuals';
 import { isCountLike } from '../data/aggregations';
 import { externalsOf, layerFailure, mirrorsOf, relabelled } from './semanticFigures';
-import { liveJoinOf, liveJoinedChart } from './liveJoin';
+import { liveJoinOf, liveJoinedChart, liveJoinedKpi, liveMetricJoinOf } from './liveJoin';
 
 /** The dataset's metadata when it is Live, else null — one metadata read, no rows. */
 export async function liveMetaOf(projectId: string, datasetId: string): Promise<DatasetMeta | null> {
@@ -112,11 +112,14 @@ export async function liveCardMetric(
   filters: FilterStep[],
 ): Promise<{ ok: true; value: number | null; asOf: AsOf; notes?: string[] }> {
   const touched = ['column' in spec ? spec.column : undefined, ...(filters || []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string');
+  // A measure or filter through a relationship (L4, ./liveJoin): planned as a copy's KPI, so none of its names is "foreign" below.
+  const joined = 'column' in spec ? await liveMetricJoinOf(projectId, meta, spec, filters) : null;
   // A layer's metric is the layer's figure, never converted here.
-  const pre = await preRefusal(projectId, meta, touched,
+  const pre = await preRefusal(projectId, meta, joined ? [] : touched,
     async () => 'column' in spec && !isCountLike(spec.aggregation) && !!(await fxContext(projectId, meta.id, [spec.column], touched)));
   if (pre) throw new LiveFigureError(pre);
-  const r = await liveMetric(projectId, meta.id, spec, filters);
+  if (joined && !joined.ok) throw new LiveFigureError(joined.failure);
+  const r = joined ? await liveJoinedKpi(projectId, joined) : await liveMetric(projectId, meta.id, spec, filters);
   if (!r.ok) throw new LiveFigureError(r);
   return { ok: true, value: r.value, asOf: r.asOf, ...(r.notes ? { notes: r.notes } : {}) };
 }

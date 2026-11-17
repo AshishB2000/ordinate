@@ -6,7 +6,9 @@
 //      code and reason the copy's twin gets. NEGATIVE CONTROL: with the related gate off, the body runs, and its nested
 //      `withLockOf` on Customers compiles east's lock into Customers' scan: the chart equals joinJs over east's
 //      customers only (the rest unmatched), while the editor's equals joinJs over every customer.
-//   2. A HIDDEN COLUMN on the related table, read as the category: refused `hidden` at the door, as the copy's.
+//      A KPI of a related measure (count of Customers' tier from Orders) is refused the same way; with the gate off it
+//      takes east's lock (2 customers, not 3), and the editor's counts each reached customer once (3, not 4 orders).
+//   2. A HIDDEN COLUMN on the related table, read as the category or as a KPI's measure: refused `hidden` at the door, as the copy's.
 //      NEGATIVE CONTROL: the editor gets the figure.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicyLiveJoins.js
@@ -64,6 +66,8 @@ void (async () => {
       return out;
     });
     const chart = (who: string, d: string, by: string, column = 'region') => W.call(who, 'visual:data', { projectId: P, datasetId: d, encoding: { category: column, categoryDatasetId: by, values: [{ column: 'amt', aggregation: 'sum' }] } });
+    // A KPI across the link (L4): count of Customers' tier from Orders, each customer once (the fan-in mask).
+    const kpi = (who: string, d: string) => W.call(who, 'dashboard:metric', { projectId: P, datasetId: d, column: 'tier', aggregation: 'count', filters: [] });
     const policy = (d: string, on: boolean) => W.call('boss', 'dataset:setRowPolicy', { projectId: P, datasetId: d, policy: on ? { column: 'region', rules: [{ teamId: W.team, values: ['East'] }] } : null });
 
     // ── 1. Rules on the related table ───────────────────────────────────
@@ -74,8 +78,12 @@ void (async () => {
     ok('setup: rules on both Customers', (await policy(ids.lc, true)).body?.ok === true && (await policy(ids.xc, true)).body?.ok === true);
     const [live, copy] = [await chart('east', ids.lo, ids.lc), await chart('east', ids.xo, ids.xc)];
     ok('east, with rules on the related Live table: refused related — the code and reason the copy\'s twin gets', H.refused(live, 'related') && H.refused(copy, 'related'), `${show(live)} | ${show(copy)}`);
+    const [kLive, kCopy] = [await kpi('east', ids.lo), await kpi('east', ids.xo)];
+    ok('…and east\'s KPI of a related measure is refused related too, as the copy\'s', H.refused(kLive, 'related') && H.refused(kCopy, 'related'), `${show(kLive)} | ${show(kCopy)}`);
     doors.setRelatedGateForTest(false);
     try {
+      const k = await kpi('east', ids.lo);
+      ok('NEGATIVE CONTROL: with the gate off, the KPI takes east\'s lock in Customers\' scan — c1 and c3 (2), not every reached customer (3)', k.body?.ok === true && k.body.value === 2, show(k));
       const locked = await chart('east', ids.lo, ids.lc);
       ok('NEGATIVE CONTROL: with the related gate off, liveJoin\'s withLockOf puts east\'s lock in Customers\' scan — joinJs over east\'s customers', same(figures(locked), eastOnly) && !same(figures(locked), everyone), show(locked));
       ok('…and the editor, whom nothing restricts, still gets every customer', same(figures(await chart('ed', ids.lo, ids.lc)), everyone));
@@ -95,6 +103,10 @@ void (async () => {
     const [hidLive, hidCopy] = [await chart('east', ids.lo, ids.lc, 'tier'), await chart('east', ids.xo, ids.xc, 'tier')];
     ok('a column hidden on the related Live table, read as the category: refused hidden, as the copy\'s', H.refused(hidLive, 'hidden') && H.refused(hidCopy, 'hidden'), `${show(hidLive)} | ${show(hidCopy)}`);
     ok('NEGATIVE CONTROL: the editor gets it', (await chart('ed', ids.lo, ids.lc, 'tier')).body?.ok === true);
+    const [kHidLive, kHidCopy] = [await kpi('east', ids.lo), await kpi('east', ids.xo)];
+    ok('a KPI of that hidden related column: refused hidden, as the copy\'s', H.refused(kHidLive, 'hidden') && H.refused(kHidCopy, 'hidden'), `${show(kHidLive)} | ${show(kHidCopy)}`);
+    const kEd = await kpi('ed', ids.lo);
+    ok('NEGATIVE CONTROL: the editor\'s KPI counts each reached customer once — 3, not 4 orders', kEd.body?.ok === true && kEd.body.value === 3, show(kEd));
     await hide(ids.lc, false);
     await hide(ids.xc, false);
   } finally {

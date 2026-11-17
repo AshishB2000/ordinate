@@ -45,6 +45,33 @@ export const NUMBER_PARTITION: Record<CompileDialectId, string> = {
     'PARTITION BY CASE WHEN CASE WHEN isfinite(TRY_CAST(lv_src."id" AS DOUBLE)) THEN TRY_CAST(lv_src."id" AS DOUBLE) END = 0 THEN CAST(0 AS DOUBLE) ELSE CASE WHEN isfinite(TRY_CAST(lv_src."id" AS DOUBLE)) THEN TRY_CAST(lv_src."id" AS DOUBLE) END END',
 };
 
+/**
+ * Rule 3, a KPI of a RELATED measure (sum of Customers.zid, a number key): the head of the statement, per dialect. Each
+ * related row (its table's `lv_k`, exposed as `lv_r1`) keeps its measure on one row only, over the whole filtered result;
+ * BigQuery partitions by the key's 17-digit text (no float), as the cut does.
+ */
+export const KPI_MASK: Record<CompileDialectId, string> = {
+  duckdb:
+    'SELECT CAST(sum(lv_v0) AS DOUBLE) AS o_m0s FROM (SELECT CASE WHEN row_number() OVER (PARTITION BY lv_src.lv_r1 ORDER BY lv_src.lv_r1) = 1 THEN CASE WHEN isfinite(TRY_CAST(lv_src.lv_c4 AS DOUBLE)) THEN TRY_CAST(lv_src.lv_c4 AS DOUBLE) END END AS lv_v0 FROM ',
+  snowflake:
+    'SELECT CAST(sum(lv_v0) AS DOUBLE) AS o_m0s FROM (SELECT CASE WHEN row_number() OVER (PARTITION BY lv_src.lv_r1 ORDER BY lv_src.lv_r1) = 1 THEN CASE WHEN CAST(lv_src.lv_c4 AS DOUBLE) - CAST(lv_src.lv_c4 AS DOUBLE) = 0 THEN CAST(lv_src.lv_c4 AS DOUBLE) END END AS lv_v0 FROM ',
+  bigquery:
+    'SELECT CAST(sum(lv_v0) AS FLOAT64) AS o_m0s FROM (SELECT CASE WHEN row_number() OVER (PARTITION BY FORMAT(\'%.17g\', lv_src.lv_r1) ORDER BY FORMAT(\'%.17g\', lv_src.lv_r1)) = 1 THEN CASE WHEN NOT IS_INF(SAFE_CAST(lv_src.lv_c4 AS FLOAT64)) AND NOT IS_NAN(SAFE_CAST(lv_src.lv_c4 AS FLOAT64)) THEN SAFE_CAST(lv_src.lv_c4 AS FLOAT64) END END AS lv_v0 FROM ',
+  redshift:
+    'SELECT CAST(sum(lv_v0) AS DOUBLE PRECISION) AS o_m0s FROM (SELECT CASE WHEN row_number() OVER (PARTITION BY lv_src.lv_r1 ORDER BY lv_src.lv_r1) = 1 THEN CASE WHEN CAST(lv_src.lv_c4 AS DOUBLE PRECISION) - CAST(lv_src.lv_c4 AS DOUBLE PRECISION) = 0 THEN CAST(lv_src.lv_c4 AS DOUBLE PRECISION) END END AS lv_v0 FROM ',
+  clickhouse:
+    'SELECT toFloat64(sum(lv_v0)) AS o_m0s FROM (SELECT CASE WHEN row_number() OVER (PARTITION BY lv_src.lv_r1 ORDER BY lv_src.lv_r1) = 1 THEN CASE WHEN isFinite(accurateCastOrNull(lv_src.lv_c4, \'Float64\')) THEN accurateCastOrNull(lv_src.lv_c4, \'Float64\') END END AS lv_v0 FROM ',
+  databricks:
+    'SELECT CAST(sum(lv_v0) AS DOUBLE) AS o_m0s FROM (SELECT CASE WHEN row_number() OVER (PARTITION BY lv_src.lv_r1 ORDER BY lv_src.lv_r1) = 1 THEN CASE WHEN try_cast(lv_src.lv_c4 AS DOUBLE) - try_cast(lv_src.lv_c4 AS DOUBLE) = 0 THEN try_cast(lv_src.lv_c4 AS DOUBLE) END END AS lv_v0 FROM ',
+};
+
+/** Rule 3 on a chart with a number split (no fold): the mask layer over `lv_raw`, per (category, series, related row). */
+export const CHART_MASK = 'lv_base AS (SELECT lv_g, lv_s, CASE WHEN row_number() OVER (PARTITION BY lv_g, lv_s, lv_r0 ORDER BY lv_g, lv_s, lv_r0) = 1 THEN lv_u0 END AS lv_v0 FROM lv_raw)';
+export const CHART_MASK_BIGQUERY = 'lv_base AS (SELECT lv_g, lv_s, CASE WHEN row_number() OVER (PARTITION BY lv_g, FORMAT(\'%.17g\', lv_s), lv_r0 ORDER BY lv_g, FORMAT(\'%.17g\', lv_s), lv_r0) = 1 THEN lv_u0 END AS lv_v0 FROM lv_raw)';
+
+/** Rule 3 on a folded text axis (DuckDB): the rows under their folded key, masked per (folded key, related row), counted once. */
+export const FOLD_MASK = "lv_kmap AS (SELECT DISTINCT lv_g, lv_k, lv_n FROM lv_fold),\nlv_kb AS (SELECT lv_kmap.lv_k AS lv_kk, lv_kmap.lv_n AS lv_kn, lv_base.* FROM lv_base JOIN lv_kmap ON coalesce(lv_base.lv_g, '') = coalesce(lv_kmap.lv_g, '') AND CASE WHEN lv_base.lv_g IS NULL THEN 1 ELSE 0 END = CASE WHEN lv_kmap.lv_g IS NULL THEN 1 ELSE 0 END),\nlv_bk AS (SELECT lv_kb.*, CASE WHEN row_number() OVER (PARTITION BY lv_kk, lv_r0 ORDER BY lv_kk, lv_r0) = 1 THEN lv_v0 END AS lv_w0 FROM lv_kb),\nlv_out AS (SELECT lv_kk AS lv_k, CAST(sum(lv_w0) AS DOUBLE) AS lv_b0s, CAST(max(lv_kn) AS DOUBLE) AS lv_nc FROM lv_bk GROUP BY lv_kk),\n";
+
 const ORDERS: LiveColumn[] = [{ name: 'cust', type: 'text' }, { name: 'amt', type: 'number' }];
 const CUSTOMERS: LiveColumn[] = [{ name: 'id', type: 'text' }, { name: 'region', type: 'text' }, { name: 'zid', type: 'number' }];
 
@@ -90,6 +117,21 @@ export function joinShapes(ok: Ok, ids: readonly CompileDialectId[], inOrder: (i
     ok(`${id}: a number key partitions the one side as golden${id === 'bigquery' ? ' (by its 17-digit text: BigQuery partitions by no float)' : ''}`, sql.includes(`${NUMBER_PARTITION[id]} ORDER BY`), sql);
     ok(`${id}: …and both keys fold −0 into 0 before they meet`, (sql.match(/ = 0 THEN /g) ?? []).length >= 3 && sql.includes('ON lv_t0.lv_j1 = lv_t1.lv_k'), sql.slice(0, 400));
   }
+  const zid = [{ column: 'Customers.zid', aggregation: 'sum' as const }];
+  for (const id of ids) {
+    const k = comp.compileMetric({ kind: 'metric', measures: zid, filters: [], order: 'natural', weekCal: null }, joinedEnv(id, { keyType: 'number' }));
+    const sql = k.ok ? k.query.sql : '';
+    ok(`${id}: a KPI of a related measure masks each related row to one row, as golden, and exposes that row (lv_r1)`, sql.startsWith(KPI_MASK[id]) && sql.includes('lv_t1.lv_k AS lv_r1')
+      && sql.endsWith(id === 'clickhouse' ? ') AS lv_m\nSETTINGS join_use_nulls = 1' : ') AS lv_m'), sql);
+    const c = comp.compileChart({ kind: 'chart', category: { column: 'amt', kind: 'bins' }, series: 'amt', measures: zid, filters: [], order: 'natural', weekCal: null }, { kind: 'bins', lo: 0, hi: 10, width: 1, bins: 10 }, joinedEnv(id));
+    ok(`${id}: a chart of a related measure masks per (category, series, related row) in a layer of its own, as golden`, c.ok && c.query.sql.includes(id === 'bigquery' ? CHART_MASK_BIGQUERY : CHART_MASK), c.ok ? c.query.sql : JSON.stringify(c));
+    const own = comp.compileChart(BY_REGION, { kind: 'text' }, joinedEnv(id));
+    ok(`${id}: NEGATIVE CONTROL: a measure on the primary is never masked (no lv_r, no row_number past the cut's)`, own.ok && !/lv_r\d/.test(own.query.sql) && (own.query.sql.match(/row_number\(\)/g) ?? []).length === 1, own.ok && own.query.sql.slice(0, 200));
+  }
+  const fold = comp.compileChart({ ...BY_REGION, category: { column: 'cust', kind: 'text' }, measures: zid }, { kind: 'text' }, joinedEnv('duckdb'));
+  ok('a folded text axis with a related measure ranks the unmasked rows, then masks per folded key and counts once, as golden', fold.ok && fold.query.sql.includes(FOLD_MASK) && !fold.query.sql.includes('lv_raw'), fold.ok ? fold.query.sql : JSON.stringify(fold));
+  const days = comp.compileChart({ ...BY_REGION, category: { column: 'Customers.region', kind: 'date' }, measures: zid }, { kind: 'days', weekCal: { kind: '445', start: 1 } as never }, joinedEnv('duckdb'));
+  ok('a related measure by week-calendar days refuses (relatedMeasure): days roll up past the mask', !days.ok && days.code === 'relatedMeasure', JSON.stringify(days));
   // Where each filter goes (DuckDB): a base filter and a lock inside their own scan; a primary question filter inside the
   // primary's scan; a related column's outside, on the joined cell.
   const base: [LiveFilter[], LiveFilter[]] = [[{ kind: 'compare', column: 'amt', op: '>', value: 1 }], [{ kind: 'compare', column: 'region', op: '!=', value: 'Test' }]];
