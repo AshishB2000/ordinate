@@ -43,6 +43,7 @@ import { NUMBER_AGGREGATIONS } from '../data/aggregations';
 import { sanitizeTableCalc } from '../analysis/tableCalc';
 // A measure's `calc`, read as the engine's table calculation; its refusals are catalog sentences (./answerMessages).
 import { DATE_ORDER_KINDS, readAnswerCalc } from './answerCalc';
+import { rawVia, storedJoin } from './answerJoin';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,10 @@ export interface AnswerSpec {
   matched?: ValueMatch[];
   /** Read straight from a source table (outcome C, ../ipc/sourceAnswers): its connection's id; `datasetId` is then its doc's. */
   table?: string;
+  /** A visual's join fields (../analysis/visuals VizEncoding, ./answerJoin): the related dataset the category or split is read from, and the relationship. */
+  categoryDatasetId?: string;
+  categoryVia?: string;
+  seriesDatasetId?: string;
 }
 
 /** What validation needs to know about a dataset: names and declared types only. */
@@ -356,8 +361,11 @@ export function validateAnswerSpec(
   const ds = resolveDataset(o.dataset ?? o.datasetId, datasets, opts.defaultDatasetId);
   if (!ds) return unknownName('dataset', 'dataset', o.dataset ?? '');
 
-  const cat = resolveColumn(o.category, ds.columns, ds.names);
-  if (!cat) return unknownName('category', 'category column', o.category, ds.id);
+  // A category or split from a related dataset (./answerJoin) names it as `dataset` is named; the planner reaches it when drawn.
+  const catOn = relatedOf(o.categoryDatasetId ?? o.categoryDataset, ds, datasets);
+  if (typeof catOn === 'string') return { ok: false, reason: catOn };
+  const cat = resolveColumn(o.category, (catOn ?? ds).columns, (catOn ?? ds).names);
+  if (!cat) return unknownName('category', 'category column', o.category, (catOn ?? ds).id);
 
   const measuresRaw = Array.isArray(o.measures) ? o.measures : o.measure !== undefined ? [o.measure] : [];
   if (!measuresRaw.length) return { ok: false, reason: 'The answer names no measure.' };
@@ -371,10 +379,14 @@ export function validateAnswerSpec(
   }
 
   let series: string | undefined;
+  let serOn: SpecDataset | null = null;
   if (o.series !== undefined && o.series !== null && o.series !== '') {
-    const s = resolveColumn(o.series, ds.columns, ds.names);
-    if (!s) return unknownName('series', 'split column', o.series, ds.id);
-    if (s.name === cat.name) return { ok: false, reason: 'The split cannot be the category.' };
+    const on = relatedOf(o.seriesDatasetId ?? o.seriesDataset, ds, datasets);
+    if (typeof on === 'string') return { ok: false, reason: on };
+    serOn = on;
+    const s = resolveColumn(o.series, (serOn ?? ds).columns, (serOn ?? ds).names);
+    if (!s) return unknownName('series', 'split column', o.series, (serOn ?? ds).id);
+    if (s.name === cat.name && serOn?.id === catOn?.id) return { ok: false, reason: 'The split cannot be the category.' };
     series = s.name;
   }
 
@@ -398,7 +410,7 @@ export function validateAnswerSpec(
       const said = (f as { term: unknown }).term;
       const t = matchTerm(said, opts.terms || []);
       if (!t) return { ok: false, reason: `There is no glossary term called "${String(said)}".` };
-      if (t.datasetId !== ds.id) return { ok: false, reason: `"${t.name}" is a term of another dataset, not ${ds.name}.` }; // an answer never joins
+      if (t.datasetId !== ds.id) return { ok: false, reason: `"${t.name}" is a term of another dataset, not ${ds.name}.` }; // an answer's filters are its own dataset's (only its category or split joins, ./answerJoin)
       filters.push({ term: t.id });
       continue;
     }
@@ -423,7 +435,17 @@ export function validateAnswerSpec(
   if (cut) spec.top = cut;
   // A date axis's roll-up, when the spec carries one: a refined answer keeps its chart's (./answerRefine).
   if (isDateGrain(o.grain) && cat.type === 'date') spec.grain = o.grain;
+  if (catOn) Object.assign(spec, { categoryDatasetId: catOn.id }, rawVia(o.categoryVia) ? { categoryVia: rawVia(o.categoryVia) } : {});
+  if (serOn) spec.seriesDatasetId = serOn.id;
   return { ok: true, spec };
+}
+
+/** The related dataset a raw spec names for its category or split (by id or name, as `dataset`), null for its own; a string: why not. */
+function relatedOf(raw: unknown, own: SpecDataset, datasets: SpecDataset[]): SpecDataset | null | string {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const d = typeof raw === 'string' ? resolveDataset(raw, datasets) : null;
+  if (!d) return `Unknown dataset "${String(raw)}".`;
+  return d.id === own.id ? null : d;
 }
 
 function cleanTitle(t: unknown): string {
@@ -500,7 +522,7 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   const matched = sanitizeMatched(o.matched, filters);
   if (matched.length) spec.matched = matched;
   if (typeof o.table === 'string' && UUID_RE.test(o.table)) spec.table = o.table;
-  return spec;
+  return Object.assign(spec, storedJoin(o, !!spec.series)); // a visual's join fields, whitelisted as its encoding's (./answerJoin)
 }
 
 // ── Periods: resolved by the APP as a dashboard date filter is ──────────────
@@ -670,10 +692,13 @@ export interface AnswerChip {
  */
 export function answerChips(
   spec: AnswerSpec,
-  ctx: { columns: ParsedColumn[]; splitCandidates: string[]; hierarchies?: readonly NavHierarchy[]; ladder?: readonly DateGrain[] },
+  // `category`: the related dataset's columns when the category is one's (./answerJoin); `hierarchies` are then that dataset's.
+  ctx: { columns: ParsedColumn[]; splitCandidates: string[]; hierarchies?: readonly NavHierarchy[]; ladder?: readonly DateGrain[]; category?: ParsedColumn[] },
 ): AnswerChip[] {
   const chips: AnswerChip[] = [];
-  const catCol = ctx.columns.find((c) => c.name === spec.category);
+  const related = !!spec.categoryDatasetId && spec.categoryDatasetId !== spec.datasetId;
+  const catCols = related ? ctx.category ?? [] : ctx.columns;
+  const catCol = catCols.find((c) => c.name === spec.category);
   // A measure's calc (./answerCalc) a chip must not take away from under it: a kind run in date order needs a
   // date category, and YoY the year before. diff, pct_diff and index compare within the axis, so a year
   // earlier has its own previous and first periods: those keep every chip.
@@ -699,7 +724,7 @@ export function answerChips(
   // A next level that is none of `columns` (a column hidden from the caller, part 4) is no chip.
   const down = ctx.hierarchies && nextLevel(ctx.hierarchies, spec.category);
   const finer = ctx.ladder && spec.grain && catCol?.type === 'date' ? nextGrain(ctx.ladder, spec.grain) : null;
-  const regroup = down && ctx.columns.some((c) => c.name === down.next && (!dateOrder || c.type === 'date'));
+  const regroup = down && catCols.some((c) => c.name === down.next && (!dateOrder || c.type === 'date'));
   if (down && regroup) chips.push({ label: `By ${down.next}`, spec: { ...spec, category: down.next, title: cleanTitle(`${spec.title} by ${down.next}`) } });
   else if (finer) chips.push({ label: `By ${grainWord(finer, ctx.ladder!)}`, spec: { ...spec, grain: finer } });
 
@@ -711,7 +736,7 @@ export function answerChips(
     const filters = spec.filters.slice();
     filters[periodIdx] = { ...f, yearsBack: (f.yearsBack || 0) + 1 };
     chips.push({ label: 'Same for last year', spec: { ...spec, filters, title: cleanTitle(`${spec.title}, a year earlier`) } });
-  } else if (lastYear && dateCol && dateCol.name !== spec.category) {
+  } else if (lastYear && dateCol && (related || dateCol.name !== spec.category)) {
     chips.push({
       label: 'Same for last year',
       spec: {

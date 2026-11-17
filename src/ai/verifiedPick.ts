@@ -30,7 +30,8 @@ export interface Names { dataset: (id: string) => string; term: (id: string) => 
 export function rawSpec(spec: AnswerSpec, names: Names): Record<string, unknown> {
   const filter = (f: AnswerFilter): Record<string, unknown> => ('term' in f ? { term: names.term(f.term) } : f);
   return {
-    dataset: names.dataset(spec.datasetId), category: spec.category, ...(spec.series ? { series: spec.series } : {}),
+    dataset: names.dataset(spec.datasetId), category: spec.category, ...(spec.categoryDatasetId ? { categoryDataset: names.dataset(spec.categoryDatasetId) } : {}),
+    ...(spec.series ? { series: spec.series } : {}), ...(spec.series && spec.seriesDatasetId ? { seriesDataset: names.dataset(spec.seriesDatasetId) } : {}),
     measures: spec.measures.map((m) => ({ column: m.column, aggregation: m.aggregation, ...(m.calc ? { calc: m.calc } : {}) })), filters: spec.filters.map(filter),
     chartType: spec.chartType, ...(spec.top ? { top: spec.top } : {}), ...(spec.grain ? { grain: spec.grain } : {}),
   };
@@ -47,6 +48,7 @@ export interface PickOptions {
 /** Whether `s` may be shown to this caller as an example: it runs, they may see it, and no value filter of it is on a column withheld from them. */
 export function eligibleExample(s: VerifiedState, o: Pick<PickOptions, 'exclude' | 'withheld'>): boolean {
   if (!usable(s, o.exclude)) return false;
+  if (s.q.spec.categoryVia) return false; // a model names no relationship (./answerJoin): copied, it would draw the default path's chart
   const w = o.withheld(s.q.spec.datasetId);
   return !(hasValueFilter(s.q.spec) && s.q.spec.filters.some((f) => 'column' in f && !('period' in f) && w.has(f.column)));
 }

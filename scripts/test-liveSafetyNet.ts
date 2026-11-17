@@ -54,6 +54,7 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const liveRefusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const semFake: typeof import('./semanticFake') = require('./semanticFake');
 
@@ -227,6 +228,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['metric check (the measure editor)', 'metric:check', { projectId: P, datasetId: d, expression: 'sum(sales) / sum(qty)', name: 'Per unit', chart: true }],
     // answers
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
+    // a category from a related dataset (docs/assistant "Joins, as built"): Live joins are not built yet, so a typed refusal
+    ['answer card: a related category', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', categoryDatasetId: other, measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     ['answer: explain a tile', 'answer:explain', { projectId: P, tile: { datasetId: d, encoding: enc, filters: [], chartType: 'bar', name: 'Sales by region' } }],
     ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     ['answer: refresh', 'answer:refresh', { projectId: P, ...kept[d] }],
@@ -283,6 +286,13 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     if (ROUTED.has(label)) ok(`Live → ${label} (${channel}) ANSWERS from the warehouse (L2.4)`, r.status === 200 && answered(r.value), `${r.status} ${r.body.slice(0, 240)}`);
     else ok(`Live → ${label} (${channel}) refuses, typed`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
   }
+  // A Live dataset's answer with a related category: the chart door's own typed sentence, never the safety net's live_dataset.
+  const joinedLive = await post('answer:card', { projectId: P, spec: { datasetId: seed.live, category: 'region', categoryDatasetId: seed.extract, measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } });
+  ok('Live → an answer with a related category is refused in the chart door\'s sentence (live_refused), never live_dataset',
+    joinedLive.status === 200 && joinedLive.value?.code === 'live_refused' && joinedLive.value.reason === liveRefusals.liveRelatedRefused() && !/live_dataset/.test(joinedLive.body), joinedLive.body.slice(0, 240));
+  const joinedOnLive = await post('answer:card', { projectId: P, spec: { datasetId: seed.extract, category: 'region', categoryDatasetId: seed.live, measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } });
+  ok('…and so is an extract\'s answer whose category is read from a Live dataset', joinedOnLive.value?.code === 'live_refused' && joinedOnLive.value.reason === liveRefusals.liveRelatedRefused() && !/live_dataset/.test(joinedOnLive.body), joinedOnLive.body.slice(0, 240));
+
   // …and the Live answer is the warehouse's count of the declared key (120 rows, 5 regions, each repeated), stored with its time.
   const liveKey = await post('catalog:checkKey', { projectId: P, datasetId: seed.live });
   const liveCheck = (liveKey.value?.table as { keyCheck?: { rows: number; empty: number; repeatedKeys: number; checkedAt: string } } | undefined)?.keyCheck;

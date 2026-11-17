@@ -62,7 +62,7 @@
   "answerMessages.a_moving_window_is_a_whole": null,
   "answerMessages.could_not_add_this_answer_to": "No se pudo añadir esta respuesta a ese panel.",
   "answerMessages.could_not_save_this_answer_as": null,
-  "answerMessages.is_a_column_of_which_is": null,
+  "answerMessages.is_a_column_of_which_is": "\"{column}\" es una columna de {linked}, con el que {dataset} está vinculado. Una respuesta puede agrupar o dividir {dataset} por ella si nombra {linked}; sus medidas y filtros son columnas propias de {dataset}. Pregunte por {linked} por separado o cree el gráfico en Visuals.",
   "answerMessages.is_not_a_calculation_the_chart": null,
   "answerMessages.matched_to_in": null,
   "answerMessages.no_rows_have_in": null,

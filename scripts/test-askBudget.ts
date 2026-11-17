@@ -9,7 +9,9 @@
 // comes with it, and NO figure query runs (the answer door, a hydration and the Live door spied) — NEGATIVE CONTROL:
 // with the snapshots removed, the web's reopen computes all 15. (g) An SQL answer (src/ipc/answerSql.ts): the gate names
 // tables off ONE listing of the project and reads a dataset's record only for what the statement reads and the answer
-// picked (getDatasetMeta spied) — NEGATIVE CONTROL: the Query tab's sidebar catalog reads every dataset's record.
+// picked (getDatasetMeta spied) — NEGATIVE CONTROL: the Query tab's sidebar catalog reads every dataset's record. (h) A
+// joined chart answer (docs/assistant "Joins, as built"): case (a) with one link, then its category read from the linked
+// dataset, through the chart door (the link made and removed inside the case, so no other case follows it).
 //
 // Always (no database; records are files):
 //   1. The parsed catalog (../src/app/catalog `loadShared`) is one object inside a read memo, forgotten by a write, and
@@ -40,6 +42,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { Client, Pool } from 'pg';
+import { randomUUID } from 'crypto';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -58,6 +61,7 @@ const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = re
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const access: typeof import('../src/data/columnAccess') = require('../src/data/columnAccess');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
@@ -136,6 +140,15 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // (E2, one transaction: 3 statements) and five records read one at a time (5 transactions: 15); the indexes' folder
   // WHERE none (8 counts their statements with it and without). No other case moved with E4 (E3: 92 / 88 / 75 / 120 / 112 / 22).
   opsViewer: at(138, 7_141), // was at(138, 7_139) before the value search
+  // (h) Answers that join (docs/assistant "Joins, as built"), new. Measured LAST, with meaning on (the suite's state by
+  // then): writing the case's link drops the project's answer cache, which moved the cases after it (dataset, meaning on:
+  // 122 → 127 reads) when it ran before them. Home's chart with one link in the project (Orders → Stores): 109 queries and
+  // 185 reads (Home with meaning on, 106 / 169, and the link followed: the relationships record in a transaction, Stores'
+  // record and table facts). Then the same ask, its category read from Stores through THE chart door: no query more, 19
+  // record reads more, every one a memo hit (the join plan's relationships record and the records it names, read by each
+  // gate the door passes, and the snapshot's print over both tables). Meaning off, the two measured 95 / 185 and 95 / 204.
+  linked: at(109, 185),
+  joined: at(109, 204),
 };
 // PR 7c, meaning search ON (a fake fingerprint model, all 19,998 items and questions fingerprinted): ONE embed call a
 // question; per search one nearest-items query beside the words one, and the examples' nearest questions; once an ask,
@@ -156,7 +169,7 @@ const VALUE_SEARCHES = homeFacts.HOME_DATASETS + askLinks.LINKED_MAX;
 /** (g)'s getDatasetMeta calls beyond a chart answer's from Home: the pick's and the statement's (pick, gate, card); never one per dataset. */
 const SQL_METAS = 12;
 
-interface World { P: string; orders: string; agent: string; board: string; withRows: string[] }
+interface World { P: string; orders: string; stores: string; agent: string; board: string; withRows: string[] }
 
 async function world(pool: Pool): Promise<World> {
   return as('admin', async () => {
@@ -209,7 +222,7 @@ async function world(pool: Pool): Promise<World> {
     const count = async (kind: string) => Number((await pool.query(`SELECT count(*) AS n FROM records WHERE org_id = 'acme' AND path >= $1 AND path < $2`, [base + kind + '/', base + kind + '0'])).rows[0].n);
     const seeded = { datasets: await count('datasets'), metrics: await count('metrics'), terms: await count('terms'), verified: await count('verified') };
     ok('the project is seeded at scale', JSON.stringify(seeded) === JSON.stringify(SCALE), JSON.stringify(seeded));
-    return { P, orders, agent: agent.id, board: board.id, withRows: [orders, stores, visits] };
+    return { P, orders, stores, agent: agent.id, board: board.id, withRows: [orders, stores, visits] };
   });
 }
 
@@ -406,6 +419,7 @@ async function dbLeg(pool: Pool): Promise<void> {
   await sqlCase(w, fresh, line); // before meaningOn, which leaves its fake model on
   await foldersCase(pool, w, once, line);
   await meaningOn(cases, once, line);
+  await joinedCase(w, fresh, line); // last: writing its link drops the project's answer cache, which would move every case after it
 }
 
 /** 8. Case (d) with folders: Orders in Ops (the viewer's team: view), 50 clones in Finance (admins only). The WHERE costs nothing. */
@@ -543,6 +557,39 @@ async function sqlCase(w: World, fresh: (role: Role) => Promise<string>, line: (
     (analyze as { askCopilot: unknown }).askCopilot = ask0;
     (analyze as { dispatch: unknown }).dispatch = dispatch0;
     (datasets as { getDatasetMeta: unknown }).getDatasetMeta = meta0;
+  }
+}
+
+/**
+ * (h) A JOINED chart answer (docs/assistant "Joins, as built"): Home's question, its category read from a linked dataset
+ * (Orders.region → Stores.city, linked here and unlinked after, so no other case follows it). Measured beside the same
+ * ask with the link there and the plain category, so the difference is the join's own: the chart door's join plan (the
+ * relationships record and each dataset's record it names) and its figure, in place of the card's own rows.
+ */
+async function joinedCase(w: World, fresh: (role: Role) => Promise<string>, line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
+  const ask0 = analyze.askCopilot;
+  const link = randomUUID();
+  await as('admin', () => rels.saveRelationship(w.P, { id: link, from: { datasetId: w.orders, column: 'region' }, to: { datasetId: w.stores, column: 'city' }, cardinality: 'many_to_one', verified: { matched: 0, unmatchedFrom: 1_200 } }));
+  try {
+    const run = async (spec: object) => {
+      (analyze as { askCopilot: unknown }).askCopilot = async () => ({ ok: true, text: 'West leads.', suggestedAction: { ...ANSWER, spec } });
+      const threadId = await fresh('admin');
+      return counted(() => as('admin', () => handlers.get('copilot:ask')!({}, { projectId: w.P, context: {}, question: 'revenue by region last year', threadId })));
+    };
+    const plain = await run(ANSWER.spec);
+    line('linked', plain);
+    const joined = await run({ ...ANSWER.spec, category: 'city', categoryDataset: 'Stores' });
+    line('joined', joined);
+    const t = joined.out.turns?.at(-1);
+    ok('joined: the ask answers with a chart on Orders whose category is Stores\' city', joined.out.ok === true && t?.answer?.datasetId === w.orders && t.answer.categoryDatasetId === w.stores && !!t.card, JSON.stringify(joined.out).slice(0, 300));
+    ok('linked: …and the plain ask beside it, its link there, a chart of Orders\' own region', plain.out.ok === true && plain.out.turns?.at(-1)?.answer?.datasetId === w.orders && !plain.out.turns.at(-1).answer.categoryDatasetId);
+    for (const [name, c] of [['linked', plain], ['joined', joined]] as const) {
+      ok(`${name}: ${c.queries} queries ≤ ${CEILING[name].queries} and ${c.reads} record reads ≤ ${CEILING[name].reads}`, c.queries <= CEILING[name].queries && c.reads <= CEILING[name].reads);
+      if (c.queries * 1.1 > CEILING[name].queries || process.env.ORDINATE_BUDGET_SQL) histogram(name, c.sqls);
+    }
+  } finally {
+    (analyze as { askCopilot: unknown }).askCopilot = ask0;
+    await as('admin', () => rels.deleteRelationship(w.P, link));
   }
 }
 

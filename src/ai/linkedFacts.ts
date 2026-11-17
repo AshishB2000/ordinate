@@ -2,8 +2,8 @@
 // src/ipc/askLinks.ts decides which datasets go in and what the caller may read of them.
 //
 // Each linked dataset is listed as the facts list a dataset (./copilotFacts schemaLine), with the links that reach it.
-// The chart form reads ONE dataset (an answer never joins, ./answerSpec), so the block says what a linked dataset is for:
-// an answer of its own, or a chart built in Visuals, whose builder follows the same links.
+// The chart form reads its measures and filters on ONE dataset, so the block says what a linked dataset is for: an answer
+// of its own, or the category or split of one on the dataset it is linked to, which the chart door joins (./answerJoin).
 
 import { schemaLine, sealLedger, type FactSchema } from './copilotFacts';
 import type { LedgerEntry } from './numberAudit';
@@ -19,8 +19,8 @@ export interface LinkedEntry { schema: FactSchema; base: string; hops: readonly 
 // No digit here: the frame adds nothing to the ledger.
 const FRAMING = [
   'LINKED DATASETS — linked in Relationships to a dataset above, followed only from the many side to the one side, so',
-  'each row there has at most one row here. An answer reads ONE dataset: it may be drawn from a linked dataset itself,',
-  'but it cannot use a linked dataset\'s columns on the dataset it is linked to; a chart built in Visuals can.',
+  'each row there has at most one row here. An answer on the dataset above may take its category or split from one of',
+  'these (naming it as "categoryDataset" or "seriesDataset"); its measures and filters stay that dataset\'s own columns.',
 ].join('\n');
 
 const hopText = (h: LinkHop): string => `${h.from.dataset}.${h.from.column} → ${h.to.dataset}.${h.to.column}`;

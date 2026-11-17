@@ -33,6 +33,7 @@ import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import type { LedgerEntry } from './numberAudit';
 import { sanitizeStoredSpec } from './answerSpec';
+import { turnRelatedIds } from './answerJoin';
 import { sameChart } from './answerRefine';
 import type { AnswerSpec } from './answerSpec';
 import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
@@ -605,7 +606,8 @@ export async function appendTurn(
   const outside = role === 'assistant' && !answer ? sanitizeOutside(turn && turn.outside) : undefined;
   if (outside) record.outside = outside;
   if (role === 'assistant' && !answer) Object.assign(record, sanitizeNeeds(turn));
-  const factsFrom = role === 'assistant' ? sanitizeIds(turn && turn.factsFrom) : undefined;
+  // A related category's or split's dataset, the answer's or an option's (./answerJoin), hides the turn as its facts' do: 0039's SQL count reads it here.
+  const factsFrom = role === 'assistant' ? sanitizeIds([...(Array.isArray(turn?.factsFrom) ? turn.factsFrom : []), ...turnRelatedIds(answer, suggest?.options)]) : undefined;
   if (factsFrom) record.factsFrom = factsFrom;
   const dashboardsFrom = role === 'assistant' ? sanitizeIds(turn && turn.dashboardsFrom) : undefined;
   if (dashboardsFrom) record.dashboardsFrom = dashboardsFrom;

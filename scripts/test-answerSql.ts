@@ -7,6 +7,10 @@
 //   1. TWO CALLS: an `sql` outcome makes exactly 2 model calls; the second is sent the full details of ONLY the picked
 //      datasets (every column and type, the key, the size, the link between them), never another's.
 //      NEGATIVE CONTROL: a chart-form answer makes 1 call and no second.
+//  1b. A LOOKUP JOIN IS THE CHART FORM (docs/assistant "Joins, as built"): "amount by region", region a column of
+//      Customers (Orders → Customers, many to one), took the SQL lane's two calls; its category naming Customers it is
+//      ONE call and no second, a chart turn (checkable, addable to a dashboard), and its figures are Object.is-equal to
+//      the SQL lane's join over the same tables. NEGATIVE CONTROL: the same question asked as SQL still takes 2 calls.
 //   2. DIFFERENTIAL: the card's columns and every cell are Object.is-equal to `sql:run` on the same SQL; its words are
 //      the app's (rows, columns, what it read); a label and one number come with a chart.
 //   3. REFUSALS, each with a passing twin: a Live dataset whose connection is gone (refused before any SQL is written:
@@ -183,6 +187,20 @@ async function fileLeg(): Promise<void> {
   ok('1. the answer: an SQL turn with its kept table', a1.r.ok && a1.turn?.sql?.text === GAP_BY_REGION && c1?.kind === 'sql' && !!c1.snapshot?.asOf, show(a1.turn));
   const form = await ask(ADMIN, 'amount by customer', { kind: 'answer', intent: 'amount by customer', spec: { dataset: 'Orders', category: 'customer', measures: [{ column: 'amount', aggregation: 'sum' }] } });
   ok('1. NEGATIVE CONTROL: a chart-form answer makes 1 call and no second', form.asks === 1 && form.sqls === 0 && !!form.turn?.answer && !form.turn?.sql, `${form.asks} ${form.sqls}`);
+
+  // 1b. A question that needed only a lookup join: the chart form now, one call.
+  const BY_REGION_SQL = 'SELECT c.region, sum(o.amount) AS total FROM orders o JOIN customers c USING (customer) GROUP BY c.region ORDER BY c.region';
+  const lookup = await ask(ADMIN, 'amount by region', { kind: 'answer', intent: 'amount by region', spec: { dataset: 'Orders', category: 'region', categoryDataset: 'Customers', measures: [{ column: 'amount', aggregation: 'sum' }] } });
+  ok('1b. "amount by region" (region on Customers) is the chart form: 1 call, no second, a chart turn on Orders reading Customers\' region',
+    lookup.asks === 1 && lookup.sqls === 0 && !lookup.turn?.sql && lookup.turn?.answer?.datasetId === orders && lookup.turn.answer.categoryDatasetId === customers, `${lookup.asks} ${lookup.sqls} ${show(lookup.turn)}`);
+  const viaSql = await ask(ADMIN, 'amount by region in sql', { kind: 'sql', intent: 'amount by region', datasets: ['Orders', 'Customers'] }, BY_REGION_SQL);
+  const lane = await sqlRun(ADMIN, BY_REGION_SQL);
+  const chartOf = (c: any): Map<string, unknown> => new Map((c?.data?.labels ?? []).map((l: string, i: number) => [l, c.data.series[0].values[i]])); // any: a card
+  const laneOf = new Map((lane.rows ?? []).map((r: unknown[]) => [r[0], r[1]]));
+  const chart = chartOf(lookup.turn?.card);
+  ok('1b. DIFFERENTIAL: its figures are the SQL lane\'s join over the same tables, region by region (Object.is)',
+    chart.size === 2 && chart.size === laneOf.size && [...chart].every(([k, v]) => laneOf.has(k) && Object.is(v, laneOf.get(k))), show([[...chart], lane.rows]));
+  ok('1b. NEGATIVE CONTROL: asked as SQL, the same question still takes 2 calls', viaSql.asks === 1 && viaSql.sqls === 1 && !!viaSql.turn?.sql, `${viaSql.asks} ${viaSql.sqls}`);
 
   // 2. Differential against sql:run; the app's words; a chart for a label and one number.
   const run1 = await sqlRun(ADMIN, GAP_BY_REGION);

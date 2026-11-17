@@ -62,7 +62,7 @@
   "answerMessages.a_moving_window_is_a_whole": null,
   "answerMessages.could_not_add_this_answer_to": "この回答をそのダッシュボードに追加できませんでした。",
   "answerMessages.could_not_save_this_answer_as": null,
-  "answerMessages.is_a_column_of_which_is": null,
+  "answerMessages.is_a_column_of_which_is": "「{column}」は {dataset} がリンクしている {linked} の列です。回答が {linked} を指定すれば、{dataset} をこの列でグループ化または分割できます。メジャーとフィルターは {dataset} 自身の列です。{linked} について単独で質問するか、Visuals でグラフを作成してください。",
   "answerMessages.is_not_a_calculation_the_chart": null,
   "answerMessages.matched_to_in": null,
   "answerMessages.no_rows_have_in": null,

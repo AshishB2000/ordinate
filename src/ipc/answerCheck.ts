@@ -29,6 +29,12 @@ export async function vocabulary(projectId: string, want: VocabularyWant): Promi
   return { datasets: (await specDatasets(projectId)).filter((d) => !only || only.has(d.id)), metrics: await specMetrics(projectId), terms: await specTerms(projectId) };
 }
 
+/** Does a raw spec name a related dataset for `field` ("categoryDataset" or its id key)? */
+const hasKey = (raw: unknown, field: 'categoryDataset' | 'seriesDataset'): boolean => {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return [o[field], o[`${field}Id`]].some((v) => v !== undefined && v !== null && v !== '');
+};
+
 /** At most this many datasets step 3 finds for a dataset name that missed, by its words and by its spelling: "Did you mean"'s candidates. */
 const NEAR_DATASETS = 20;
 
@@ -77,12 +83,14 @@ export async function checkAction(
   const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question, terms };
   const v = validateAnswerSpec(raw, all, { ...opts, metrics: defined });
   if (!v.ok) {
-    // A column of a dataset this one links to (./askLinks; an agent follows no links): the form reads one dataset, so the refusal says that, never "Did you mean" another.
-    const linked = !only && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkedColumnOf(projectId, v.miss.datasetId, v.miss.said) : null;
+    // A column of a dataset this one links to (./askLinks; an agent follows no links): named without its dataset it is refused (only a category or split may be one's, named so), never "Did you mean" another.
+    // A name missed on the related dataset a category or split was read from (../ai/answerJoin) is "Did you mean" there, never a link of it.
+    const related = (v.miss?.part === 'category' && hasKey(raw, 'categoryDataset')) || (v.miss?.part === 'series' && hasKey(raw, 'seriesDataset'));
+    const linked = !only && !related && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkedColumnOf(projectId, v.miss.datasetId, v.miss.said) : null;
     const on = linked && all.find((d) => d.id === v.miss?.datasetId);
     if (linked && on) return { ok: false, reason: linkedColumnRefused(linked.column, linked.dataset, on.name) };
     // A column of a dataset NOT linked to this one (outcome E, ./answerLink): the checked-link card, or "can't be combined yet".
-    const unlinked = !only && !linked && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkRefusal(projectId, v.miss.datasetId, v.miss.said) : null;
+    const unlinked = !only && !linked && !related && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkRefusal(projectId, v.miss.datasetId, v.miss.said) : null;
     if (unlinked) return unlinked;
     // A name that does not exist: what it may have meant, picked by the app from the names alone
     // (ai/answerSuggest) and laid over the same raw spec — the MERGED one, so a follow-up's option

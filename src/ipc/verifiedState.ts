@@ -6,6 +6,7 @@
 
 import { answerNames } from '../engine/live/liveMissing';
 import { refineSpec } from '../ai/answerRefine';
+import { isJoined, ownNames, relatedIds } from '../ai/answerJoin';
 import { parseAgg, validateAnswerSpec } from '../ai/answerSpec';
 import type { SpecDataset, SpecMetric } from '../ai/answerSpec';
 import type { SpecTerm } from '../ai/termFacts';
@@ -49,7 +50,7 @@ export async function verifiedEnvFor(projectId: string, questions: readonly Veri
   const all = named.size ? ((await metricsNamedAs(projectId, [...named])) ?? (await perAsk(`metricSummaries\0${projectId}`, () => listMetrics(projectId)))) : [];
   const nameOn = (s: MetricSummary): string => `${s.datasetId}\0${s.name.trim().toLowerCase()}`;
   const same = new Set(all.filter((s) => named.has(s.id)).map(nameOn));
-  const [dsIds, termIds] = [ids((q) => [q.spec.datasetId]), ids((q) => q.spec.filters.map((f) => ('term' in f ? f.term : undefined)))];
+  const [dsIds, termIds] = [ids((q) => [q.spec.datasetId, ...relatedIds(q.spec)]), ids((q) => q.spec.filters.map((f) => ('term' in f ? f.term : undefined)))]; // a related category's or split's too (../ai/answerJoin)
   const read = (id: string): boolean => isValidId(projectId) && isValidId(id); // the getters read no other: null
   const [dsFile, tFile] = [(id: string) => datasetFilePath(projectId, id), (id: string) => termFile(projectId, id)];
   const bodies = await recordFs.readMany([...dsIds.filter(read).map(dsFile), ...termIds.filter(read).map(tFile)]); // ONE query for both
@@ -72,9 +73,19 @@ export function verifiedProblem(q: VerifiedQuestion, env: VerifiedEnv): string |
   const ds = env.datasets.find((d) => d.id === q.spec.datasetId);
   if (!ds) return msg.verifiedDatasetGone();
   const mirror = (id: string | undefined): boolean => !!id && !!env.metrics.find((s) => s.id === id)?.external; // a layer's metric: its `column` is no field
-  const named = answerNames({ ...q.spec, measures: q.spec.measures.filter((m) => !mirror(m.metricId)) });
+  const spec = { ...q.spec, measures: q.spec.measures.filter((m) => !mirror(m.metricId)) };
+  const named = isJoined(q.spec) ? ownNames(spec) : answerNames(spec);
   const gone = named.find((n) => !ds.columns.some((c) => c.name === n)); // by exact name, as computeCard reads it
   if (gone !== undefined) return msg.verifiedColumnGone(gone, ds.name);
+  // A related category or split (../ai/answerJoin): its dataset still there, with that column.
+  const related: SpecDataset[] = [];
+  for (const [id, column] of [[q.spec.categoryDatasetId, q.spec.category], [q.spec.seriesDatasetId, q.spec.series]] as const) {
+    if (!id || !column) continue;
+    const on = env.datasets.find((d) => d.id === id);
+    if (!on) return msg.verifiedDatasetGone();
+    if (!on.columns.some((c) => c.name === column)) return msg.verifiedColumnGone(column, on.name);
+    related.push(on);
+  }
   if (q.spec.filters.some((f) => 'term' in f && !env.terms.some((t) => t.id === f.term))) return msg.verifiedTermGone();
   // A measure named by a metric is the metric as verified (refineSpec's carried check): redefined, filtered or deleted,
   // the figure under the mark is no longer the metric's. A retired metric is still in env.metrics, and still runs.
@@ -85,7 +96,7 @@ export function verifiedProblem(q: VerifiedQuestion, env: VerifiedEnv): string |
     return !x || x.datasetId !== ds.id || !!x.hasFilters || x.column !== m.column || (parseAgg(x.aggregation) || 'sum') !== m.aggregation;
   });
   if (drifted) return msg.verifiedMetricChanged();
-  const v = validateAnswerSpec(refineSpec(q.spec, {}, ds, env.metrics), [ds], { metrics: env.metrics, terms: env.terms }); // a term by its id, a mirror by its name
+  const v = validateAnswerSpec(refineSpec(q.spec, {}, ds, env.metrics), [ds, ...related], { metrics: env.metrics, terms: env.terms }); // a term by its id, a mirror by its name
   return v.ok ? null : v.reason;
 }
 

@@ -10,8 +10,10 @@
 //    in a topic, Customers (one link) and Regions and Segments (two) are in the facts, marked with their links; Countries
 //    (three) and Items (one → many) never; an agent's topic follows none. A linked Live dataset's table facts follow
 //    (Segments). At most LINKED_MAX on a star of eight. The model's answer from a linked dataset validates and is drawn;
-//    one naming a linked dataset's column on Purchases is refused with the documented sentence. NEGATIVE CONTROL: the
-//    links deleted, no block, no table facts, and the ordinary refusal.
+//    one naming a linked dataset's column on Purchases is refused with the documented sentence, and the same NAMING its
+//    linked dataset ("categoryDataset": "Regions", two links away) is the chart form in one model call, its figures read
+//    through both links (docs/assistant "Joins, as built"). NEGATIVE CONTROL: the links deleted, no block, no table facts,
+//    and the ordinary refusal.
 //    With DATABASE_URL, real roles (./rowPolicyHarness): a viewer never reads a column hidden from them (Customers'
 //    email and segment_id) nor a dataset linked through one (Segments); a dataset row access rules restrict them on
 //    (Regions) is never added, for a viewer with no rows and for one with some. NEGATIVE CONTROL: an editor reads them all.
@@ -81,7 +83,7 @@ function block(): void {
   };
   const b = linkedFacts.linkedBlock([entry]);
   ok('block: the line names the links, then the columns as the facts list them', b.text.split('\n').at(-1)!.startsWith('- Regions (linked to Purchases via Purchases.customer_id → Customers.id, then Customers.region_id → Regions.id): id (text), region (text'), b.text);
-  ok('block: it says the form reads one dataset', b.text.startsWith('LINKED DATASETS') && b.text.includes('An answer reads ONE dataset'));
+  ok('block: it says a linked dataset may give the category or split, measures and filters staying the dataset\'s own', b.text.startsWith('LINKED DATASETS') && b.text.includes('"categoryDataset"') && b.text.includes('measures and filters stay'));
   const many = linkedFacts.linkedBlock(Array.from({ length: 40 }, (_, i) => ({ ...entry, schema: { ...entry.schema, name: `D${i}`, columns: Array.from({ length: 12 }, (_, c) => ({ name: `column_${c}`, type: 'text' })) } })));
   const shown = many.text.split('\n').filter((l) => l.startsWith('- D')).length;
   ok(`block: at most ${linkedFacts.LINKED_FACTS_MAX} characters of datasets, then "(more not shown)"`, shown > 0 && shown < 40 && many.text.endsWith('- (more linked datasets not shown)'), `${shown} shown`);
@@ -98,10 +100,13 @@ interface Bench {
 }
 
 let lastPrompt = '';
+let modelCalls = 0;
 const replies: object[] = [];
 function stubModel(): void {
   (execConfig as { executionReady: unknown }).executionReady = async () => true;
+  (analyze as { dispatch: unknown }).dispatch = async () => { modelCalls++; throw new Error('no second model call in this suite'); }; // the SQL lane's
   (analyze as { askCopilot: unknown }).askCopilot = async (_prior: unknown, facts: string) => {
+    modelCalls++;
     lastPrompt = facts;
     return replies.shift() ?? { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } };
   };
@@ -179,6 +184,15 @@ async function prompts(b: Bench, s: Seeded, editor: string): Promise<void> {
   ok('answer: a linked dataset\'s column on Purchases is refused with the documented sentence, no "Did you mean"', refused(across.reply, msg.linkedColumnRefused('region_id', 'Customers', 'Purchases')), JSON.stringify(across.reply).slice(0, 400));
   const dotted = await b.ask(editor, { context: { kind: 'dataset', id: s.purchases }, question: 'amount by region' }, answer({ category: 'Regions.region', measures: [{ column: 'amount', aggregation: 'sum' }] }));
   ok('answer: …named "Regions.region" too', refused(dotted.reply, msg.linkedColumnRefused('region', 'Regions', 'Purchases')), JSON.stringify(dotted.reply).slice(0, 400));
+  // THE WIN (docs/assistant "Joins, as built"): the same question, the category NAMING its linked dataset, two links away, is
+  // the chart form — one model call, no SQL lane — and its figures are Regions' through both links (East 5, West 7).
+  const calls0 = modelCalls;
+  const joined = await b.ask(editor, { context: { kind: 'dataset', id: s.purchases }, question: 'amount by region' }, answer({ category: 'region', categoryDataset: 'Regions', measures: [{ column: 'amount', aggregation: 'sum' }] }));
+  const t = joined.reply?.turns?.at(-1);
+  const byRegion = t?.card ? Object.fromEntries((t.card.data.labels as string[]).map((l, i) => [l, t.card.data.series[0].values[i]])) : {};
+  ok('answer: naming the linked dataset ("categoryDataset": "Regions") it is the chart form, in ONE model call and no second', joined.reply?.ok === true && t?.answer?.datasetId === s.purchases
+    && t.answer.categoryDatasetId === s.regions && modelCalls - calls0 === 1 && !t.sql && !String(joined.reply.answer).includes('(No chart'), JSON.stringify(joined.reply).slice(0, 400));
+  ok('answer: …its figures read Regions through both links', byRegion.East === 5 && byRegion.West === 7 && Object.keys(byRegion).length === 2, JSON.stringify(byRegion));
 }
 
 async function unlinked(b: Bench, s: Seeded, editor: string): Promise<void> {

@@ -26,6 +26,7 @@ import * as datasets from '../data/datasets';
 import { listBoth, listVerified, readManyBoth, readManyTagged, verifiedFromBody, verifiedSqlFromBody } from '../analysis/verifiedQuestions';
 import type { Tagged } from '../app/editConflict';
 import { isSqlQuestion, questionKey, type AnyVerified, type VerifiedQuestion, type VerifiedSqlQuestion } from '../analysis/verifiedRules';
+import { relatedIds } from '../ai/answerJoin';
 import { getTerm } from '../analysis/terms';
 import { withheldColumns } from '../app/sharePolicy';
 import { words } from '../ai/answerSuggest';
@@ -53,7 +54,7 @@ export const describeVerified: index.DescribeVerified = (projectId, id, body) =>
   const q: AnyVerified | undefined = verifiedFromBody(projectId, body)?.rec ?? verifiedSqlFromBody(projectId, body)?.rec;
   if (!q || q.id !== id) return []; // `listTagged` skips a misnamed record: so does the index
   const datasetId = isSqlQuestion(q) ? q.sql.datasetIds[0] : q.spec.datasetId;
-  const reads = isSqlQuestion(q) ? q.sql.datasetIds : [datasetId]; // every dataset it reads: the folders' WHERE (0034)
+  const reads = isSqlQuestion(q) ? q.sql.datasetIds : [datasetId, ...relatedIds(q.spec)]; // every dataset it reads, a related category's or split's too: the folders' WHERE (0034)
   return [q.question, ...q.phrasings].map((text, ord) => ({
     ord, key: questionKey(text), datasetId, reads, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [], text: ord === 0 ? questionText(q.question) : '',
   }));
