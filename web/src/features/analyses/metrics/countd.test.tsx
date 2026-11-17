@@ -54,12 +54,14 @@ describe('KeyHint', () => {
     expect(onUseCount).toHaveBeenCalledTimes(1);
   });
 
-  it('NEGATIVE CONTROL: a key that repeats, a key check never run (or hidden from a restricted viewer), another column, or another aggregation: nothing', async () => {
+  it('NEGATIVE CONTROL: a key that repeats, a key check never run (or hidden from a restricted viewer), one held to a date range, another column, or another aggregation: nothing', async () => {
     for (const [table, aggregation, column] of [
       [doc({ key: 'customer_id', keyCheck: { rows: 4, empty: 0, repeatedKeys: 3, checkedAt: 't' } }), 'countd', 'customer_id'],
       [doc({ key: 'customer_id' }), 'countd', 'customer_id'],
       [doc({ key: 'order_id', keyCheck: { rows: 4, empty: 0, repeatedKeys: 0, checkedAt: 't' } }), 'countd', 'customer_id'],
       [doc({ key: 'customer_id', keyCheck: { rows: 4, empty: 0, repeatedKeys: 0, checkedAt: 't' } }), 'count', 'customer_id'],
+      // unique only over the date range a Live table requires: not said of the whole table
+      [doc({ key: 'customer_id', keyCheck: { rows: 4, empty: 0, repeatedKeys: 0, checkedAt: 't', range: { from: '2024-03-01', to: '2025-02-28' } } }), 'countd', 'customer_id'],
     ] as const) {
       cleanup();
       const calls = serveRpc(routes(table));

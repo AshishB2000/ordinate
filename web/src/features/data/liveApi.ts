@@ -59,6 +59,8 @@ export interface LiveSchema {
   method: 'sample' | 'limit' | null;
   /** Why the last sync read no sample (a catalog sentence), or null. */
   note: string | null;
+  /** The sample was held to the date range its table requires: that range's sentence, or null. Absent from an older server. */
+  range?: string | null;
   columns: SchemaColumn[];
   missing: MissingColumn[];
   /** The always-applied filters (D13). A caller row access rules restrict gets each one's column and operator only. */

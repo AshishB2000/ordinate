@@ -18,12 +18,13 @@ import l from './LiveData.module.css';
 
 const USE_WORD: Record<MissingColumn['usedBy'][number]['kind'], string> = { visual: 'visual', metric: 'metric', kpi: 'KPI tile', control: 'dashboard control', alert: 'alert' };
 
-/** "Profiled from a sample of 240 rows · 7:12 PM" — or why there is no sample yet. */
-export function sampleLine(v: Pick<LiveSchema, 'sampledAt' | 'sampleRows' | 'method'>): string {
+/** "Profiled from a sample of 240 rows · 7:12 PM" — or why there is no sample yet. A sample held to its table's required date range says that range. */
+export function sampleLine(v: Pick<LiveSchema, 'sampledAt' | 'sampleRows' | 'method' | 'range'>): string {
   if (!v.sampledAt) return 'Not profiled yet. Sync schema reads the columns and a sample of the rows.';
-  if (v.sampleRows === null) return `Profiled from a sample · ${stamp(v.sampledAt)}`; // no size to a caller row access rules restrict
-  const how = v.method === 'limit' ? ' (the first rows, since this table could not be sampled at random)' : '';
-  return `Profiled from a sample of ${rowsText(v.sampleRows)}${how} · ${stamp(v.sampledAt)}`;
+  const within = v.range ? ` · ${v.range}` : '';
+  if (v.sampleRows === null) return `Profiled from a sample${within} · ${stamp(v.sampledAt)}`; // no size to a caller row access rules restrict
+  const how = v.range ? ' (the first rows in the range)' : v.method === 'limit' ? ' (the first rows, since this table could not be sampled at random)' : '';
+  return `Profiled from a sample of ${rowsText(v.sampleRows)}${how}${within} · ${stamp(v.sampledAt)}`;
 }
 
 /** What a sync found, in one line. */

@@ -1538,3 +1538,58 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
 - **Not run yet:** no nightly has had `BIGQUERY_SCRATCH_DATASET`. The answer to the open question (does BigQuery take
   `lv_src._PARTITIONTIME`, and a bound TIMESTAMP, as a partition filter?) is the first such run's `partition time` lines
   and its two `spike:` lines.
+
+## 2026-11-16 — Required ranges on the stored readers: the key check and the schema sync's sample
+
+(docs/assistant/00-design.md, "Live date filters on key columns", its open question "Date-filter pruning"; closes the
+"Not covered" of the entry above.)
+
+- **The rule, once.** Both readers take `liveDateRange.lookupRequired(target, [])`, as the case fix and the probe do:
+  REQUIRED_RANGE on each required date column the base filters leave open, `_PARTITIONTIME` as the TIMESTAMP base
+  filter (BigQuery table sources only), and a required integer-range partition refuses, naming it. No copy of the rule.
+- **The key check** ("Check now", `tableDocs.runKeyCheck`): `compileKeyCheck(key, need.env, need.filters)`, one
+  statement through `liveLookup` as before. The count is stored with the days it covered (`KeyCheck.range`,
+  `{from, to}`, ISO, `src/data/liveRange.ts`); `catalog:getTable`, `:setTable` and `:checkKey` reply it with `note`,
+  the figures' sentence *Last 12 months: this table needs a date range*, rendered per read and never stored. The About
+  tab's key line shows it. A required integer-range partition skips the check: *This table needs a filter on "tier",
+  and the key check assumes no range for it.*, typed `live_refused`, nothing sent, nothing stored (the doc keeps what
+  it had; a skip has no count to qualify). `countedAfterSave` and `afterTableData` count extracts only (D2), so they
+  read every row of our copy, unranged. A key unique over a range is not told to the Assistant as unique
+  (`tableFacts.keyState` left out), the Data model overview reads it `unchecked`, and the metric editor's "Use Count"
+  hint is not offered for it; repeats over a range repeat in the table, so `repeats` is still told and shown.
+- **The schema sync's sample** (`schemaSync.sampleProfile`): the required filters join the base filters, their columns
+  profiled first. A ranged sample is LIMIT only, with no sample clause and no ClickHouse sampling-key probe: an
+  engine's sample clause samples every partition (Snowflake's row sample scans the table; BigQuery's percent is the
+  whole table's, from its row estimate). So `method` is `limit`; the BigQuery dry run still prices it first. The days
+  are stored on the profile (`LiveProfile.range`), kept with the old figures when a later sync reads no sample, and
+  dropped with them when the base filters move (`unsampled`). `_PARTITIONTIME` cannot be selected by a subquery, so a
+  sample under it reads the table scan itself (`(SELECT … FROM t AS lv_src WHERE lv_src._PARTITIONTIME … LIMIT n)`);
+  with a sample clause it is refused, never sent unpruned. A required integer-range partition skips the sample:
+  `skipped: 'needsFilter'` with `needs: 'tier'`, *No sample was read: this table needs a filter on "tier", and the
+  sample assumes no range for it. …*; the columns still sync. The Schema tab's sample line says the range's sentence
+  (`dataset:liveSchema` `range`). The ClickHouse probe is metadata (`system.tables`), so it needs no range.
+  What the table requires is read against the columns the sync has just read (`dateFactsOf(…, next)` and
+  `liveDateRange.requiresOf`, which `liveTarget` now shares), never the stored record's: a required date column added
+  in this sync is held to its range in the same sync, and one gone from the warehouse is dropped instead of refusing
+  the sample as an unknown column.
+- **The Assistant's facts** (`ai/liveFacts`): a ranged profile's line reads *a sample of 611 rows of the last 12 months
+  (2024-03-01 to 2025-02-28: this table requires a date range)*, and every column's figures *in the sample of the last
+  12 months*, in the facts block and the project inventory. The name is the date control's (`requiredPeriod`, from
+  `REQUIRED_RANGE`, both now in `src/data/liveRange.ts` so `ai/` reads them without `engine/`). The prompt is English, so
+  no catalog key.
+- **Stored before.** A key check or a profile with no `range` reads as before: every row. A hand-edited range keeps
+  its valid ends and still says "not every row" (`{}` at worst); a `needsFilter` skip with no column reads `refused`.
+  No migration: both are JSON fields their sanitizers keep (`sanitizeKeyCheck`, `sanitizeProfile`).
+- **Tests** (`test-livePartitionFilter`, now 89 checks): the key check binds [2024-03-01, 2025-02-28], stores the days,
+  replies the sentence, and its counts are `keyCheckJs` over the extract's rows in those days (`Object.is`); the
+  sample binds the same days with no `USING SAMPLE`, stores them, and holds exactly the extract's row count in the
+  range; NEGATIVE CONTROLS: no doc — every row counted (the whole-table reference), the engine samples, no range is
+  stored or said. `tier` required: both skip, naming it, and send nothing. `_PARTITIONTIME`: both statements read it
+  on the table scan (NEGATIVE CONTROL: a sample clause refuses). The facts and the inventory say the range (NEGATIVE
+  CONTROL: an unranged profile's say a sample, no range); a unique key over a range is `unchecked` on the overview and
+  untold to the Assistant, a repeating one `repeats` (NEGATIVE CONTROL: unique over every row is `unique`). A required
+  `d` the stored record lacks is ranged in its first sync, and a required `gone_d` the warehouse lacks is dropped
+  (NEGATIVE CONTROL: the stored record's target asks the opposite of each). Web: the About tab's key line and the
+  Schema tab's sample line say the range; the "Use Count" hint is not offered for a ranged unique key.
+- **Not covered:** the Assistant's link card counts a Live key (`answerLink.keyCounts`) over every row. UNVERIFIED on a
+  real warehouse: the ranged sample's shape on BigQuery (the pseudo-column on the aliased scan, as the compiler's).

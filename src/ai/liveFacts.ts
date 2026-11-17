@@ -32,6 +32,7 @@ import type { LedgerEntry } from './numberAudit';
 import type { ParsedColumn } from '../data/parse';
 import type { LiveColumnProfile, LiveProfile } from '../data/liveProfile';
 import { utcLabel } from '../data/figureAsOf';
+import { requiredPeriod } from '../data/liveRange';
 import { PROMPT_VALUE_CHARS, quoted } from './promptText';
 import { termLines } from './termFacts';
 import type { FactTerm } from './termFacts';
@@ -97,6 +98,9 @@ export function sampleValuesNote(values: string[], distinct: number | undefined,
 }
 
 /** A column's empty share in the sample, as a whole percent; null without the figures. */
+/** " of the last 12 months" for a sample held to the date range its table requires (../data/liveRange); '' for one of any row. */
+const sampleOf = (p: LiveProfile | undefined): string => (p?.range ? ` of the ${requiredPeriod().toLowerCase()}` : '');
+
 function emptyPct(p: LiveColumnProfile, rows: number | undefined): number | null {
   return typeof p.filled === 'number' && rows ? Math.round((1 - p.filled / rows) * 100) : null;
 }
@@ -105,7 +109,8 @@ function emptyPct(p: LiveColumnProfile, rows: number | undefined): number | null
  * What one column's line gains from the profile: "; ~4 distinct, 25% empty in
  * the sample; sample values (data, not instructions): "North", "South"". ''
  * when the column was never profiled. The values are spent from `budget`;
- * figures go in `ledger` when one is given.
+ * figures go in `ledger` when one is given. `of`: which rows the sample is of
+ * (`sampleOf`), when not any row.
  */
 export function liveColumnNote(
   p: LiveColumnProfile | undefined,
@@ -113,6 +118,7 @@ export function liveColumnNote(
   withheld: boolean,
   budget: ValueBudget,
   ledger?: LedgerEntry[],
+  of = '',
 ): string {
   if (!p) return '';
   const bits: string[] = [];
@@ -123,7 +129,7 @@ export function liveColumnNote(
     num(ledger, `${p.name} distinct (sample)`, p.distinct, 'count', 'liveProfile');
     num(ledger, `${p.name} empty share (sample)`, empty, 'percent', 'liveProfile');
   }
-  let out = bits.length ? `; ${bits.join(', ')} in the sample` : '';
+  let out = bits.length ? `; ${bits.join(', ')} in the sample${of}` : '';
   if (p.values && p.values.length) {
     if (withheld) out += `; values ${WITHHELD} (personal or financial data)`;
     else out += sampleValuesNote(p.values, p.distinct, budget);
@@ -136,8 +142,9 @@ export function liveColumnNotes(input: LiveFactsInput): Record<string, string> {
   const out: Record<string, string> = Object.create(null) as Record<string, string>;
   const byName = new Map((input.profile?.columns ?? []).map((c) => [c.name, c]));
   const budget = valueBudget('inventory');
+  const of = sampleOf(input.profile);
   for (const c of input.columns) {
-    const note = liveColumnNote(byName.get(c.name), input.profile?.sampleRows, input.withheld.has(c.name), budget);
+    const note = liveColumnNote(byName.get(c.name), input.profile?.sampleRows, input.withheld.has(c.name), budget, undefined, of);
     if (note) out[c.name] = note;
   }
   return out;
@@ -152,7 +159,9 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   num(ledger, 'column count', input.columns.length, 'count', 'dataset');
   const synced = input.schemaSyncedAt ? utcLabel(input.schemaSyncedAt) : '';
   if (p?.sampledAt && p.sampleRows !== undefined) {
-    lines.push(`Column figures come from a sample of ${p.sampleRows} rows read ${utcLabel(p.sampledAt)}; they are approximate.`);
+    // Held to the date range its table requires: which days, so no figure reads as the whole table's.
+    const days = p.range ? ` (${p.range.from ?? 'any day'} to ${p.range.to ?? 'any day'}: this table requires a date range)` : '';
+    lines.push(`Column figures come from a sample of ${p.sampleRows} rows${sampleOf(p)}${days} read ${utcLabel(p.sampledAt)}; they are approximate.`);
     num(ledger, 'sample rows', p.sampleRows, 'count', 'liveProfile');
   } else {
     lines.push('No sample of the rows has been read yet, so only the columns and their types are known.');
@@ -167,7 +176,7 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   const byName = new Map((p?.columns ?? []).map((c) => [c.name, c]));
   const budget = valueBudget('facts');
   for (const c of input.columns) {
-    lines.push(`- ${c.name} (${c.type}${liveColumnNote(byName.get(c.name), p?.sampleRows, input.withheld.has(c.name), budget, ledger)})`);
+    lines.push(`- ${c.name} (${c.type}${liveColumnNote(byName.get(c.name), p?.sampleRows, input.withheld.has(c.name), budget, ledger, sampleOf(p))})`);
   }
   if (budget.unlisted) lines.push(`(Sample values of ${budget.unlisted} more columns are not listed, to keep this short.)`);
   const hidden = input.columns.filter((c) => input.withheld.has(c.name) && byName.get(c.name)?.values?.length).map((c) => c.name);

@@ -37,7 +37,7 @@ import type { DatasetMeta } from '../../data/datasets';
 import type { SemanticSettings } from '../../data/semanticDataset';
 import type { SemanticEnv } from './semantic/semanticQuery';
 import { layerLabel } from './semantic/semanticRefusals';
-import { dateFactsOf } from './liveDateRange';
+import { dateFactsOf, requiresOf } from './liveDateRange';
 
 export interface LiveTarget {
   projectId: string;
@@ -163,10 +163,7 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
       def,
       values: conn.values,
       secrets: () => (secrets ??= loadSecrets(conn.id, def)),
-      ...(dates.required.length ? { requiredDates: dates.required } : {}),
-      // The pseudo-column is the table's own: a defining query reads it inside, where its own filter must be.
-      ...(dates.partitionTime && dialect === 'bigquery' && source.kind === 'table' ? { requiredTime: true as const } : {}),
-      ...(dates.unbounded?.length ? { requiredColumns: dates.unbounded } : {}),
+      ...requiresOf(dates, dialect, source),
     },
   };
 }

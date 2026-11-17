@@ -106,6 +106,9 @@ function sampledFrom(c: Ctx, src: LiveSource, plan: SamplePlan, base: readonly L
     if (src.parts.some(badName)) return refuse('badIdentifier');
     const clause = plan.limitOnly ? null : d.tableSample(plan);
     const table = `${src.parts.map((p) => d.ident(p)).join('.')}${clause ? ` ${clause}` : ''}`;
+    // BigQuery's `_PARTITIONTIME` is the table's pseudo-column, which no subquery selects: it is read on the scan itself.
+    // A ranged sample has no sample clause (./schemaSync); one with a clause is refused, never sent unpruned.
+    if ((base ?? []).some((f) => f.kind === 'range' && f.partitionTime === true)) return clause ? refuse('badQuery') : `(SELECT ${cols} FROM ${table} AS lv_src${where} ${limit}) AS lv_src`;
     if (where) return `(SELECT ${cols} FROM (SELECT ${cols} FROM ${table}) AS lv_src${where} ${limit}) AS lv_src`;
     return `(SELECT ${cols} FROM ${table} ${limit}) AS lv_src`;
   }

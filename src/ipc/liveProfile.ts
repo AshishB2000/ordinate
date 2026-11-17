@@ -29,7 +29,7 @@ import { isLive } from '../data/liveDataset';
 import { isSourceView } from '../data/sourceView';
 import { tableValuesOnKeep } from '../ai/sourceAnswerMessages';
 import { declaredColumns } from '../data/liveCalcs';
-import { LOW_CARDINALITY, profileDistinct, profileOf, type LiveProfile, type ProfileDistinct, type UnlistedReason } from '../data/liveProfile';
+import { LOW_CARDINALITY, profileDistinct, profileOf, type LiveProfile, type ProfileDistinct, type SampleSkip, type UnlistedReason } from '../data/liveProfile';
 import { formatNumber } from '../app/format';
 import { distribution, pctOf, type ColumnProfile } from '../data/profileView';
 import { refreshRunning } from '../data/refreshJob';
@@ -43,6 +43,7 @@ import type { CopilotFacts } from '../ai/copilot';
 import type { FactMetric } from '../ai/copilotFacts';
 import { schemaSyncStarting, startSchemaSync } from '../engine/live/schemaSyncJob';
 import * as msg from '../engine/liveProfileMessages';
+import { requiredRangeNote } from '../engine/live/liveDateRange';
 import { loadInput } from './lineage';
 import type { FactTerm } from '../ai/termFacts';
 import { liveCalculated, type CalculatedView } from './liveCalcs';
@@ -192,6 +193,8 @@ export interface LiveSchemaView {
   method: 'sample' | 'limit' | null;
   /** Why the last sync read no sample (a catalog sentence), or null. */
   note: string | null;
+  /** The sample was held to the date range its table requires: that range's sentence (catalog), or null for any row. */
+  range: string | null;
   columns: SchemaColumn[];
   missing: MissingColumn[];
   /** The always-applied filters (D13); column and operator only for a caller row access rules restrict. */
@@ -204,7 +207,9 @@ export interface LiveSchemaView {
   grains?: Array<{ column: string; grains: string[] }>;
 }
 
-const SKIP_NOTE = { tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused } as const;
+const SKIP_NOTE: Record<SampleSkip, (p: LiveProfile) => string> = {
+  tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused, needsFilter: (p) => msg.liveSampleNeedsFilter(p.needs ?? ''),
+};
 
 async function schemaView(projectId: string, datasetId: string): Promise<LiveSchemaView | { ok: false; error: string; code?: string }> {
   // Asked BEFORE the record is read: a sync landing between the two would otherwise send its old profile as "not
@@ -226,7 +231,8 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     sampledAt: prof?.sampledAt ?? null,
     sampleRows: closed ? null : rows ?? null,
     method: prof?.method ?? null,
-    note: prof?.skipped ? SKIP_NOTE[prof.skipped]() : null,
+    note: prof?.skipped ? SKIP_NOTE[prof.skipped](prof) : null,
+    range: prof?.range ? requiredRangeNote() : null,
     columns: declaredColumns(meta).map((c) => {
       const p = profileOf(meta, c.name);
       const filled = !closed && typeof p?.filled === 'number' ? p.filled : null;

@@ -26,3 +26,8 @@ export function tableNotesNotRead(): string {
 export function tableNotesNotSaved(): string {
   return t('tableDocMessages.could_not_save_the_table_notes');
 }
+
+/** "Check now" on a Live table that requires a filter on a column with no default range (an integer-range partition). */
+export function keyCheckNeedsFilter(column: string): string {
+  return t('tableDocMessages.this_table_needs_a_filter_on', { column });
+}

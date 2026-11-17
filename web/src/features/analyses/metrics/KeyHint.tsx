@@ -14,7 +14,7 @@ export function KeyHint(props: Props) {
 
 function Hint({ projectId, datasetId, column, onUseCount }: Props) {
   const t = useTableDoc(projectId, datasetId).data;
-  if (!t || t.key !== column || t.keyCheck?.repeatedKeys !== 0) return null;
+  if (!t || t.key !== column || t.keyCheck?.repeatedKeys !== 0 || t.keyCheck.range) return null; // unique over a range is not the table's
   return (
     <p className={s.keyHint}>
       Each {column} appears once, so Count gives the same number.{' '}

@@ -25,6 +25,16 @@
 //      CONTROL: the scan check refuses the range one SELECT out).
 //   4. The nightly's pruning measurement: its plan skips without variables, refuses a half-set, and
 //      compiles its two forms; test-warehouseLive skips green without secrets and writes no artifact.
+//   5. STORED READERS: the key check ("Check now") and the schema sync's sample read inside the required
+//      range and store its days, said on reply (the figures' sentence); the counts and the sample's rows
+//      are the extract reference's over the same days (Object.is). NEGATIVE CONTROL: no doc, no range,
+//      every row. A required integer-range partition skips both, naming it, nothing sent; `_PARTITIONTIME`
+//      sits on the table scan of both statements (NEGATIVE CONTROL: with a sample clause it refuses). A
+//      result stored before has no range and reads as before. The Assistant's facts and inventory say the
+//      sample's range, and a key unique only over it is told and badged as unchecked (NEGATIVE CONTROLS: no
+//      range, as before). The sync reads what is required of the columns it just read: a required date column
+//      added now gets its range in the same sync, one gone is dropped (NEGATIVE CONTROL: the stored record's
+//      target says the opposite).
 //
 //   npm run build:ts && node scripts/test-livePartitionFilter.js
 
@@ -48,6 +58,12 @@ const tree: typeof import('../src/engine/live/sql/tree') = require('../src/engin
 const print: typeof import('../src/engine/live/sql/print') = require('../src/engine/live/sql/print');
 const liveTarget: typeof import('../src/engine/live/liveTarget') = require('../src/engine/live/liveTarget');
 const pruning: typeof import('./warehousePruning') = require('./warehousePruning');
+const sync: typeof import('../src/engine/live/schemaSync') = require('../src/engine/live/schemaSync');
+const profileSql: typeof import('../src/engine/live/profileSql') = require('../src/engine/live/profileSql');
+const tableStore: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+const liveProfile: typeof import('../src/data/liveProfile') = require('../src/data/liveProfile');
+const { keyCheckJs }: typeof import('../src/analysis/keyCheck') = require('../src/analysis/keyCheck');
+const liveProfileIpc: typeof import('../src/ipc/liveProfile') = require('../src/ipc/liveProfile');
 const { DIALECT_IDS, dialectFor }: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 
 const SENTENCE = 'Last 12 months: this table needs a date range';
@@ -393,6 +409,128 @@ function pruningMeasurement(): void {
   ok('NEGATIVE CONTROL: a pruning variable without the warehouse\'s key fails the nightly (a half-set is not a skip)', alone.status !== 0 && /missing: BIGQUERY_KEY_JSON/.test(alone.stdout + alone.stderr), alone.stdout.slice(-300));
 }
 
+/** A doc on `connId`'s `live_typed` saying its partition requires a filter. */
+const requireOn = (P: string, connId: string, partition: { columns: string[]; method: string }) => H.as(H.ORG_A, async () => {
+  const made = await store.createSourceDoc(P, connId, 'live_typed', {});
+  if (!made.ok) throw new Error('no doc');
+  await store.updateSourceDoc(P, connId, made.docId, (d) => ({ ...d, facts: { columns: [], partition: { ...partition, required: true }, readAt: '2025-03-01T00:00:00Z', readBy: 'ana' } }));
+});
+
+async function storedReaders(): Promise<void> {
+  const s = await H.setupOrg(H.ORG_A);
+  const P = s.projectId;
+  const bare = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  const tier = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  await requireOn(P, s.connId, { columns: ['d'], method: 'DAY' });
+  await requireOn(P, tier.connId, { columns: ['tier'], method: 'RANGE' });
+  const RANGE = ['2024-03-01', '2025-02-28'];
+  const DAYS = { from: RANGE[0], to: RANGE[1] };
+  // The extract's own reference (analysis/keyCheck keyCheckJs) over the rows the range holds, and over every row.
+  const ref = await H.as(H.ORG_A, async () => {
+    const ds = await H.datasets.getDataset(P, s.extractId);
+    const k = ds!.columns.findIndex((c) => c.name === 'bigid');
+    const d = ds!.columns.findIndex((c) => c.name === 'd');
+    const inRange = ds!.rows.filter((r) => r[d] != null && String(r[d]).slice(0, 10) >= RANGE[0] && String(r[d]).slice(0, 10) <= RANGE[1]);
+    return { ranged: keyCheckJs(inRange.map((r) => r[k]), 'text'), all: keyCheckJs(ds!.rows.map((r) => r[k]), 'text'), inRange: inRange.length, rows: ds!.rows.length };
+  });
+  const same = (a: Record<string, unknown> | undefined, b: Record<string, unknown>) => !!a && ['rows', 'empty', 'repeatedKeys'].every((f) => Object.is(a[f], b[f]));
+  for (const id of [s.liveId, bare.liveId, tier.liveId]) await post('catalog:setTable', { projectId: P, datasetId: id, patch: { key: 'bigid' } });
+
+  H.fakeMod.resetFake();
+  const checked = (await post('catalog:checkKey', { projectId: P, datasetId: s.liveId })).value;
+  const kc = checked.ok ? checked.table.keyCheck : undefined;
+  ok('key check: held to the required range, bound, and stored with its days', JSON.stringify(datesOf(/k_repeated/)) === JSON.stringify([RANGE]) && JSON.stringify(kc?.range) === JSON.stringify(DAYS), JSON.stringify([datesOf(/k_repeated/), kc]));
+  ok('…its counts are the extract reference\'s over the same days (Object.is), fewer rows than the table', same(kc, ref.ranged) && ref.inRange > 0 && ref.inRange < ref.rows, JSON.stringify([kc, ref]));
+  const read = (await post('catalog:getTable', { projectId: P, datasetId: s.liveId })).value;
+  const raw = await H.as(H.ORG_A, () => tableStore.getTableDoc(P, s.liveId));
+  ok('…the reply and a later read say the range in the figures\' sentence; the store keeps the days, never the sentence', kc?.note === SENTENCE && read.table?.keyCheck?.note === SENTENCE && JSON.stringify(raw.keyCheck?.range) === JSON.stringify(DAYS) && !('note' in (raw.keyCheck ?? {})), JSON.stringify([read, raw]));
+  H.fakeMod.resetFake();
+  const whole = (await post('catalog:checkKey', { projectId: P, datasetId: bare.liveId })).value;
+  ok('NEGATIVE CONTROL: no doc — every row is counted (the reference\'s whole-table counts), no range, no sentence', whole.ok === true && JSON.stringify(datesOf(/k_repeated/)) === '[[]]' && same(whole.table.keyCheck, ref.all) && !('range' in whole.table.keyCheck) && !('note' in whole.table.keyCheck), JSON.stringify(whole));
+  H.fakeMod.resetFake();
+  const needs = (await post('catalog:checkKey', { projectId: P, datasetId: tier.liveId })).value;
+  ok('a required integer-range partition: the key check is skipped, naming it, nothing sent or stored', needs.ok === false && needs.code === 'live_refused' && needs.error === 'This table needs a filter on "tier", and the key check assumes no range for it.' && H.fake.calls.length === 0
+    && !(await H.as(H.ORG_A, () => tableStore.getTableDoc(P, tier.liveId))).keyCheck, JSON.stringify(needs));
+  // The Assistant is told a key is unique only over the whole table; repeats over a range are the table's too.
+  // The Data model overview badges it the same way: a range's "no repeats" is not "unique".
+  const facts = async (check: import('../src/app/tableDocs').KeyCheck) => {
+    const told = await H.as(H.ORG_A, async () => (await tableStore.writeKeyCheck(P, s.liveId, 'bigid', check), (await tableStore.tableFacts(P, s.liveId))?.keyState));
+    const badged = ((await post('model:overview', { projectId: P })).value.tables as { datasetId: string; keyState: string }[]).find((x) => x.datasetId === s.liveId)?.keyState;
+    return `${told}/${badged}`;
+  };
+  const unique = { rows: 3, empty: 0, repeatedKeys: 0, checkedAt: '2025-03-15T00:00:00Z' };
+  const states = [await facts({ ...unique, range: DAYS }), await facts({ ...unique, repeatedKeys: 1, range: DAYS }), await facts(unique)];
+  ok('a key unique over a range is not told or badged unique (unchecked), one repeating there is "repeats" (NEGATIVE CONTROL: unique over every row is "unique")',
+    JSON.stringify(states) === '["undefined/unchecked","repeats/repeats","unique/unique"]', JSON.stringify(states));
+
+  const profileOf = async (id: string) => (await H.as(H.ORG_A, () => H.datasets.getDatasetMeta(P, id)))?.live?.profile; // read back through the record's sanitizer
+  const view = async (id: string) => (await post('dataset:liveSchema', { projectId: P, datasetId: id })).value;
+  H.fakeMod.resetFake();
+  const synced = await H.as(H.ORG_A, () => sync.syncLiveSchema(P, s.liveId));
+  const sample = H.fake.calls.filter((c) => c.sql.includes('CROSS JOIN lv_ix'));
+  const prof = await profileOf(s.liveId);
+  ok('schema sync: the sample is read inside the range, LIMIT only (no sample clause), and stored with its days', synced.ok && sample.length === 1 && JSON.stringify(datesOf(/CROSS JOIN lv_ix/)) === JSON.stringify([RANGE]) && !/USING SAMPLE/.test(sample[0].sql)
+    && prof?.method === 'limit' && JSON.stringify(prof.range) === JSON.stringify(DAYS), JSON.stringify([synced, prof?.method, prof?.range]));
+  ok('…it holds exactly the rows the range holds (the extract\'s count, Object.is), and the Schema panel says the range', Object.is(prof?.sampleRows, ref.inRange) && (await view(s.liveId)).range === SENTENCE, JSON.stringify([prof?.sampleRows, ref.inRange]));
+  const told = async (id: string) => H.as(H.ORG_A, async () => {
+    const meta = await H.datasets.getDatasetMeta(P, id);
+    return { text: (await liveProfileIpc.liveCopilotFacts(P, id))?.facts.text ?? '', notes: Object.values((meta && (await liveProfileIpc.liveInventoryNotes(P, meta))) ?? {}) };
+  });
+  const ranged = await told(s.liveId);
+  ok('the Assistant\'s facts say which rows the sample is of, with its days, and each column\'s figures say it',
+    ranged.text.includes(`a sample of ${ref.inRange} rows of the last 12 months (2024-03-01 to 2025-02-28: this table requires a date range) read`) && /- region \(text; ~\d+ distinct, \d+% empty in the sample of the last 12 months;/.test(ranged.text), ranged.text);
+  ok('…and so does the project inventory\'s line for each column', ranged.notes.length > 0 && ranged.notes.every((n) => n.includes('in the sample of the last 12 months')), JSON.stringify(ranged.notes));
+  H.fakeMod.resetFake();
+  await H.as(H.ORG_A, () => sync.syncLiveSchema(P, bare.liveId));
+  const bareProf = await profileOf(bare.liveId);
+  ok('NEGATIVE CONTROL: no doc — the engine samples every row, no range is stored or said', JSON.stringify(datesOf(/CROSS JOIN lv_ix/)) === '[[]]' && /USING SAMPLE/.test(H.fake.calls.find((c) => c.sql.includes('CROSS JOIN lv_ix'))?.sql ?? '')
+    && bareProf?.method === 'sample' && !('range' in bareProf) && (await view(bare.liveId)).range === null, JSON.stringify(bareProf));
+  const plain = await told(bare.liveId);
+  ok('NEGATIVE CONTROL: no range — the facts and the inventory say a sample, no range', /a sample of \d+ rows read/.test(plain.text) && !plain.text.includes('12 months') && plain.notes.length > 0 && plain.notes.every((n) => !n.includes('12 months')), plain.text);
+  H.fakeMod.resetFake();
+  const skipped = await H.as(H.ORG_A, () => sync.syncLiveSchema(P, tier.liveId));
+  const tierProf = await profileOf(tier.liveId);
+  const NEEDS = 'No sample was read: this table needs a filter on "tier", and the sample assumes no range for it. The column figures are from the last sync that read one.';
+  ok('a required integer-range partition: the columns sync, the sample is skipped naming it, nothing is sampled', skipped.ok === true && !skipped.sample.ok && skipped.sample.error === NEEDS && H.fake.calls.every((c) => !c.sql.includes('CROSS JOIN lv_ix'))
+    && tierProf?.skipped === 'needsFilter' && tierProf.needs === 'tier' && (await view(tier.liveId)).note === NEEDS, JSON.stringify([skipped, tierProf]));
+
+  // The sync reads what is required of the columns it just read, not of the stored record's.
+  const added = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS.filter((c) => c.name !== 'd')));
+  const gone = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, [...H.fx.COLUMNS, { name: 'gone_d', type: 'date' }]));
+  await requireOn(P, added.connId, { columns: ['d'], method: 'DAY' });
+  await requireOn(P, gone.connId, { columns: ['gone_d'], method: 'DAY' });
+  const stale = await H.as(H.ORG_A, async () => [await liveTarget.liveTarget(P, added.liveId), await liveTarget.liveTarget(P, gone.liveId)]);
+  ok('NEGATIVE CONTROL: from the stored records, `d` would be asked of nothing and `gone_d` of the sample',
+    stale.every((r) => r.ok) && stale[0].ok && stale[0].target.requiredDates === undefined && stale[1].ok && JSON.stringify(stale[1].target.requiredDates) === '["gone_d"]', JSON.stringify(stale.map((r) => r.ok && r.target.requiredDates)));
+  H.fakeMod.resetFake();
+  await H.as(H.ORG_A, () => sync.syncLiveSchema(P, added.liveId));
+  const addedProf = await profileOf(added.liveId);
+  ok('a required date column added in this sync is held to its range in the same sync', JSON.stringify(datesOf(/CROSS JOIN lv_ix/)) === JSON.stringify([RANGE]) && JSON.stringify(addedProf?.range) === JSON.stringify(DAYS) && Object.is(addedProf?.sampleRows, ref.inRange), JSON.stringify(addedProf));
+  H.fakeMod.resetFake();
+  const goneSync = await H.as(H.ORG_A, () => sync.syncLiveSchema(P, gone.liveId));
+  const goneProf = await profileOf(gone.liveId);
+  ok('…and one gone from the warehouse is dropped: the sample is read, unranged, never refused for it', goneSync.ok === true && goneSync.sample.ok === true && JSON.stringify(datesOf(/CROSS JOIN lv_ix/)) === '[[]]' && goneProf?.method === 'sample' && !('range' in goneProf), JSON.stringify([goneSync, goneProf]));
+
+  // `_PARTITIONTIME` on both statements (BigQuery's pseudo-column, ./liveDateRange): on the table scan itself.
+  const columns: LiveColumn[] = [{ name: 'k', type: 'text' }, { name: 'amt', type: 'number' }];
+  const env = { dialect: 'bigquery' as const, source: { kind: 'table' as const, parts: ['p', 'd', 't'] }, columns };
+  const need = dateRange.lookupRequired({ requiredTime: true, env }, []);
+  const keySql = need.ok ? compile.compileKeyCheck('k', need.env, need.filters) : null;
+  const base = need.ok ? need.env.base ?? [] : [];
+  const prof1 = profileSql.compileProfile({ ...env, base }, { rows: 1000, limitOnly: true });
+  const SCAN = /FROM `p`\.`d`\.`t` AS lv_src WHERE \(lv_src\._PARTITIONTIME >= CAST\(@p\d+ AS TIMESTAMP\)/;
+  ok('_PARTITIONTIME: the key check and the profile read it on the table scan, a TIMESTAMP range, no sample clause',
+    keySql?.ok === true && SCAN.test(keySql.query.sql) && prof1.ok && SCAN.test(prof1.query.sql) && !/TABLESAMPLE/.test(prof1.query.sql) && JSON.stringify(need.ok && need.range) === JSON.stringify(DAYS), JSON.stringify([keySql, prof1]));
+  ok('NEGATIVE CONTROL: a profile of it under a sample clause refuses, never sent unpruned', profileSql.compileProfile({ ...env, base }, { rows: 1000, percent: 5 }).ok === false);
+
+  // A result stored before this change has no range: it reads as every row's, with no crash.
+  const old = tableStore.sanitizeTableDoc({ key: 'k', keyCheck: unique });
+  const oldProf = liveProfile.sanitizeProfile({ columns: [{ name: 'k', filled: 1 }], sampledAt: '2025-03-01T00:00:00Z', sampleRows: 1, method: 'sample' });
+  const odd = liveProfile.sanitizeProfile({ columns: [], range: { from: '2024-03-01', to: 'soon' }, skipped: 'needsFilter' });
+  ok('stored before: a key check and a profile with no range read as before; a hand-edited range keeps "not every row", a nameless skip reads refused',
+    !!old.keyCheck && !('range' in old.keyCheck) && !!oldProf && !('range' in oldProf) && JSON.stringify(odd?.range) === '{"from":"2024-03-01"}' && odd?.skipped === 'refused', JSON.stringify([old, oldProf, odd]));
+}
+
 async function main(): Promise<void> {
   rawRangeCompile();
   partitionTime();
@@ -402,6 +540,7 @@ async function main(): Promise<void> {
   await lookups();
   await integerPartition();
   await partitionTimeFacts();
+  await storedReaders();
 }
 
 void main()

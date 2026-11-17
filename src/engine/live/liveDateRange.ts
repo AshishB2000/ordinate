@@ -16,9 +16,11 @@
 // takes the same rule through `requiredRange` (./liveSql: in the view of a table no WHERE of the
 // statement filters on that column), with the same sentence on its card.
 //
-// A lookup (the answers' case fix, the latest-day probe, the key check) is not a question, so it takes the
-// rule through `lookupRequired`: the same range on each required column its own filters leave open. A
-// lookup whose result a person reads says so with the same sentence.
+// A lookup (the answers' case fix, the latest-day probe, the key check, the schema sync's sample) is not a
+// question, so it takes the rule through `lookupRequired`: the same range on each required column its own
+// filters leave open. A lookup whose result a person reads says so with the same sentence; one whose result is
+// STORED (the key check, the profile) stores the range's days beside it (../../data/liveRange), and a required
+// column with no default skips it, said by its reader, never guessed.
 //
 // Two required partitions are not a declared date. BigQuery's ingestion-time `_PARTITIONTIME` is a
 // pseudo-column, in no dataset's columns: a table source gets REQUIRED_RANGE on it as a TIMESTAMP range
@@ -29,15 +31,16 @@
 import type { DatasetOrigin } from '../../data/datasetOrigin';
 import { docTablesOf, sourceTablesOf } from '../../data/sourceTableOf';
 import { listSourceIndex, readSourceDoc } from '../../app/sourceTables';
-import type { PeriodSpec } from '../../analysis/dateIntel';
-import { describePeriod, getCalendar, resolvePeriodNow } from '../../analysis/dateIntel';
+import { resolvePeriodNow } from '../../analysis/dateIntel';
+import { REQUIRED_RANGE, requiredPeriod } from '../../data/liveRange';
 import * as msg from '../liveQueryMessages';
 import type { LiveColumn, LiveFilter, LiveIR, LiveRefusal } from './liveSpec';
 import { refuse } from './liveSpec';
-import type { CompileEnv } from './compile';
+import type { CompileEnv, LiveSource } from './compile';
+import type { LiveDialectId } from '../../connectors/types';
 
-/** The range a question on a table that requires one gets when it names none: the date control's "Last 12 months". */
-export const REQUIRED_RANGE: PeriodSpec = { preset: 'last_n_months', n: 12 };
+/** The range a question on a table that requires one gets when it names none (../../data/liveRange, where stored results read it too). */
+export { REQUIRED_RANGE };
 
 /** BigQuery's ingestion-time partition pseudo-column. */
 export const PARTITION_TIME = '_PARTITIONTIME';
@@ -60,6 +63,18 @@ export interface Requires {
   requiredTime?: true;
   /** Required columns with no default range: a question that leaves one open is refused. */
   requiredColumns?: string[];
+}
+
+/**
+ * What a question on the dataset must filter, from its tables' facts (`dateFactsOf`). The pseudo-column is the
+ * table's: a defining query reads it inside, where its own filter must be, so only a BigQuery table source gets it.
+ */
+export function requiresOf(dates: DateFacts, dialect: LiveDialectId, source: LiveSource): Requires {
+  return {
+    ...(dates.required.length ? { requiredDates: dates.required } : {}),
+    ...(dates.partitionTime && dialect === 'bigquery' && source.kind === 'table' ? { requiredTime: true as const } : {}),
+    ...(dates.unbounded?.length ? { requiredColumns: dates.unbounded } : {}),
+  };
 }
 
 /** The words of an editor's "required filters" line, lower-cased: `Filter on ORDER_DATE` names `order_date`. */
@@ -111,8 +126,11 @@ export function requiredRange(req: Requires | undefined, filtered: Iterable<stri
   const bounds = { ...(r.from ? { from: r.from } : {}), ...(r.to ? { to: r.to } : {}) };
   const filters = missing.map((column): LiveFilter => ({ kind: 'range', column, ...bounds }));
   if (time) filters.push({ kind: 'range', column: PARTITION_TIME, ...bounds, partitionTime: true });
-  return { ok: true, filters, notes: [msg.liveRequiredRange(describePeriod(REQUIRED_RANGE, getCalendar()))] };
+  return { ok: true, filters, notes: [requiredRangeNote()] };
 }
+
+/** What a figure held to REQUIRED_RANGE says, in the reader's language: *Last 12 months: this table needs a date range*. */
+export const requiredRangeNote = (): string => msg.liveRequiredRange(requiredPeriod());
 
 /** `env` with the partition-time range among its base filters (on the table scan, innermost), else `env` as it came. */
 function withTime(env: CompileEnv, filters: readonly LiveFilter[]): CompileEnv {
