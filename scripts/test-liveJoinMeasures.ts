@@ -15,8 +15,7 @@
 //   4. DRILL-ACROSS KPI: a measure on the MANY side is that table's own KPI on Live too, as the copy's (and its chart's);
 //      across a mix (a Live primary with a copy many side, a copy primary with a Live one) a filter on the primary
 //      refuses typed in the mix sentence, nothing sent or hydrated (NEGATIVE CONTROL: unfiltered, the Live side answers).
-//   A COPY DIVERGENCE is pinned too: a related measure that is also the category — joinJs moves masked rows to the
-//   blank category, joinResident (and Live) do not.
+//   A related measure that is also the category: no masked row leaves its group, on Live, joinResident and joinJs alike.
 //   5. NEGATIVE CONTROLS: without the mask, sum and count by the primary category and the KPI take the by-hand unmasked
 //      figures and disagree with joinJs; a chart across a reverse hop refuses, and a KPI filter only a reverse hop reaches
 //      is skipped as the copy skips it; a mix (a copy, two connections) and a deleted relationship refuse typed on a KPI.
@@ -168,16 +167,17 @@ void (async () => {
     ok('a related measure under a related split and filters (masked per category AND series): Live = joinJs', live.ok && p.length === 0, p.join(' | ') || show(live));
   }
   {
-    // A COPY DIVERGENCE, pinned: the measure column is the category column. joinJs's maskFanIn nulls the masked cells of
-    // the measure column — here the group key itself — so every later row of a customer moves to the blank category,
-    // taking the chart's other measures with it. joinResident masks a copy of the cell and keeps the key; Live does too.
+    // The measure column is the category column. The mask must not move a row out of its group: joinResident and Live
+    // mask a copy of the cell and keep the key, and joinJs reads a hidden copy of the key (keyCopies). Before that fix,
+    // joinJs moved North's later orders to the blank category (North's sum of amt read 21).
     const enc = (x: Side): VizEncoding => ({ category: 'region', categoryDatasetId: x.customers, values: [M('region', 'count', x.customers), M('amt', 'sum')] });
     const live = await chart(L.orders, enc(L));
     const { resident, js } = await copyCharts(P, X.orders, enc(X), []);
     const p = problems(resident, live);
     ok('a related measure that IS the category (count of region by region): Live = joinResident, Object.is', p.length === 0, p.join(' | ') || show(live.data));
-    ok('…and joinJs differs (a copy divergence, joinJs\'s to fix): North\'s later orders land in the blank category', problems(js, live).length > 0
-      && js.data.series[1].values[js.data.labels.indexOf('North')] === 21, show(js.data));
+    const q = problems(js, live);
+    ok('…and Live = joinJs too: no row leaves its group (North is not the 21 the unfixed joinJs gave)', q.length === 0
+      && js.data.series[1].values[js.data.labels.indexOf('North')] !== 21, q.join(' | ') || show(js.data));
   }
   {
     const web = await chart(L.orders, { category: 'ch', values: [M('target', 'sum', L.customers)] });
