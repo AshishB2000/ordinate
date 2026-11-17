@@ -65,6 +65,8 @@ export interface PlanRun {
   touches: Touch[];
   state: RunState;
   undo?: UndoReport;
+  /** Server only: the ending (`state`) whose log is written — once, whoever asks again (../ipc/plan `logIfOver`). */
+  logged?: RunState;
   /** Server only: the upload (POST /api/files token) the next import step reads, handed over by plan:next. */
   fileToken?: string;
 }

@@ -13,8 +13,9 @@
 //     its facts were built from, and a conversation of only such turns leaves the list and reads as missing by id.
 //     So does an answer asked on a dashboard page placed in Finance (no dataset of its own) and an alert's explanation on
 //     Finance's dataset; a rename is told the count shown; an ask into a conversation of only hidden turns starts a new one
-//     and replays the model none of them.
-//     NEGATIVE CONTROLS: finViewer and padmin do; a stored turn without that record (an older release's) keeps its words;
+//     and replays the model none of them, and a follow-up chip and a plan's log into one start a new one too.
+//     NEGATIVE CONTROLS: finViewer and padmin do; a chip into a conversation with a turn shown appends there, and with the
+//     folder checks off (no folder besides Everyone) the chip and the log land in the ones named; a stored turn without that record (an older release's) keeps its words;
 //     with the WHERE condition removed (folderGate's seam), opsViewer's index answers carry them and differ from the
 //     reference; a ⌘K row with no anchor (an older pod's) is not returned to opsViewer but is to padmin; an anchor
 //     written in another case is still filtered, in ⌘K and in step 3's index.
@@ -264,6 +265,65 @@ async function proseChecks(W: H.World, prose: Prose): Promise<void> {
   ok('NEGATIVE CONTROL: finViewer\'s lands in the one named, replaying its two turns', kept.threadId === fins.fin && kept.turns === 4 && kept.replayed.length === 2 && FIN.test(kept.replayed.join(' ')) && kept.stored === 4, JSON.stringify(kept).slice(0, 300));
 }
 
+/**
+ * Every other write naming a conversation lands as an ask does (../src/ipc/turnsOpen `askThread`): a follow-up chip
+ * (answer:rerun) and a plan's log, into one of only hidden turns, start a new one, and the old one gains no turn.
+ */
+async function landingChecks(W: H.World, prose: Prose, fin: Fin): Promise<void> {
+  const { P, pool } = W;
+  const turnsIn = async (threadId: string) => (await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM assistant_turns WHERE project_id = $1 AND thread_id = $2', [P, threadId])).rows[0].n;
+  const unchecked = async <T>(fn: () => Promise<T>): Promise<T> => {
+    gate.setFolderChecksForTest(false); // as with no folder besides Everyone, or for an admin: `levelsOf` answers null
+    try {
+      return await fn();
+    } finally {
+      gate.setFolderChecksForTest(true);
+    }
+  };
+  const chip = { datasetId: W.plain, category: 'dept', measures: [{ column: 'salary', aggregation: 'sum' }], filters: [] };
+  const rerun = async (who: H.Person, threadId: string) => {
+    const before = await turnsIn(threadId);
+    const r = (await W.call(who, 'answer:rerun', { projectId: P, threadId, spec: chip, label: 'plain chip' })).body ?? {};
+    return { ok: r.ok === true, threadId: r.threadId as string, turns: ((r.turns ?? []) as unknown[]).length, gained: (await turnsIn(threadId)) - before, raw: JSON.stringify(r).slice(0, 300) };
+  };
+  const ops = prose.of.get('opsViewer')!;
+  const fresh = await rerun('opsViewer', ops.fin);
+  ok('history: opsViewer\'s follow-up chip into their conversation of only hidden turns lands in a new one, named in the reply, and the old one gains no turn', fresh.ok && fresh.threadId !== ops.fin && fresh.turns === 2 && fresh.gained === 0 && !CANARIES.test(fresh.raw), JSON.stringify(fresh));
+  const mixed = await rerun('opsViewer', ops.mixed);
+  ok('NEGATIVE CONTROL: opsViewer\'s chip into their conversation with turns shown appends there, as before', mixed.ok && mixed.threadId === ops.mixed && mixed.turns === 4 && mixed.gained === 2 && !CANARIES.test(mixed.raw), JSON.stringify(mixed));
+  const fins = await rerun('finViewer', prose.of.get('finViewer')!.fin);
+  ok('NEGATIVE CONTROL: finViewer\'s into theirs on Finance\'s dataset lands in the one named', fins.ok && fins.threadId === prose.of.get('finViewer')!.fin && fins.gained === 2, JSON.stringify(fins));
+  const asked = (who: H.Person) => fakeModel(async () => { // a conversation of one prose answer on Finance's dataset
+    const id = (await W.call(who, 'copilot:newThread', { projectId: P })).body?.thread?.id as string;
+    await W.call(who, 'copilot:ask', { projectId: P, threadId: id, context: { kind: 'dataset', id: fin.ds }, question: 'fincanary prose question' });
+    return id;
+  });
+  const admins = await asked('padmin');
+  const admin = await rerun('padmin', admins);
+  ok('NEGATIVE CONTROL: padmin\'s into theirs on Finance\'s dataset lands in it', admin.ok && admin.threadId === admins && admin.gained === 2 && admin.turns === 4, JSON.stringify(admin));
+
+  // A plan's log, at its run's end, into the conversation plan:start named: opsLead's, asked while the checks were off.
+  const leads = await unchecked(() => asked('opsLead'));
+  ok('setup: opsLead\'s conversation has 2 turns, none shown to them', (await turnsIn(leads)) === 2 && (await W.call('opsLead', 'copilot:history', { projectId: P, threadId: leads })).body?.threadId === null);
+  const threads = async () => (await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM assistant_threads WHERE project_id = $1', [P])).rows[0].n;
+  const logged = async (name: string) => {
+    const before = await turnsIn(leads);
+    const run = (await W.call('opsLead', 'plan:start', { projectId: P, threadId: leads, intent: 'x', steps: [{ kind: 'import', file: 'a.csv', name }] })).body?.runId as string;
+    const log = (await W.call('opsLead', 'plan:stop', { projectId: P, runId: run })).body?.log as string | undefined;
+    const at = async () => (await pool.query<{ t: string }>('SELECT thread_id::text AS t FROM assistant_turns WHERE project_id = $1 AND text = $2', [P, log ?? ''])).rows.map((r) => r.t);
+    const [where, gained, n] = [await at(), (await turnsIn(leads)) - before, await threads()];
+    // A plan:next after the run ended: the log is written once, so it lands nowhere again and opens no conversation.
+    const repeat = (await W.call('opsLead', 'plan:next', { projectId: P, runId: run })).body?.log ?? null;
+    return { log: !!log, at: where, gained, again: { log: repeat, copies: (await at()).length, threads: (await threads()) - n, gained: (await turnsIn(leads)) - before - gained } };
+  };
+  const once = (r: Awaited<ReturnType<typeof logged>>) => r.again.log === null && r.again.copies === 1 && r.again.threads === 0 && r.again.gained === 0;
+  const away = await logged('Hidden log');
+  ok('history: a plan\'s log into opsLead\'s conversation of only hidden turns lands in a new one, and the old one gains no turn', away.log && away.at.length === 1 && away.at[0] !== leads && away.gained === 0, JSON.stringify(away));
+  ok('history: …and a plan:next after that run ended logs it nowhere again and opens no conversation', once(away), JSON.stringify(away.again));
+  const inert = await unchecked(async () => ({ chip: await rerun('opsViewer', ops.fin), log: await logged('Shown log') }));
+  ok('NEGATIVE CONTROL: with the folder checks off, opsViewer\'s chip and opsLead\'s log land in the ones named, the log once', inert.chip.threadId === ops.fin && inert.chip.gained === 2 && inert.log.gained === 1 && once(inert.log), JSON.stringify(inert));
+}
+
 export async function indexSections(W: H.World): Promise<void> {
   const { P, pool } = W;
   const fin = await finance(W);
@@ -333,6 +393,7 @@ export async function indexSections(W: H.World): Promise<void> {
     const unfiltered = await counts('opsViewer').finally(() => gate.setIndexWhereForTest(true));
     ok('NEGATIVE CONTROL: counted without the folders, opsViewer\'s list would say how many turns are hidden', unfiltered.some(([n, shown]) => n > shown), JSON.stringify(unfiltered));
     await proseChecks(W, prose);
+    await landingChecks(W, prose, fin);
 
     // ── NEGATIVE CONTROL: the WHERE removed ──
     gate.setIndexWhereForTest(false);

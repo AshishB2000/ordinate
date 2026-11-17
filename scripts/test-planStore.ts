@@ -9,7 +9,11 @@
 //   4. a lease left by a pod that went away is recovered: that step failed, "may
 //      have partly run", the touches kept; a lost undo goes back to its state;
 //   5. caps: 10 runs per user (oldest first), a run past 24 h goes, a leased run is
-//      never pruned.
+//      never pruned;
+//   6. the log is written once per ending: a plan:next after the run ended (two at
+//      once) adds no turn, opens no conversation and asks the store for no write —
+//      NEGATIVE CONTROL: the call that ended it logged and marked the record; an
+//      ended run with no mark, asked twice at once, logs once (the lock decides).
 //
 //   npm run build:ts && node scripts/test-planStore.js
 
@@ -117,6 +121,52 @@ const edit = (runId: string, fn: (r: Record<string, any>) => void): void => { //
   const applied = await store.apply(P, run2.id, cl!.claim, (r) => pr.addTouches(r, made('kept')), (r) => pr.endStep(r, 0, made('kept'))).catch(() => null);
   (recordFs as { locked: typeof realLocked }).locked = realLocked;
   ok('an apply that meets ERECORDBUSY once is tried again: the touches and the step\'s result land', !!applied && applied.touches.some((t) => t.id === 'kept') && applied.status[0] === 'done');
+
+  // 6. The log, once per ending: the run's record says it was written (../src/ipc/plan `logIfOver`).
+  const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+  const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+  const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each channel's own reply
+  require('../src/ipc/plan').register();
+  const call = (ch: string, payload: object): Promise<any> => handlers.get(ch)!({}, payload);
+  const pid = (await projects.createProject('Plan logs'))!.id;
+  const tid = (await copilot.createThread(pid))!.id;
+  const tally = async () => ({ turns: (await copilot.loadHistory(pid, tid)).length, threads: (await copilot.listThreads(pid)).length });
+  const realUpdate = store.update;
+  let updates = 0; // the store's locked writes asked for by the channels (a claim's own is inside the store)
+  let hold: Promise<void> | null = null; // set: the first write asked waits for a second, so both have read the record
+  let letGo = (): void => undefined;
+  (store as { update: unknown }).update = async (...a: Parameters<typeof realUpdate>) => {
+    if (++updates === 1 && hold) await hold;
+    else letGo();
+    return realUpdate(...a);
+  };
+  try {
+    const before = await tally();
+    const started = await call('plan:start', { projectId: pid, threadId: tid, intent: 'log once', steps: [{ kind: 'import', file: 'a.csv', name: 'A' }] });
+    updates = 0;
+    const ended = await call('plan:skip', { projectId: pid, runId: started.runId, index: 0 });
+    const first = { ...(await tally()), updates };
+    ok('NEGATIVE CONTROL: the call that ends the run logs it, one turn in the conversation it came from, and marks its record (2 writes: the skip, the mark)',
+      ended.state === 'finished' && /^Plan run finished/.test(ended.log ?? '') && first.turns === before.turns + 1 && first.threads === before.threads && first.updates === 2, JSON.stringify({ log: ended.log, before, first }));
+    updates = 0;
+    const again = await Promise.all([1, 2].map(() => call('plan:next', { projectId: pid, runId: started.runId })));
+    const after = { ...(await tally()), updates };
+    ok('a plan:next after the run ended, twice at once, logs nothing and writes nothing for it: no turn, no conversation, no log in the reply, no store write',
+      again.every((r) => r.ok === true && r.log === undefined) && after.turns === first.turns && after.threads === first.threads && after.updates === 0, JSON.stringify({ logs: again.map((r) => r.log), after }));
+    // An ended run with no mark: two calls at once both get past the record they read, and the lock lets one log.
+    const runFile = store.runPath(pid, started.runId);
+    const raw = JSON.parse(fs.readFileSync(runFile, 'utf8'));
+    delete raw.logged;
+    fs.writeFileSync(runFile, JSON.stringify(raw));
+    updates = 0;
+    hold = new Promise<void>((r) => { letGo = r; setTimeout(r, 2_000).unref(); }); // the timer only if no second write comes
+    const raced = await Promise.all([1, 2].map(() => call('plan:next', { projectId: pid, runId: started.runId })));
+    const last = { ...(await tally()), updates };
+    ok('an ended run with no mark (an older pod\'s), asked twice at once: both read it unmarked and try the locked mark, one logs',
+      raced.filter((r) => r.log).length === 1 && last.turns === after.turns + 1 && last.threads === after.threads && last.updates === 2, JSON.stringify({ logs: raced.map((r) => !!r.log), last }));
+  } finally {
+    (store as { update: unknown }).update = realUpdate;
+  }
 })()
   .catch((err) => ok('the suite ran to the end', false, err instanceof Error ? err.stack : err))
   .finally(() => {
