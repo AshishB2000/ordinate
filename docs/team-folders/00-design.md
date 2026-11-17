@@ -382,7 +382,10 @@ index to the reference, now per caller.
   leaves out a conversation with turns and none shown (one made empty stays, as a new one); `copilot:history` answers
   such a conversation, by id or as the latest, as for none (no turns, no id, no title), and `copilot:ask` naming it (or
   with it the latest) starts a new conversation (`askThread`): none of its turns is replayed to the model, nor its agent
-  used, nor its id returned. `copilot:renameThread` returns the count shown, from the list's own SQL (`renameThread`, the
+  used, nor its id returned. So does every other write a caller names a conversation for: a follow-up chip or "Did you
+  mean" option (`answer:rerun`, its reply naming the new one) and a plan's log (`plan:start` names it; the log lands at
+  the run's end, and the plan's agent check reads no agent of it); a verified hit takes the ask's, and Explain and an
+  alert's explanation always start their own. `copilot:renameThread` returns the count shown, from the list's own SQL (`renameThread`, the
   rename and the count one statement). With no folder the count is
   every turn and every conversation is listed, as before. Nothing is deleted: open the folder to them and the turns are back. A kept card on
   such a dataset could never be sent anyway (its record reads as missing, E2), and `answer:refresh` of it refuses at the
@@ -408,16 +411,17 @@ index to the reference, now per caller.
   shown — a prose answer on Finance's dataset leaves with its question (the one on Plain before it stays), and a
   conversation of only such turns is not listed and reads as none by id; so is an alert's explanation on Finance's
   dataset, and an answer asked on a dashboard placed in Finance that shows no dataset; a rename is told the 2 turns
-  shown, not 4; an ask into a conversation of only hidden turns lands in a new one and replays the model none of them;
+  shown, not 4; an ask into a conversation of only hidden turns lands in a new one and replays the model none of them,
+  and so do a follow-up chip into it and a plan's log (opsLead's), the old one gaining no turn;
   NEGATIVE CONTROLS: finViewer and padmin do (finViewer's ask lands in the one named, replaying its two turns; their
-  rename is told 4); the dashboard turn with its `dashboardsFrom` removed is listed and shown; the rename counted
+  rename is told 4; their chip, padmin's and opsViewer's into the mixed one append there, and so do opsViewer's chip and
+  opsLead's log with the folder checks off); the dashboard turn with its `dashboardsFrom` removed is listed and shown; the rename counted
   without the folders says 4; without the WHERE, opsViewer's ⌘K, words, spelling and meaning carry
   Finance's, and their list would count the hidden turns and carry that conversation; the same turn with its `factsFrom` removed (an older release's) keeps its words; an anchor-less row is not returned to opsViewer but is to padmin; an anchor in another case is still
   filtered. `LATER` is empty: the sweep holds `search:query`, `copilot:history` and `copilot:threads` (NEGATIVE CONTROL:
   padmin's carry HR's canaries).
 - **Left for later**: reach (E5) needs nothing here — the indexes keep only folders the caller opens, so a reached
-  dataset is never searched (D9). E6's writes remain. An `answer:rerun` naming a conversation of only hidden turns
-  still appends to it (it replays nothing to the model, and the hidden turns stay hidden).
+  dataset is never searched (D9). E6's writes remain.
 
 ### Writes, as built (E6)
 

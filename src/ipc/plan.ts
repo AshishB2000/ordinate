@@ -9,6 +9,7 @@ import { RUN_DEPS, loadProjectCtx, undoGroup, logRun, fixStep } from '../ai/plan
 import * as store from '../ai/planStore';
 import * as copilot from '../ai/copilot';
 import { askScope } from './agentAsk';
+import { askThread } from './turnsOpen';
 import { agentAnswersOnly } from '../ai/agentMessages';
 
 // Assistant plans IPC — check a proposed plan, then run it one click at a time.
@@ -55,9 +56,23 @@ function snapshot(run: PlanRun, extra: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * The run's log, written once per ending (an undo after a finished run logs once more). A repeat, on any pod, finds the
+ * mark on the record it read and returns: no write, no log. The first call marks the record under its lock, which
+ * decides a race between two such calls.
+ */
 async function logIfOver(run: PlanRun): Promise<string | undefined> {
-  if (run.state === 'finished' || run.state === 'stopped' || run.state === 'undone') return logRun(run);
-  return undefined;
+  if (run.state !== 'finished' && run.state !== 'stopped' && run.state !== 'undone') return undefined;
+  if (run.logged === run.state) return undefined;
+  const first = await store.update(run.projectId, run.id, (r) => {
+    if (r.state !== run.state || r.logged === r.state) return false;
+    r.logged = r.state;
+    return true;
+  });
+  if (!first?.out) return undefined;
+  // Into the conversation it came from, as an ask lands: a new one when every turn of that one is hidden from the caller (./turnsOpen).
+  const { into } = await askThread(run.projectId, run.threadId || undefined);
+  return logRun({ ...run, threadId: into?.id ?? (await copilot.createThread(run.projectId))?.id ?? '' });
 }
 
 const GONE = { ok: false, error: 'That plan run has ended. Ask again to start a new one.' };
@@ -88,7 +103,10 @@ export function register(): void {
     const clean = sanitizePlanSteps(steps);
     if (!clean.steps.length) return { ok: false, error: 'The plan has no steps.' };
     // A plan from a conversation with an Assistant agent that may only answer is refused (docs/assistant-agents rule 8).
-    const convAgent = typeof threadId === 'string' && threadId ? await copilot.agentOf(String(projectId), threadId) : undefined;
+    // Not the agent of a conversation whose every turn is hidden from the caller: to them it is none (./turnsOpen).
+    const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+    const into = tid ? (await askThread(String(projectId), tid)).into : null;
+    const convAgent = tid && into?.id === tid ? into.agentId : undefined;
     const { agent } = await askScope(String(projectId), convAgent); // a personal API token keeps the Project assistant (rule 13)
     if (agent && !agent.build) return { ok: false, error: agentAnswersOnly(agent.name) };
     const run = newRun(randomUUID(), String(projectId), typeof threadId === 'string' ? threadId : '',

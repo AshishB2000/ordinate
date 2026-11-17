@@ -8,7 +8,8 @@
 //
 // THE SAME RULE, IN SQL, counts the turns of each conversation in the list (../ai/copilotRows `listPage`): a turn is
 // shown unless it is a closed answer or a question whose next turn is one. A conversation with turns and none shown is, to
-// them, none: `copilot:history` answers as for none, the list leaves it out, and an ask into it starts a new one (`askThread`).
+// them, none: `copilot:history` answers as for none, the list leaves it out, and an ask, a follow-up chip (answer:rerun)
+// or a plan's log (plan:start) into it starts a new one (`askThread`).
 //
 // INERT with no folder besides Everyone (or for an admin): `levelsOf` answers null with no query, and the turns are
 // returned as they are.
@@ -40,9 +41,9 @@ export async function openTitle(projectId: string, title: string, opening: reado
 }
 
 /**
- * The conversation `copilot:ask` lands in: the caller's `threadId`, else their latest (`copilot.threadFor`) — or none when
- * it has turns and every one is hidden from them, so the ask starts a new one and nothing of the old one (its agent, its
- * id) is used or named. `stored`: its turns, read to tell only when a folder restricts the caller (the ask replays them).
+ * The conversation `copilot:ask` lands in, and answer:rerun and a plan's log: the caller's `threadId`, else their latest
+ * (`copilot.threadFor`) — or none when it has turns and every one is hidden from them, so the ask starts a new one and
+ * nothing of the old one (its agent, its id) is used or named. `stored`: its turns, read to tell only when a folder restricts the caller (the ask replays them).
  */
 export async function askThread(projectId: string, threadId: string | undefined): Promise<{ into: copilot.ThreadRef | null; stored?: copilot.CopilotTurn[] }> {
   const into = await copilot.threadFor(projectId, threadId);

@@ -59,6 +59,7 @@ import { daysFromCivil } from '../analysis/categoryKey';
 import { isoFromDays } from '../analysis/dateIntel';
 import { saveCardAsVisual } from './answerSave';
 import { learnState, registerSnapshots, snapshotFor, turnsForBrowser, type BrowserTurn } from './answerSnapshots';
+import { askThread } from './turnsOpen';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import { previousAnswerBlock } from '../ai/previousAnswer';
 import { withheldColumns } from '../app/sharePolicy';
@@ -538,9 +539,12 @@ export function register(guard: Guard): void {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+      // Where it lands, as copilot:ask: the one named when it is the caller's, else their latest; none when every turn of
+      // it is hidden from them, so a new one, and nothing of the old one (its agent, its id) is used (./turnsOpen).
+      const { into } = await askThread(projectId, tid);
       // In an Assistant agent's conversation the agent narrates (./agentAsk), and a chart outside its topic is not its to
       // give: refused before anything is computed.
-      const scope = await askScope(projectId, tid ? await copilot.agentOf(projectId, tid) : undefined);
+      const scope = await askScope(projectId, tid && into?.id === tid ? into.agentId : undefined);
       if (scope.only && scope.topic && !scope.only.has(s.datasetId)) return { ok: false, reason: outsideTopic(scope.topic.name) };
       const built = await computeCard(projectId, s, !(await verifiedMark(projectId, s)).verified); // a verified question's own spec (its chip) draws as stored
       if ('ok' in built) return built;
@@ -548,7 +552,7 @@ export function register(guard: Guard): void {
       const n = await narrate(projectId, built,
         `Narrate this chart answer ("${s.title}") in two or three sentences, citing only figures from the facts.`,
         guard, scope.agent);
-      const r = await appendAnswer(projectId, tid, userText, n.text, built, built.card.spec, sanitizeLearn(learn, built.card.spec));
+      const r = await appendAnswer(projectId, into?.id ?? (await copilot.createThread(projectId))?.id, userText, n.text, built, built.card.spec, sanitizeLearn(learn, built.card.spec));
       return { ok: true, turns: r.turns, threadId: r.threadId };
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not run the follow-up' };
