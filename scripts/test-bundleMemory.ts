@@ -151,17 +151,25 @@ function sameFiles(a: Map<string, Buffer>, b: Map<string, Buffer>): string {
 
 /**
  * Counts every chunk handed to an inflater — stream or one-shot, both go
- * through InflateRaw's _transform. (zlib's exports are read-only in Node 24.)
+ * through InflateRaw's _transform — and every byte one pushes out: what was
+ * inflated, which other processes and the allocator's timing never move.
+ * (zlib's exports are read-only in Node 24.)
  */
-function spyInflaters(): { count(): number; restore(): void } {
-  const proto = (require('zlib') as { InflateRaw: { prototype: { _transform: (...a: unknown[]) => unknown } } }).InflateRaw.prototype;
+function spyInflaters(): { count(): number; bytes(): number; restore(): void } {
+  const proto = (require('zlib') as { InflateRaw: { prototype: { _transform: (...a: unknown[]) => unknown; push?: (chunk: Buffer | null) => boolean } } }).InflateRaw.prototype;
   const real = proto._transform;
+  const push = (require('stream') as typeof import('stream')).Readable.prototype.push;
   let n = 0;
+  let out = 0;
   proto._transform = function (this: unknown, ...a: unknown[]) {
     n++;
     return real.apply(this, a);
   };
-  return { count: () => n, restore: () => { proto._transform = real; } };
+  proto.push = function (this: import('stream').Readable, chunk: Buffer | null) {
+    if (chunk) out += chunk.length;
+    return push.call(this, chunk);
+  };
+  return { count: () => n, bytes: () => out, restore: () => { proto._transform = real; delete proto.push; } };
 }
 
 /** The largest text JSON.parse is handed until stop(): "never parsed" is a fact, not an RSS guess. */
@@ -464,20 +472,44 @@ async function main(adminUrl: string | undefined): Promise<void> {
       const file = path.join(DATA, `bomb-${name}.ordinate`);
       zipOf(file, [{ name: 'manifest.json', body: manifestOf(counts) }, { name, body: alertsBomb }]);
       const parsed = spyParse();
-      const r = await rssGrowth(() => inOrg(C, () => bundle.importBundle({ file })));
+      const inflaters = spyInflaters();
+      const r = await inOrg(C, () => bundle.importBundle({ file }));
+      const inflated = inflaters.bytes();
+      inflaters.restore();
       const biggest = parsed.stop();
-      ok(`parse bomb: a ${(fs.statSync(file).size / 1024).toFixed(0)} KB bundle with a 32 MiB ${name} of {} is never parsed (largest parse ${biggest} bytes), RSS +${mb(r.growth)}`,
-        biggest < MB && r.growth < 64 * MB, `${r.value.error} ${biggest} ${r.growth}`);
+      // What it held, as the bytes inflated, not RSS: under the parallel `npm test` RSS read +4 to +91 MB
+      // for the same 64 MiB inflated (+7 MB alone; other processes move the allocator's pages). Past its
+      // byte cap: refused from the directory, not one byte inflated. templates.json: its declared size
+      // once per read (pass 1's id check, then the value count), one read live at a time, never parsed.
+      const bound = name === 'templates.json' ? 2 * alertsBomb.usize + rules.MANIFEST_MAX_BYTES : 0;
+      ok(`parse bomb: a ${(fs.statSync(file).size / 1024).toFixed(0)} KB bundle with a 32 MiB ${name} of {} is never parsed (largest parse ${biggest} bytes), ${mb(inflated)} inflated`,
+        biggest < MB && inflated <= bound, `${r.error} ${biggest} ${inflated}`);
       // templates.json may weigh 32 MiB (thumbnails): within its cap, over the value budget, it is an
       // optional extra skipped — the import goes on without it. The others are past their byte caps.
       if (name === 'templates.json') {
-        ok('…templates.json: skipped, the import goes on without it', r.value.ok === true, r.value.error);
-        if (r.value.project) await inOrg(C, () => projects.deleteProject(r.value.project!.id));
+        ok('…templates.json: skipped, the import goes on without it', r.ok === true, r.error);
+        if (r.project) await inOrg(C, () => projects.deleteProject(r.project!.id));
       } else {
-        ok(`…${name}: the bundle is refused`, r.value.ok === false && r.value.error === m.entryTooLarge(name), r.value.error);
+        ok(`…${name}: the bundle is refused`, r.ok === false && r.error === m.entryTooLarge(name), r.error);
       }
     }
     ok('parse bomb: none of the refused ones created a project', (await projectCount(C)) === before);
+    {
+      // CONTROL: the same meter, alerts.json's byte cap lifted through the policy, sees the bomb inflate.
+      const policy = rules.BUNDLE_POLICY;
+      const capOf = policy.capOf;
+      policy.capOf = (n: string): number => (n === 'alerts.json' ? 64 * MB : capOf.call(policy, n));
+      const lifted = spyInflaters();
+      try {
+        const r = await inOrg(C, () => bundle.importBundle({ file: path.join(DATA, 'bomb-alerts.json.ordinate') }));
+        const bytes = lifted.bytes();
+        ok(`parse bomb NEGATIVE CONTROL: alerts.json's byte cap lifted, the same meter sees ${mb(bytes)} inflated (bound 0); the value budget refuses it`,
+          bytes >= alertsBomb.usize && r.ok === false && r.error === m.tooManyValues('alerts.json'), `${bytes} ${r.error}`);
+      } finally {
+        lifted.restore();
+        policy.capOf = capOf;
+      }
+    }
     // Under its byte cap, over the value budget: 1.2 M empty objects in 3.5 MiB.
     const dense = await fill('{"rules":[', '{},', '{}]}', 3.5 * MB);
     const file = path.join(DATA, 'bomb-dense.ordinate');
