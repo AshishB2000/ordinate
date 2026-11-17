@@ -48,6 +48,8 @@ import { isoFromDays } from '../analysis/dateIntel';
 import { formatDate } from '../app/format';
 import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
+import { joinedLive, type Joined } from './answerJoined';
+import { ownNames, specEncoding } from '../ai/answerJoin';
 import { withChartFigures } from '../analysis/chartShapes';
 import { applyChartCalcs } from '../analysis/tableCalc';
 import { figureAsk } from '../analysis/figureAsk';
@@ -200,30 +202,33 @@ function requiredSteps(filters: readonly AnswerFilter[], columns: ParsedColumn[]
 
 /** `computeCard` for a Live dataset, or null when the dataset is not Live. */
 /** `lock`: steps that never skip (a row lock, a glossary term's steps); `termLabels`: those terms' names, for the card's filter line; `labels`: value labels a just-written spec's filters may say (part 3 D6). */
-export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: readonly FilterStep[] = [], termLabels: string[] = [], labels?: FilterLabels): Promise<Built | Failure | null> {
+/** `joined`: the related sides of a spec whose category or split is a related dataset's (./answerJoined): its chart is then the chart door's. */
+export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: readonly FilterStep[] = [], termLabels: string[] = [], labels?: FilterLabels, joined?: Joined): Promise<Built | Failure | null> {
   let spec = asked;
   const meta = await datasets.getDatasetMeta(projectId, spec && spec.datasetId);
   if (!meta || !isLive(meta)) return null;
   // A column the warehouse dropped (L2.5): said as exactly that, typed — before the case fix asks anything.
-  const gone = missingRefusal(meta.live?.missingColumns, answerNames(spec));
+  const gone = missingRefusal(meta.live?.missingColumns, joined ? ownNames(spec) : answerNames(spec)); // a related column is its own dataset's to miss
   if (gone) return { ok: false, reason: gone.message, code: 'live_refused' };
   // computeCard's own first check, with its own words.
   const has = (n: string): boolean => meta.columns.some((c) => c.name === n);
   const sem = meta.live?.semantic; // a semantic dataset's measures are its mirror metrics, by id (part 7 b2)
   const used = [spec.category, ...(sem ? [] : spec.measures.map((m) => m.column)), ...spec.filters.flatMap((f) => ('column' in f ? [f.column] : []))].concat(spec.series ? [spec.series] : []);
-  const missing = used.find((n) => !has(n));
+  const missing = (joined ? ownNames({ ...spec, measures: sem ? [] : spec.measures }) : used).find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${meta.name}.` };
+  const catCol = (joined?.category ? joined.category.columns : meta.columns).find((c) => c.name === spec.category);
+  const isDate = !!catCol && catCol.type === 'date';
 
   const fixed = await liveCaseFix(projectId, meta.id, meta.columns, spec.filters, lock, labels);
   if (!fixed.ok) return fail(fixed);
   if (fixed.matched.length) spec = { ...spec, filters: fixed.said, matched: [...(spec.matched ?? []), ...fixed.matched].slice(0, MAX_MATCHED) }; // as the extract's matchValues: a reload draws the same chart
   const mirrors = sem ? await mirrorsOf(projectId, meta.id, spec.measures.map((m) => m.metricId)) : null;
-  const r = await liveAnswer(projectId, { ...spec, filters: fixed.filters }, { lock, ...(mirrors ? { mirrors: externalsOf(mirrors) } : {}) });
-  if (!r.ok) return fail(r);
+  // Joined: the chart door's figures (the Live join's executor, or its typed sentence for a mix), ranked as a copy's card.
+  const r = joined ? await joinedLive(projectId, spec, fixed.filters, meta.columns, lock, isDate)
+    : await liveAnswer(projectId, { ...spec, filters: fixed.filters }, { lock, ...(mirrors ? { mirrors: externalsOf(mirrors) } : {}) });
+  if (!r.ok) return 'error' in r ? fail(r) : r;
   if (mirrors) r.data = relabelled(r.data, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, mirrors);
 
-  const catCol = meta.columns.find((c) => c.name === spec.category);
-  const isDate = !!catCol && catCol.type === 'date';
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
   // A measure's "Calculate as" on the warehouse's totals, as a Live visual's reply (analysis/tableCalc); then the figures the card
   // draws (analysis/chartShapes) — and its caption reads them.
@@ -239,14 +244,16 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   // As computeCard: a model reads no filter value and no label of a withheld column; the card's labels stand.
   // Withheld here is the Live facts' own set (./liveProfile): marked, pending or detected.
   const withheld = await liveWithheld(projectId, meta.id, meta);
+  for (const name of joined ? joined.withheld : []) withheld.add(name); // a related dataset's marks hold for its category or split
   const said = withheldFilters(spec.filters, withheld);
+  const on = { category: joined?.category?.meta.name, series: joined?.series?.meta.name };
   const factsIn = {
-    title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels,
+    title: spec.title, datasetName: meta.name, describe: describeAnswer(spec, on), data, categoryIsDate: isDate, additive, filterLabels,
     saidFilterLabels: labelsOf(said), caption, asOf: utcLabel(r.asOf.at),
   };
   const facts = cardFacts(factsIn, spec, withheld);
   // As computeCard: what a person reads says the labels (F5), its filters' too; the model's facts keep the stored values.
-  const labelled = await labelCardData(projectId, meta.id, encoding, data);
+  const labelled = await labelCardData(projectId, meta.id, joined ? specEncoding(spec) : encoding, data); // a related category's labels are its dataset's
   const filterSaid = await filterText(projectId, meta.id, spec.filters, fixed.held);
   const shown = saidFilters(spec.filters, filterSaid, fixed.held);
   const shownLabels = shown === spec.filters ? filterLabels : labelsOf(shown);
@@ -261,7 +268,10 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   return {
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
-      chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category), ...(await navContext(projectId, spec.datasetId)) }),
+      chips: answerChips(spec, {
+        columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category),
+        ...(await navContext(projectId, spec.categoryDatasetId ?? spec.datasetId)), ...(joined?.category ? { category: joined.category.columns } : {}), // a related category drills on its own dataset's levels
+      }),
       filterLabels: shownLabels, steps: specFilterSteps({ filters: fixed.filters }, meta.columns, []).steps, asOf: r.asOf,
       notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, calcNotes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n)), stale),
     },

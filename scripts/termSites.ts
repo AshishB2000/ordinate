@@ -97,6 +97,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/rowDoors.ts': { count: 2, how: 'door' },
   // throws: an engine after the door. A term that reaches it throws TermNotExpandedError, never skipped.
   'src/ai/answerSpec.ts': { count: 1, how: 'throws' },
+  // joinedLive: a Live joined card's own filters as steps for the chart door (specFilterSteps throws on a term; its
+  // terms were expanded by the answer door first and ride beside them, as their steps)
+  'src/ipc/answerJoined.ts': { count: 1, how: 'throws' },
   'src/engine/cohortResident.ts': { count: 1, how: 'throws' },
   'src/engine/datasetPage.ts': { count: 2, how: 'throws' },
   'src/engine/driversResident.ts': { count: 1, how: 'throws' },

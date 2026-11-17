@@ -31,7 +31,7 @@ import * as copilot from '../ai/copilot';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import { buildVizData } from '../analysis/vizData';
-import { applyChartCalcs, type CalcSeries } from '../analysis/tableCalc';
+import { applyChartCalcs } from '../analysis/tableCalc';
 import type { ChartData } from '../analysis/vizData';
 import type { ValueLabelPairs } from '../analysis/valueLabels';
 import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
@@ -51,7 +51,7 @@ import {
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset } from '../ai/answerSpec';
 import { isJoined, ownNames, relatedIds, specEncoding } from '../ai/answerJoin';
-import { joinedSides, joinedViz, relatedOfStored } from './answerJoined';
+import { joinedSides, joinedViz, ranked, relatedOfStored } from './answerJoined';
 import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
 import { sanitizeLearn } from '../ai/answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from '../ai/answerSuggest';
@@ -161,29 +161,6 @@ function endsOn(columns: { name: string }[], rows: Cell[][], column: string): st
 }
 
 /**
- * Largest first, and at most `top` of them. An answer about categories reads
- * best ranked; a date axis keeps time order and never takes a top-N.
- */
-function ranked(data: ChartData, top?: number): ChartData {
-  const first: CalcSeries | undefined = data.series[0];
-  if (!first) return data;
-  const by = first.raw ?? first.values; // the figures, never a calculated one: rank 1 is the largest
-  const order = data.labels.map((_, i) => i).sort((a, b) => {
-    const va = by[a];
-    const vb = by[b];
-    if (typeof va !== 'number') return typeof vb === 'number' ? 1 : a - b;
-    if (typeof vb !== 'number') return -1;
-    return vb - va || a - b;
-  });
-  const keep = top && top > 0 ? order.slice(0, top) : order;
-  const pick = <T>(xs: T[]): T[] => keep.map((i) => xs[i]);
-  return {
-    labels: pick(data.labels),
-    series: data.series.map((s: CalcSeries) => ({ name: s.name, values: pick(s.values), ...(s.calc && s.raw ? { raw: pick(s.raw), calc: s.calc } : {}) })),
-  };
-}
-
-/**
  * The card a spec draws. `loose` is for a spec that was just WRITTEN — by a
  * model, or by a chip built from one: a filter value the column does not hold
  * is then matched to the one stored value it means (ai/answerValues), and the
@@ -231,12 +208,13 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)) // part 5's shapes first; extract and Live alike
     ?? (await figureRefusal(projectId, asked.datasetId, { ...asMeasures, ...(asked.series ? { series: asked.series } : {}) }, asked.chartType)); // a waterfall, Pareto or 100% stack adds its measure up, as a running total or a share does (D7)
   if (snapshot) return { ok: false, reason: snapshot };
-  // A related dataset's category or split (./answerJoined): its sides read first; a Live one, either side, refused typed.
+  // A related dataset's category or split (./answerJoined): its sides read first (a closed or only reached one refused).
   const joined = isJoined(asked) ? await joinedSides(projectId, asked) : null;
   if (joined && !joined.ok) return joined;
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
+  // Joined, its chart is the chart door's (the Live join's executor on one connection; any other mix, the door's sentence).
   const sayable = loose ? await labelsSaid(projectId, asked.datasetId, asked.filters) : undefined; // value labels a just-written spec may say (part 3 D6)
-  const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels, sayable);
+  const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels, sayable, joined ?? undefined);
   if (live) return live;
   await ensureFresh(projectId, [asked.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all

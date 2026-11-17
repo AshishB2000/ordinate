@@ -54,7 +54,7 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
-const liveRefusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
+const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const semFake: typeof import('./semanticFake') = require('./semanticFake');
 
@@ -228,7 +228,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['metric check (the measure editor)', 'metric:check', { projectId: P, datasetId: d, expression: 'sum(sales) / sum(qty)', name: 'Per unit', chart: true }],
     // answers
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
-    // a category from a related dataset (docs/assistant "Joins, as built"): Live joins are not built yet, so a typed refusal
+    // a category from a related dataset (docs/assistant "Joins, as built"): no link here, so the chart door's typed refusal
     ['answer card: a related category', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', categoryDatasetId: other, measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     ['answer: explain a tile', 'answer:explain', { projectId: P, tile: { datasetId: d, encoding: enc, filters: [], chartType: 'bar', name: 'Sales by region' } }],
     ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
@@ -286,12 +286,24 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     if (ROUTED.has(label)) ok(`Live → ${label} (${channel}) ANSWERS from the warehouse (L2.4)`, r.status === 200 && answered(r.value), `${r.status} ${r.body.slice(0, 240)}`);
     else ok(`Live → ${label} (${channel}) refuses, typed`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
   }
-  // A Live dataset's answer with a related category: the chart door's own typed sentence, never the safety net's live_dataset.
-  const joinedLive = await post('answer:card', { projectId: P, spec: { datasetId: seed.live, category: 'region', categoryDatasetId: seed.extract, measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } });
-  ok('Live → an answer with a related category is refused in the chart door\'s sentence (live_refused), never live_dataset',
-    joinedLive.status === 200 && joinedLive.value?.code === 'live_refused' && joinedLive.value.reason === liveRefusals.liveRelatedRefused() && !/live_dataset/.test(joinedLive.body), joinedLive.body.slice(0, 240));
-  const joinedOnLive = await post('answer:card', { projectId: P, spec: { datasetId: seed.extract, category: 'region', categoryDatasetId: seed.live, measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } });
-  ok('…and so is an extract\'s answer whose category is read from a Live dataset', joinedOnLive.value?.code === 'live_refused' && joinedOnLive.value.reason === liveRefusals.liveRelatedRefused() && !/live_dataset/.test(joinedOnLive.body), joinedOnLive.body.slice(0, 240));
+  // An answer across a link between the Live dataset and the extract (saved straight to the store: relationship:save
+  // refuses the pair, its own check): the chart door's own typed mix sentence, the words visual:data says, never live_dataset.
+  const mix = await context.runInContext(ADMIN, 'mix-links', async () => [
+    (await rels.saveRelationship(P, { from: { datasetId: seed.live, column: 'region' }, to: { datasetId: seed.extract, column: 'region' }, cardinality: 'many_to_one' }))!.id,
+    (await rels.saveRelationship(P, { from: { datasetId: seed.extract, column: 'region' }, to: { datasetId: seed.live, column: 'region' }, cardinality: 'many_to_one' }))!.id,
+  ]);
+  try {
+    for (const [label, d, other] of [['a Live dataset\'s answer, its category from the extract', seed.live, seed.extract], ['the extract\'s answer, its category from the Live dataset', seed.extract, seed.live]] as const) {
+      const enc = { category: 'region', categoryDatasetId: other, values: [{ column: 'sales', aggregation: 'sum' }] };
+      const got = await post('answer:card', { projectId: P, spec: { datasetId: d, category: 'region', categoryDatasetId: other, measures: enc.values, filters: [] } });
+      const door = await post('visual:data', { projectId: P, datasetId: d, encoding: enc, filters: [] });
+      ok(`${label}: the chart door's own typed sentence (live_refused, as visual:data says it), never live_dataset`,
+        got.status === 200 && got.value?.ok === false && got.value.code === 'live_refused' && door.value?.code === 'live_refused' && got.value.reason === door.value.error
+        && !/live_dataset/.test(got.body), `${got.body.slice(0, 240)} | ${door.body.slice(0, 160)}`);
+    }
+  } finally {
+    await context.runInContext(ADMIN, 'mix-unlink', async () => { for (const id of mix) await rels.deleteRelationship(P, id); });
+  }
 
   // …and the Live answer is the warehouse's count of the declared key (120 rows, 5 regions, each repeated), stored with its time.
   const liveKey = await post('catalog:checkKey', { projectId: P, datasetId: seed.live });
