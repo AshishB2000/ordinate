@@ -230,6 +230,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     // joins
     ['join preview (composer)', 'dataset:composePreview', { projectId: P, base: { datasetId: d }, joins: [{ datasetId: other, mode: 'left', on: { left: 'region', right: 'region' } }], offset: 0, limit: 50 }],
     ['join key suggestion', 'relationship:suggest', { projectId: P, fromId: d, toId: other }],
+    // a link's full-table counts: a Live dataset beside a copy is refused in its own sentence (two Live on one connection: test-sourceAnswers §9)
+    ['save a link (Approve)', 'relationship:save', { projectId: P, relationship: { from: { datasetId: d, column: 'region' }, to: { datasetId: other, column: 'region' }, cardinality: 'many_to_one' } }],
     // alerts: a rule's test run reads the periods and the anomalies
     ['alert test: threshold', 'alerts:test', { projectId: P, rule: { id: '3f0c1a2b-4d5e-4f60-8a7b-9c0d1e2f3a4b', datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: 'threshold', threshold: { op: '>', value: 10 } } }],
     ['alert test: change vs period', 'alerts:test', { projectId: P, rule: { id: '3f0c1a2b-4d5e-4f60-8a7b-9c0d1e2f3a4c', datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: 'change', change: { pct: 10, vs: 'previous_period', periodColumn: 'day' } } }],

@@ -14,7 +14,8 @@
 //      dataset's Guide shows the doc's notes under "From the source table", read-only.
 //   5. The Assistant (phase D): an answer read straight from the table, in the dock, says it is a warehouse table and
 //      offers only Keep as a dataset; kept, it is drawn on the new Live dataset with Save as visual (dock-source-*.png);
-//      the checked-link card of outcome E, laid on the conversation (dock-link-*.png); and an SQL answer that read the
+//      the checked-link card of outcome E, laid on the conversation (dock-link-*.png), and its twin with a Live side,
+//      which says why it can't be saved in place of Add (dock-link-blocked-*.png); and an SQL answer that read the
 //      table straight (F5), which offers Keep as a dataset where Verify would be (dock-source-sql-*.png).
 //   6. Explore (phase D): the table picked as if it were a dataset, its fields and a question answered Live through its
 //      view, every figure the Live dataset's own; a table on a connection not asked live says to copy it in and asks
@@ -314,6 +315,27 @@ e2e('source tables: an editor answered straight from the table, then kept as a d
   await screensInPlace(page, 'dock-link');
   await checked.getByRole('button', { name: 'Cancel' }).click();
   await checked.waitFor({ state: 'detached' });
+  await page.unroute('**/api/rpc/copilot%3Ahistory');
+  // The same card with a Live side no one engine can count with the copy (src/ipc/linkLive.ts), its key counted inside the
+  // range its table requires: the range's sentence under the checks, the server's sentence in place of Add link and
+  // answer, Make a copy of the Live side, and Dismiss (dock-link-blocked-*.png).
+  const blocked = 'This link can\'t be saved here: Countries is Live, so its rows are in its warehouse and the other table\'s are in Ordinate. Make a copy of Countries and link the copy.';
+  await page.route('**/api/rpc/copilot%3Ahistory', async (r) => {
+    const body = (await (await r.fetch()).json()) as { turns?: unknown[] };
+    const turns = [...(body.turns ?? []), { id: 'q-link', role: 'user', text: 'Shipments by territory', createdAt: '2026-11-15T10:00:00Z' },
+      { id: 'a-link', role: 'assistant', text: "Shipments has no link to Countries yet, so they can't be combined. Check the link below.", createdAt: '2026-11-15T10:00:01Z', needs: 'link', link: { ...link, checks: { ...link.checks, foundPct: null }, note: 'Last 12 months: this table needs a date range', blocked, copy: [C] } }];
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...body, turns }) });
+  });
+  await page.reload();
+  await settled(page);
+  const said = dock.getByTestId('answer-link');
+  await said.getByTestId('answer-link-blocked').getByText(blocked).waitFor();
+  assert.equal(await said.getByRole('button', { name: 'Add link and answer' }).count(), 0, 'a blocked link offers no Add');
+  await said.getByRole('button', { name: 'Make a copy of Countries' }).waitFor(); // the Live copy flow's button (not pressed here: Vitest sends it)
+  await said.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'dock-link-blocked');
+  await said.getByRole('button', { name: 'Dismiss' }).click();
+  await said.waitFor({ state: 'detached' });
   await page.unroute('**/api/rpc/copilot%3Ahistory');
 
   // An SQL answer that read the table straight (docs/live-data/01-live-sql.md F5), as its turn carries it with its kept

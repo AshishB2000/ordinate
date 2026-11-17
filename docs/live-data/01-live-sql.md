@@ -89,6 +89,11 @@ model text ─► DuckDB parse (json_serialize_sql) ─► tree ─► translate
 | F-D14 | **The same gates for viewers and editors; different reach.** Below. Viewers never Verify. | Row rules and hidden columns are what makes a viewer safe here, not a lower ceiling. |
 | F-D15 | **Phase B's extract lane is unchanged.** F applies when every table a statement reads is Live or a source table. | The DuckDB gate over our own Parquet allows far more (every DuckDB function), safely sandboxed by the org lock; narrowing it would break verified questions. |
 
+F-D9's rule holds outside the lane too: the Assistant's Approve of a missing link (`relationship:save`,
+`src/ipc/linkLive.ts`) counts two Live datasets on ONE connection in one compiled statement (`compileKeyMatch`, each
+side under its lock), and refuses a Live dataset beside a copy, or two connections, in a sentence naming the copy to
+make ([Assistant design](../assistant/00-design.md#source-tables-keeping-and-the-missing-link-as-built-phase-d)).
+
 ### What the IR allows (F1)
 
 A construct enters only with its parity cases (below). Everything else is refused in one sentence.

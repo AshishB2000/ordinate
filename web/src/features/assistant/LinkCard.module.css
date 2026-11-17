@@ -46,6 +46,29 @@
   border: 1px solid var(--border-2);
   border-radius: var(--r-full);
 }
+/* The date range a Live table required the counts be taken in (`note`): the server's words, as quiet as the checks. */
+.note {
+  margin: 0;
+  font-size: var(--t-11);
+  line-height: var(--lh-snug);
+  color: var(--muted);
+}
+/* Why a link can't be saved here (`blocked`): the server's sentence, quiet, in place of the primary action. */
+.blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.blocked > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
 .actions {
   display: flex;
   flex-wrap: wrap;

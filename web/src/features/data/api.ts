@@ -172,7 +172,8 @@ export interface Relationship {
   cardinality: 'many_to_one' | 'one_to_one';
   /** What the join is called in charts ("Ship date"); absent when it has no name. */
   label?: string;
-  verified: { matched: number; unmatchedFrom: number };
+  /** `range`: the date range a Live table required the counts be taken in (ISO days); none: every row. */
+  verified: { matched: number; unmatchedFrom: number; range?: { from?: string; to?: string } };
   matchPct: number;
   /** What is wrong with the lookup side as a "one" (src/analysis/relationships.ts RelWarning). Absent for a caller row access rules restrict. */
   warning?: { kind: 'repeats'; repeats: number } | { kind: 'not_key'; key: string };

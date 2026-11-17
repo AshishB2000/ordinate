@@ -1,7 +1,8 @@
 // Self-check for the key check (spec D2): analysis/keyCheck.ts (the JS reference) held to `Object.is`
 // agreement by engine/keyCheckResident.ts (its DuckDB twin, over the SAME rows saved as a resident
 // Parquet by `datasets.saveDataset`) and by compileKeyCheck (the Live statement, over a typed
-// DuckDB table loaded as a warehouse would hold it).
+// DuckDB table loaded as a warehouse would hold it). A link's counts across two such tables (compileKeyMatch) are
+// held to `joinJs.keyStatsJs` the same way.
 //
 //   npm run build:ts && node scripts/test-keyCheck.js
 
@@ -21,6 +22,8 @@ const { keyCheckJs, keyCheckFromRow }: typeof import('../src/analysis/keyCheck')
 const { keyCheckResident }: typeof import('../src/engine/keyCheckResident') = require('../src/engine/keyCheckResident');
 const { compileKeyCheck }: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 const { DIALECT_IDS }: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
+const { compileKeyMatch, keyStatsFromRow }: typeof import('../src/engine/live/compileKeyMatch') = require('../src/engine/live/compileKeyMatch');
+const { keyStatsJs }: typeof import('../src/analysis/joinJs') = require('../src/analysis/joinJs');
 
 type Cell = import('../src/data/transforms').Cell;
 type ColType = import('../src/data/parse').ParsedColumn['type'];
@@ -108,6 +111,60 @@ const CASES: Case[] = [
     bq.ok && bq.query.params.length === 1 && (bq.query.sql.match(/@p\d+/g) ?? []).join() === '@p0', bq.ok ? bq.query.sql : '');
   ok('live: the columns are k_rows, k_empty, k_repeated',
     hostile.ok && JSON.stringify(hostile.query.columns) === '["k_rows","k_empty","k_repeated"]');
+
+  // ── Live: compileKeyMatch, a link's counts over two Live datasets on one connection (relationship:save, ipc/linkLive),
+  // against `keyStatsJs` (the extract's reference, `relationships.keyStats`) over the same rows: every field Object.is.
+  // A lock on each side narrows its rows first, as `lockedTable` narrows a copy's.
+  type Side = [ColType, Cell[]];
+  const PAIRS: { name: string; from: Side; to: Side }[] = [
+    { name: 'text', from: ['text', ['s1', 's2', 's1', 's9', null, '  ', '007', '\t']], to: ['text', ['s1', 's2', 's3', null, '7', 's2', '']] },
+    { name: 'number', from: ['number', [1, 2, 2, null, 3.5, 10]], to: ['number', [1, 2, 3.5, null, 4, 4]] },
+    { name: 'date', from: ['date', ['2024-01-01', '2024-01-02', null, '2024-01-01']], to: ['date', ['2024-01-01', '2024-03-01']] },
+    { name: 'number to text', from: ['number', [1, 2, 3, null]], to: ['text', ['1', '2', 'x', null, '2']] },
+    { name: 'text to number', from: ['text', ['1', '2', 'x', '']], to: ['number', [1, 2, 7]] },
+    { name: 'no FROM rows', from: ['text', []], to: ['text', ['a']] },
+    { name: 'no TO rows', from: ['text', ['a', null]], to: ['text', []] },
+  ];
+  const group = (i: number): string => (i % 2 ? 'b' : 'a');
+  const LOCK = [{ kind: 'in' as const, column: 'g', values: ['a'], negate: false }];
+  for (const [i, c] of PAIRS.entries()) {
+    const side = async (end: 'f' | 't', [type, cells]: Side) => {
+      const cols = [{ name: 'k', type }, { name: 'g', type: 'text' as const }];
+      const table = `km_${i}_${end}`;
+      await loadWarehouse(table, cols, cells.map((v, r) => [v, group(r)]));
+      return { cols, table, type, cells };
+    };
+    const [f, t] = [await side('f', c.from), await side('t', c.to)];
+    for (const lockedToo of [false, true]) {
+      const label = `live key match ${c.name}${lockedToo ? ', locked' : ''}`;
+      const lock = lockedToo ? LOCK : [];
+      const q = compileKeyMatch(
+        { column: 'k', env: { dialect: 'duckdb', source: { kind: 'table', parts: [f.table] }, columns: f.cols }, lock },
+        { column: 'k', env: { dialect: 'duckdb', source: { kind: 'table', parts: [t.table] }, columns: t.cols }, lock },
+      );
+      ok(`${label}: the statement compiled`, q.ok);
+      if (!q.ok) continue;
+      const live = keyStatsFromRow((await runDuck(q.query))[0]);
+      const kept = (cells: Cell[]): Cell[] => (lockedToo ? cells.filter((_, r) => group(r) === 'a') : cells);
+      const js = keyStatsJs(kept(f.cells), f.type, kept(t.cells), t.type);
+      const fields = ['matched', 'unmatchedFrom', 'fromKeys', 'fromKeyed', 'toKeys', 'toKeyed'] as const;
+      ok(`${label}: every count Object.is the extract's`, live !== null && fields.every((k) => Object.is(live[k], js[k])), JSON.stringify({ live, js }));
+    }
+  }
+  ok('live key match NEGATIVE CONTROL: the text pair matches some keys and misses some, and TO repeats one',
+    (() => { const js = keyStatsJs(PAIRS[0].from[1], 'text', PAIRS[0].to[1], 'text'); return js.matched === 3 && js.unmatchedFrom === 5 && js.toKeys < js.toKeyed; })());
+  const pairEnv = (dialect: (typeof DIALECT_IDS)[number]) => ({ column: 'region', env: { ...env, dialect }, lock: [] });
+  for (const id of DIALECT_IDS) ok(`live key match ${id}: the statement compiles`, compileKeyMatch(pairEnv(id), pairEnv(id)).ok);
+  const bqPair = compileKeyMatch(pairEnv('bigquery'), pairEnv('bigquery'));
+  ok('live key match bigquery: every parameter has its own placeholder, each once',
+    bqPair.ok && (bqPair.query.sql.match(/@p\d+/g) ?? []).join() === bqPair.query.params.map((_, n) => `@p${n}`).join(), bqPair.ok ? bqPair.query.sql : '');
+  const twoWarehouses = compileKeyMatch(pairEnv('duckdb'), pairEnv('snowflake'));
+  ok('live key match: two dialects are refused (one statement is one warehouse\'s)', !twoWarehouses.ok && twoWarehouses.code === 'badQuery');
+  const gone = compileKeyMatch(pairEnv('duckdb'), { ...pairEnv('duckdb'), column: 'nope' });
+  ok('live key match: an undeclared TO column is refused, typed', !gone.ok && gone.code === 'unknownColumn');
+  ok('keyStatsFromRow: NULL sums are 0, a non-number or more matches than rows is a failure',
+    JSON.stringify(keyStatsFromRow([0, null, 0, 0, null, null])) === '{"matched":0,"unmatchedFrom":0,"fromKeys":0,"fromKeyed":0,"toKeys":0,"toKeyed":0}'
+      && keyStatsFromRow(['x', 0, 0, 0, 0, 0]) === null && keyStatsFromRow([1, 2, 1, 1, 1, 1]) === null && keyStatsFromRow([1, 1]) === null);
 
   finish();
 })().catch((err) => {

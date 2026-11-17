@@ -93,6 +93,12 @@ export interface AnswerLink {
   to: { datasetId: string; dataset: string; column: string };
   cardinality: 'many_to_one' | 'one_to_one';
   checks: { names: boolean; types: boolean; foundPct: number | null; unique: boolean };
+  /** The counts were taken inside the date range a Live table requires: the server's sentence, said under the checks. */
+  note?: string;
+  /** Why the link can't be saved here (a Live side no one engine can count with the other): the card offers no Add. */
+  blocked?: string;
+  /** With `blocked`: the Live datasets whose copies would let it be saved — the card's "Make a copy" (the Live copy flow). */
+  copy?: string[];
 }
 
 /** The Assistant agent a conversation is with (null: the Project assistant); `gone` once it was deleted. */

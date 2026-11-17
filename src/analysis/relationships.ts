@@ -44,9 +44,15 @@ export interface Relationship {
   /** What the user calls this edge ("Order date"), trimmed, 1-60 characters, no control characters. */
   label?: string;
   warning?: RelWarning;
-  /** Counted over the FULL tables when the relationship was saved. */
-  verified: { matched: number; unmatchedFrom: number };
+  /**
+   * Counted over the FULL tables when the relationship was saved — or, on a Live table whose source doc requires a date
+   * filter, inside the range every question there gets (`range`, ISO days: ipc/linkLive). None: every row.
+   */
+  verified: { matched: number; unmatchedFrom: number; range?: VerifiedRange };
 }
+
+/** The date range a Live link's counts were taken in (liveDateRange REQUIRED_RANGE, resolved when it was saved). */
+export type VerifiedRange = { from?: string; to?: string };
 
 // ponytail: fixed cap; a model this size is already a wall of edges on the canvas
 export const MAX_RELATIONSHIPS = 200;
@@ -72,6 +78,17 @@ function sanitizeWarning(raw: unknown): RelWarning | undefined {
   return undefined;
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A stored range: its ISO-day bounds, at least one; anything else is no range (the counts then read as every row's). */
+function sanitizeRange(raw: unknown): VerifiedRange | undefined {
+  const o = raw as Record<string, unknown> | null;
+  if (!o || typeof o !== 'object') return undefined;
+  const day = (v: unknown): string | undefined => (typeof v === 'string' && ISO_DAY.test(v) ? v : undefined);
+  const [from, to] = [day(o.from), day(o.to)];
+  return from || to ? { ...(from && { from }), ...(to && { to }) } : undefined;
+}
+
 function count(n: unknown): number {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
 }
@@ -87,6 +104,7 @@ export function sanitizeRelationship(raw: unknown): Relationship | null {
     ? (o.cardinality as Cardinality)
     : 'many_to_one';
   const v = (o.verified || {}) as Record<string, unknown>;
+  const range = sanitizeRange(v.range);
   const label = sanitizeLabel(o.label);
   const warning = sanitizeWarning(o.warning);
   return {
@@ -96,7 +114,7 @@ export function sanitizeRelationship(raw: unknown): Relationship | null {
     cardinality,
     ...(label !== undefined && { label }),
     ...(warning !== undefined && { warning }),
-    verified: { matched: count(v.matched), unmatchedFrom: count(v.unmatchedFrom) },
+    verified: { matched: count(v.matched), unmatchedFrom: count(v.unmatchedFrom), ...(range && { range }) },
   };
 }
 

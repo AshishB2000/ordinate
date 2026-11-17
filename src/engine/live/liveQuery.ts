@@ -344,14 +344,20 @@ export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: Adap
  * looked up at `lookupMs`, kept for `keepMs` — one flight),
  * sent through the one door (./liveWarehouse `warehouse`), and a failure is the last rows cached for it,
  * labelled stale, or a typed error — never an empty list that looks like "no match".
+ * `otherId`: a second Live dataset the one statement also reads (a link's TO, ipc/linkLive), sent to `datasetId`'s
+ * connection: its target is the build's second argument, its epoch keys the entry too, the lower cache age wins.
  */
-export async function liveLookup(projectId: string, datasetId: string, build: (t: LiveTarget) => Compiled | SemanticLookup | LiveRefusal): Promise<LiveLookupReply> {
+export async function liveLookup(projectId: string, datasetId: string, build: (t: LiveTarget, other?: LiveTarget) => Compiled | SemanticLookup | LiveRefusal, otherId?: string): Promise<LiveLookupReply> {
   const found = await liveTarget(projectId, datasetId);
   if (!found.ok) return unavailable(found);
   const t = found.target;
   const layer = await layerRefusal(t);
   if (layer) return layer;
-  const c = build(t);
+  const second = otherId ? await liveTarget(projectId, otherId) : null;
+  if (second && !second.ok) return unavailable(second);
+  const o = second?.target;
+  if (o?.semantic) return refused(dialectOf(t), refuseLayer('layerLookup', o.semantic.env));
+  const c = build(t, o);
   if (!c.ok) return refused(dialectOf(t), c);
   // A statement is never sent to a semantic layer: a lookup that only knows SQL (a key check) is the layer's to refuse.
   if (t.semantic && !('semantic' in c)) return refused(dialectOf(t), refuseLayer('layerLookup', t.semantic.env));
@@ -359,8 +365,10 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   const unsaid = 'semantic' in c ? semanticRunner(t, new AbortController().signal, () => undefined).check?.(c.semantic) : null;
   if (unsaid) return refused(dialectOf(t), unsaid);
   const op = opOf(dialectOf(t));
-  const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params });
-  const ages = agesOf(t);
+  const also = o ? { with: [o.datasetId, String(o.live.epoch), o.live.schemaSyncedAt] } : {};
+  const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params, ...also });
+  const [a, b] = [agesOf(t), o ? agesOf(o) : agesOf(t)];
+  const ages = { lookupMs: Math.min(a.lookupMs, b.lookupMs), keepMs: Math.min(a.keepMs, b.keepMs) };
   const at = (ms: number): string => new Date(ms).toISOString();
   const hit = queryCache.get<{ rows: LiveRows; at: number }>('live', key, { maxAgeMs: ages.lookupMs });
   if (hit) {
@@ -371,7 +379,7 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   try {
     const { value, owner } = await fly(key, signal, async (shared) => {
       const v = { rows: 'semantic' in c ? await layerRows(t, c.semantic, shared) : await warehouse(t, c.query, shared), at: queryCache.now() };
-      queryCache.set(key, v, [t.datasetId], { maxAgeMs: ages.keepMs });
+      queryCache.set(key, v, o ? [t.datasetId, o.datasetId] : [t.datasetId], { maxAgeMs: ages.keepMs });
       return v;
     });
     trace.recordLive(op, owner ? 'warehouse' : 'hit');

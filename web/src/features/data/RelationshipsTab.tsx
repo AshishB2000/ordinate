@@ -3,7 +3,8 @@
 // that looks rows up in it, so a fact table reads left of its lookups — with
 // curves from each many side to its lookup, and the same relationships as a
 // keyboard-first table under it. Match counts and rates are the server's,
-// counted over the full tables when the relationship was saved.
+// counted over the full tables when the relationship was saved — or inside the
+// date range a Live table requires, which both say beside the figure.
 
 import { Fragment, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -17,7 +18,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useCanEdit } from '../projects/api';
 import { useRelationships, useWrite, type Relationship } from './api';
-import { formatNumber, fromControl, pctText } from './format';
+import { formatNumber, fromControl, pctText, rangeText } from './format';
 import { RelationshipDialog } from './RelationshipDialog';
 import { relWarningText } from './tableApi';
 import { RelationshipLabelDialog } from './RelationshipLabelDialog';
@@ -160,10 +161,10 @@ function Canvas({ datasets, rels, selected, onSelect }: {
             type="button"
             className={`${ms.relLabel} ${e.id === selected ? ms.relLabelOn : ''}`}
             style={{ left: e.mid.x, top: e.mid.y }}
-            aria-label={`${r.label ? `${r.label}: ` : ''}${name(r.from.datasetId)}.${r.from.column} to ${name(r.to.datasetId)}.${r.to.column}, ${r.cardinality === 'one_to_one' ? 'one to one' : 'many to one'}, ${pctText(r.matchPct)} matched`}
+            aria-label={`${r.label ? `${r.label}: ` : ''}${name(r.from.datasetId)}.${r.from.column} to ${name(r.to.datasetId)}.${r.to.column}, ${r.cardinality === 'one_to_one' ? 'one to one' : 'many to one'}, ${pctText(r.matchPct)} matched${r.verified.range ? ` in ${rangeText(r.verified.range)}` : ''}`}
             onClick={() => onSelect(e.id)}
           >
-            {r.label && `${r.label} · `}{kindShort(r.cardinality)} · {pctText(r.matchPct)}
+            {r.label && `${r.label} · `}{kindShort(r.cardinality)} · {pctText(r.matchPct)}{r.verified.range && ` · ${rangeText(r.verified.range)}`}
           </button>
         );
       })}
@@ -300,6 +301,11 @@ export function RelationshipsTab({ projectId, topic }: { projectId: string; topi
                     <td>{r.cardinality === 'one_to_one' ? 'One to one' : 'Many to one'}</td>
                     <td className={s.num}>
                       {formatNumber(r.verified.matched)} ({pctText(r.matchPct)})
+                      {r.verified.range && (
+                        <div className={s.meta} data-testid="rel-range" title="Counted inside the date range its Live table requires">
+                          in {rangeText(r.verified.range)}
+                        </div>
+                      )}
                     </td>
                     <td className={`${s.num} ${r.verified.unmatchedFrom ? s.warnText : ''}`}>{formatNumber(r.verified.unmatchedFrom)}</td>
                     <td className={s.actions}>

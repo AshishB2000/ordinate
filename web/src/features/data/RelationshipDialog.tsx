@@ -14,7 +14,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
 import { call, useWrite, type Relationship, type Suggestion } from './api';
-import { formatNumber, pctText } from './format';
+import { formatNumber, pctText, rangeText } from './format';
 import { LABEL_HINT } from './RelationshipLabelDialog';
 import s from './Data.module.css';
 import ms from './Model.module.css';
@@ -67,7 +67,8 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
       if (!r.ok || !r.relationship) return setError(r.error || 'Could not save the relationship.');
       const rel = r.relationship;
       const n = (id: string) => datasets.find((d) => d.id === id)?.name ?? 'dataset';
-      toast(`Related ${n(rel.from.datasetId)} to ${n(rel.to.datasetId)} on ${rel.from.column}, ${pctText(rel.matchPct)} matched.`, { kind: 'success' });
+      const range = rel.verified.range ? ` in ${rangeText(rel.verified.range)}` : '';
+      toast(`Related ${n(rel.from.datasetId)} to ${n(rel.to.datasetId)} on ${rel.from.column}, ${pctText(rel.matchPct)} matched${range}.`, { kind: 'success' });
       onClose(rel.id);
     },
   });
