@@ -50,6 +50,7 @@ import { termFactsFor } from './terms';
 import { askGuidance } from './guidance';
 import { askDatasets, askTableFacts } from './askTableFacts';
 import { askLinkedFacts } from './askLinks';
+import { askValueFacts } from './askValues';
 import { verifiedAsk, verifiedMatch, verifiedScope } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
 import { topicFacts } from '../ai/topicFacts';
@@ -542,6 +543,7 @@ export function register() {
       // alone) and the Live ones' source table facts (./askTableFacts); none on a share path, whose words leave the app.
       const about = sharing ? [] : await askDatasets(projectId, asked, facts.provenance.kind, q);
       const linked = scope.only ? { text: '', ledger: [], metas: [] } : await askLinkedFacts(projectId, about);
+      const values = await askValueFacts(projectId, about, linked.metas, q); // the values its words name, under the caller's row lock (./askValues)
       const tables = sharing ? { text: '', ledger: [] } : await askTableFacts(projectId, about, linked.metas);
       const sources = sharing || scope.only ? { text: '', ledger: [] } : await askSourceTables(projectId, asked, q); // an editor's Home question: tables no dataset is made from (./sourceAnswers)
       const guided = await askGuidance(projectId, asked, facts.provenance.kind, q, { ...(agent ? { agent } : {}), ...(passed ? { exclude: passed.id } : {}) }); // the editors' instructions and guide (./guidance), after the facts
@@ -552,14 +554,14 @@ export function register() {
       // none (a report's narrative page, ./reportsServer) still has the caller's
       // latest replayed, but nobody is looking at that chart and nothing continues it.
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
-      const ledger = facts.ledger.concat(linked.ledger, tables.ledger, sources.ledger, guided.ledger, prev ? prev.ledger : []);
+      const ledger = facts.ledger.concat(linked.ledger, values.ledger, tables.ledger, sources.ledger, guided.ledger, prev ? prev.ledger : []);
       // The datasets those facts came from, kept on the answer: its words, a prose one's too, leave history with them (./turnsOpen).
       const factsFrom = [...about, ...linked.metas].map((m) => m.id).concat(facts.datasetIds ?? [], prev ? [prev.spec.datasetId] : []);
       // The real model call — a 'model' step, bracketing the one narration this app
       // makes. No agent loop; only an SQL answer (below) makes a second call, which writes SQL.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
       const how = { build: scope.agent ? scope.agent.build : true, topic: scope.only !== null };
-      const res = await askCopilot(prior, [facts.text, linked.text, tables.text, sources.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
+      const res = await askCopilot(prior, [facts.text, linked.text, values.text, tables.text, sources.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
 
       if (res.ok) {
         // What the reply may act on: an agent that may not build answers or does nothing (rule 8).

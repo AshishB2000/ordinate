@@ -49,6 +49,8 @@ const context: typeof import('../src/server/context') = require('../src/server/c
 context.enterServerMode(DATA);
 const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engine/duckdbPool');
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+const askLinks: typeof import('../src/ipc/askLinks') = require('../src/ipc/askLinks');
 const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
 const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');
 const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
@@ -110,11 +112,14 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // Table facts in the prompt (src/ipc/askTableFacts.ts): the ask's datasets read again, every one a memo hit, no query.
   // Follow the links (src/ipc/askLinks.ts): relationships.json, one record (no link here, so nothing more); a memo hit
   // where a metric's figure read it first (a dataset), a transaction of 3 queries where nothing had (Home). An agent follows none.
-  home: at(92, 167), // was at(89, 166), at(89, 154), at(345, 7_134) before that
-  dataset: at(88, 125), // was at(88, 124), at(88, 123), at(345, 7_121) before that
-  agent: at(75, 146), // was at(75, 136), at(339, 7_113) before that
+  // The value search (src/ipc/askValues.ts): no statement, and two record reads a copy it searches, both memo hits (the
+  // dataset's record, for its marked columns and its Parquet): +2 where Orders alone is searched, +6 for the agent's three.
+  // Its DuckDB statements are counted apart (VALUE_SEARCHES): 1 a case here, 3 for the agent, none for the dashboard.
+  home: at(92, 169), // was at(92, 167), at(89, 166), at(89, 154), at(345, 7_134) before that
+  dataset: at(88, 127), // was at(88, 125), at(88, 124), at(88, 123), at(345, 7_121) before that
+  agent: at(75, 152), // was at(75, 146), at(75, 136), at(339, 7_113) before that
   // Shared folders (docs/team-folders E2): the restricted viewer's folder access, one transaction (BEGIN, the tree, COMMIT).
-  viewer: at(120, 7_312), // was at(117, 7_312), at(114, 7_311), at(114, 7_299), at(359, 11_153) and at(345, 14_135) before that
+  viewer: at(120, 7_314), // was at(120, 7_312), at(117, 7_312), at(114, 7_311), at(114, 7_299), at(359, 11_153) and at(345, 14_135) before that
   dashboard: at(112, 183), // was at(354, 7_112)
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
@@ -122,24 +127,27 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // (g) An SQL answer: Home's facts, one listing of the project's datasets for the gate's names (kept for the question),
   // and the records of Orders only. Before, the gate and the second call's facts each read every dataset's record
   // (projectCatalog): 151 queries (the list's pages fill the read memo) and 4,164 record reads, 4,125 getDatasetMeta calls.
-  sql: at(151, 165),
+  sql: at(151, 171), // was at(151, 165) before the value search
   // E4: case (d) in a project with folders (8), measured 132–138 here. Over the bare viewer's 120: the datasets' placements
   // (E2, one transaction: 3 statements) and five records read one at a time (5 transactions: 15); the indexes' folder
   // WHERE none (8 counts their statements with it and without). No other case moved with E4 (E3: 92 / 88 / 75 / 120 / 112 / 22).
-  opsViewer: at(138, 7_139),
+  opsViewer: at(138, 7_141), // was at(138, 7_139) before the value search
 };
 // PR 7c, meaning search ON (a fake fingerprint model, all 19,998 items and questions fingerprinted): ONE embed call a
 // question; per search one nearest-items query beside the words one, and the examples' nearest questions; once an ask,
 // whether the project has fingerprints. Off (above), the counts are the same as before 7c.
 const CEILING_ON: Record<string, { queries: number; reads: number }> = {
-  home: at(107, 153), // off: 89 / 154
+  home: at(107, 169), // off: 92 / 169; was at(107, 153), before the table facts, the links and the value search
   dataset: at(94, 118), // off: 88 / 123
-  agent: at(84, 136), // off: 75 / 136
+  agent: at(84, 152), // off: 75 / 152; was at(84, 136), before the links and the value search
   // Shared folders (E2): +3 for the restricted viewer, its folder access in one transaction (BEGIN, the tree, COMMIT), as off.
   // CI's ~18 more were a race, not S3: the picks' checks reading singly what the counts' batches had in flight (below).
   viewer: at(134, 7_350), // off: 120 / 7,312; was at(142, 7_350) (CI's raced count), at(139, 7_350), at(135, 7_350)
   dashboard: at(119, 182), // off: 112 / 183
 };
+
+/** The value search (src/ipc/askValues.ts): at most one DuckDB statement a dataset the ask is about, Home's 12 and the linked. */
+const VALUE_SEARCHES = homeFacts.HOME_DATASETS + askLinks.LINKED_MAX;
 
 /** (g)'s getDatasetMeta calls beyond a chart answer's from Home: the pick's and the statement's (pick, gate, card); never one per dataset. */
 const SQL_METAS = 12;
@@ -201,11 +209,18 @@ async function world(pool: Pool): Promise<World> {
   });
 }
 
-/** What one ask costs: Postgres statements, record reads and tables loaded (datasets.getDataset) while `fn` runs. `slowBatches`: ms each batched record read (readMany) waits before it is sent. */
-async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out: T; queries: number; reads: number; tables: number; ms: number; sqls: string[] }> {
+/**
+ * What one ask costs: Postgres statements, record reads, tables loaded (datasets.getDataset) and the value search's DuckDB
+ * statements (src/ipc/askValues.ts) while `fn` runs. `slowBatches`: ms each batched record read (readMany) waits before it is sent.
+ */
+async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out: T; queries: number; reads: number; tables: number; values: number; ms: number; sqls: string[] }> {
   const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown }; // the pool's clients are pg Clients
-  const [query, readFile, readMany, readdir, getDataset] = [proto.query, recordFs.readFile, recordFs.readMany, recordFs.readdir, datasets.getDataset];
-  let queries = 0, reads = 0, tables = 0;
+  const [query, readFile, readMany, readdir, getDataset, queryAsync] = [proto.query, recordFs.readFile, recordFs.readMany, recordFs.readdir, datasets.getDataset, duck.queryAsync];
+  let queries = 0, reads = 0, tables = 0, values = 0;
+  (duck as { queryAsync: unknown }).queryAsync = (sql: string, ...a: unknown[]) => {
+    if (sql.includes('AND regexp_matches(v, ?)')) values++;
+    return (queryAsync as (...x: unknown[]) => unknown)(sql, ...a);
+  };
   const sqls: string[] = [];
   (datasets as { getDataset: unknown }).getDataset = (...a: Parameters<typeof getDataset>) => { tables++; return getDataset(...a); };
   proto.query = function (this: unknown, ...a: unknown[]) {
@@ -222,9 +237,10 @@ async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out:
   spy.readdir = (...a: unknown[]) => { reads++; return (readdir as (...x: unknown[]) => unknown)(...a); };
   const t0 = Date.now();
   try {
-    return { out: await fn(), queries, reads, tables, ms: Date.now() - t0, sqls };
+    return { out: await fn(), queries, reads, tables, values, ms: Date.now() - t0, sqls };
   } finally {
     proto.query = query;
+    (duck as { queryAsync: unknown }).queryAsync = queryAsync;
     Object.assign(spy, { readFile, readMany, readdir });
     (datasets as { getDataset: unknown }).getDataset = getDataset;
   }
@@ -319,8 +335,8 @@ async function dbLeg(pool: Pool): Promise<void> {
   };
   const factsOf = new Map<string, string>();
   const tablesOf = new Map<string, number>();
-  const line = (name: string, c: { queries: number; reads: number; tables: number; ms: number }) =>
-    console.log(`  ${name.padEnd(18)} ${String(c.queries).padStart(7)} queries ${String(c.reads).padStart(7)} record reads ${String(c.tables).padStart(3)} tables loaded ${String(c.ms).padStart(6)} ms`);
+  const line = (name: string, c: { queries: number; reads: number; tables: number; values?: number; ms: number }) =>
+    console.log(`  ${name.padEnd(18)} ${String(c.queries).padStart(7)} queries ${String(c.reads).padStart(7)} record reads ${String(c.tables).padStart(3)} tables loaded ${String(c.values ?? 0).padStart(3)} value searches ${String(c.ms).padStart(6)} ms`);
   for (const [name, role, extra, agentId, right] of cases) {
     const on = await once(role, extra, agentId);
     line(name, on);
@@ -328,6 +344,7 @@ async function dbLeg(pool: Pool): Promise<void> {
     ok(`${name}: ${on.queries} queries ≤ ${CEILING[name].queries} and ${on.reads} record reads ≤ ${CEILING[name].reads}`, on.queries <= CEILING[name].queries && on.reads <= CEILING[name].reads);
     if (on.queries * 1.1 > CEILING[name].queries || process.env.ORDINATE_BUDGET_SQL) histogram(name, on.sqls); // over, or into its 10%
     tablesOf.set(name, on.tables);
+    ok(`${name}: ${on.values} value-search DuckDB statements ≤ one a dataset the ask is about (${VALUE_SEARCHES})`, on.values <= VALUE_SEARCHES);
     // Before PR 4 the dashboard resolved all 5,000 metrics, a table loaded for each clone's (they have no Parquet). Since
     // PR 6b it also resolves the few metrics step 3 finds for the question elsewhere (Q12): "Revenue" on five clones.
     if (name === 'dashboard') {

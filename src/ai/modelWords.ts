@@ -14,7 +14,7 @@
 
 import { words } from './answerSuggest';
 
-const STOP: ReadonlySet<string> = new Set([
+export const STOP: ReadonlySet<string> = new Set([
   'the', 'and', 'for', 'with', 'what', 'which', 'who', 'how', 'many', 'much', 'show', 'give', 'tell', 'list', 'are', 'was', 'were',
   'has', 'have', 'had', 'our', 'all', 'each', 'per', 'from', 'into', 'than', 'then', 'that', 'this', 'these', 'those', 'there',
   'their', 'them', 'they', 'you', 'your', 'its', 'not', 'but', 'can', 'could', 'would', 'should', 'will', 'did', 'does', 'any',
