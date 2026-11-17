@@ -20,6 +20,9 @@
 //      required refuses an unfiltered question on every door (chart, tile, answer, SQL) naming it, and a
 //      filtered one passes, its case fix included; BigQuery's `_PARTITIONTIME` is a TIMESTAMP range among
 //      the base filters, on the table scan under a calc, BigQuery only (NEGATIVE CONTROL: DuckDB refuses).
+//      Every shape that carries it (chart, its grain and bin probes, a calc chart, KPI, case fix, latest-day
+//      probe, SQL on Live's view CTE) has the range on the table's own scan, written out by hand (NEGATIVE
+//      CONTROL: the scan check refuses the range one SELECT out).
 //   4. The nightly's pruning measurement: its plan skips without variables, refuses a half-set, and
 //      compiles its two forms; test-warehouseLive skips green without secrets and writes no artifact.
 //
@@ -27,7 +30,8 @@
 
 import { ok, finish } from './selfcheck';
 import { H, close, post } from './liveRouteHarness';
-import type { LiveColumn, LiveIR } from '../src/engine/live/liveSpec';
+import type { LiveColumn, LiveFilter, LiveIR } from '../src/engine/live/liveSpec';
+import type { FilterStep } from '../src/data/transforms';
 import type { CompileDialectId } from '../src/engine/live/dialect';
 
 const fs: typeof import('fs') = require('fs');
@@ -40,6 +44,8 @@ const compile: typeof import('../src/engine/live/compile') = require('../src/eng
 const compileFilter: typeof import('../src/engine/live/compileFilter') = require('../src/engine/live/compileFilter');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
 const liveSql: typeof import('../src/engine/live/liveSql') = require('../src/engine/live/liveSql');
+const tree: typeof import('../src/engine/live/sql/tree') = require('../src/engine/live/sql/tree');
+const print: typeof import('../src/engine/live/sql/print') = require('../src/engine/live/sql/print');
 const liveTarget: typeof import('../src/engine/live/liveTarget') = require('../src/engine/live/liveTarget');
 const pruning: typeof import('./warehousePruning') = require('./warehousePruning');
 const { DIALECT_IDS, dialectFor }: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
@@ -224,6 +230,77 @@ function partitionTime(): void {
   ok('NEGATIVE CONTROL: any other dialect refuses the pseudo-column, never drops it', qd?.ok === false, JSON.stringify(qd));
 }
 
+/**
+ * Is every `_PARTITIONTIME` range in the WHERE of a SELECT whose FROM is `table` itself? BigQuery's pseudo-column
+ * exists only there, not through a subquery or CTE, and only a filter on the scan counts for require_partition_filter.
+ */
+function onScan(sql: string, table: string): boolean {
+  const at = [...sql.matchAll(/\(lv_src\._PARTITIONTIME >= /g)].map((m) => m.index);
+  return at.length > 0 && at.every((i) => {
+    for (let j = i - 1, depth = 0; j >= 0; j -= 1) {
+      if (sql[j] === ')') depth += 1;
+      else if (sql[j] === '(' && (depth -= 1) < 0) return false; // left the SELECT the range sits in
+      else if (depth === 0 && sql.startsWith('FROM ', j)) return sql.startsWith(`FROM ${table} AS lv_src WHERE `, j);
+    }
+    return false;
+  });
+}
+
+/**
+ * Every statement shape that carries the partition time, its scan written out by hand (docs/live-data/log.md, 2026-11-16:
+ * checked against BigQuery's rules, not re-recorded): the range on the base table's own FROM, two TIMESTAMPs at UTC midnight.
+ */
+async function partitionTimeShapes(): Promise<void> {
+  const T = '`p`.`d`.`t`';
+  const R = '(lv_src._PARTITIONTIME >= CAST(@p AS TIMESTAMP) AND lv_src._PARTITIONTIME < CAST(@p AS TIMESTAMP))';
+  const columns: LiveColumn[] = [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }];
+  const env = { dialect: 'bigquery' as const, source: { kind: 'table' as const, parts: ['p', 'd', 't'] }, columns };
+  const calcCols: LiveColumn[] = [...columns, { name: 'dbl', type: 'number' }];
+  const calcEnv = { ...env, source: { ...env.source, calcs: [{ name: 'dbl', expression: '[amount] * 2', type: 'number' as const }] }, columns: calcCols };
+  const chart = (measure: string, category: LiveIR['category'] = { column: 'region', kind: 'text' }): LiveIR => ({ kind: 'chart', category, measures: [{ column: measure, aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null });
+  const asked = (ir: LiveIR, e: typeof env, f: (ir: LiveIR, e: import('../src/engine/live/compile').CompileEnv) => import('../src/engine/live/compile').Compiled) => {
+    const r = dateRange.withRequiredRange(ir, { requiredTime: true, env: e });
+    return r.ok ? f(r.ir, r.env) : r;
+  };
+  const lookup = (lock: LiveFilter[], f: (e: import('../src/engine/live/compile').CompileEnv, l: LiveFilter[]) => import('../src/engine/live/compile').Compiled) => {
+    const n = dateRange.lookupRequired({ requiredTime: true, env }, lock);
+    return n.ok ? f(n.env, n.filters) : n;
+  };
+  const sqlOnLive = async (text: string, e: typeof env, lock: FilterStep[] = []) => {
+    const tr = tree.translate(await tree.parseSql(text), { tables: new Map([['t', { id: 't1', columns: e.columns }]]), today: '2025-03-15' });
+    if (!tr.ok) return tr;
+    // As liveSql's inputsOf gives each view the range (its own path runs end to end in test-warehousePartitionTime).
+    const r = dateRange.requiredRange({ requiredTime: true }, []);
+    return r.ok ? print.printLiveSql(tr.ir, tr.ir.views.map(() => ({ env: { ...e, base: r.filters }, lock })), 'bigquery') : r;
+  };
+  const LOCK: LiveFilter = { kind: 'in', column: 'region', values: ['West'], negate: false, binary: true };
+  const shapes: [string, import('../src/engine/live/compile').Compiled | { ok: false }, string][] = [
+    ['a chart: on lv_base\'s own FROM', asked(chart('amount'), env, (ir, e) => compile.compileChart(ir, { kind: 'text' }, e)), `FROM ${T} AS lv_src WHERE ${R}),\nlv_grp AS (`],
+    ['a chart\'s grain probe', asked(chart('amount', { column: 'day', kind: 'date' }), env, compile.compileGrainProbe), `AS o_year FROM ${T} AS lv_src WHERE ${R}`],
+    ['a chart\'s bin probe', asked(chart('amount', { column: 'amount', kind: 'bins', bins: 5 }), env, compile.compileBinRange), `AS o_hi FROM ${T} AS lv_src WHERE ${R}`],
+    ['a chart reading a calc: on the innermost layer, under both', asked(chart('dbl'), calcEnv, (ir, e) => compile.compileChart(ir, { kind: 'text' }, e)), `FROM ${T} AS lv_src WHERE ${R}) AS lv_src) AS lv_src),\nlv_grp AS (`],
+    ['a KPI', asked({ kind: 'metric', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null }, env, compile.compileMetric), `AS o_m0s FROM ${T} AS lv_src WHERE ${R}`],
+    ['the case fix: after its key match, before ORDER BY', lookup([], (e, l) => compile.compileCaseMatches('region', ['west'], e, l)), ` IN (CAST(@p AS STRING)) AND ${R} ORDER BY o_v LIMIT 20`],
+    ['the latest-day probe, the range before the row lock', lookup([LOCK], (e, l) => compile.compileLatestDates('day', e, l)),
+      `SELECT UNIX_DATE(max(SAFE_CAST(lv_src.\`day\` AS DATE))) AS o_l0 FROM ${T} AS lv_src WHERE ${R} AND (CAST(coalesce(CAST(lv_src.\`region\` AS STRING), '') AS BYTES) IN (CAST(CAST(@p AS STRING) AS BYTES)))`],
+    ['SQL on Live: in the view CTE', await sqlOnLive('SELECT region, sum(amount) AS n FROM t GROUP BY region', env), `FROM ${T} AS lv_src WHERE ${R})\nSELECT t0.c0 AS o_0`],
+    ['SQL on Live: a self-join reads the one view twice, the range in it once', await sqlOnLive('SELECT a.region, count(*) AS n FROM t a JOIN t b ON a.region = b.region GROUP BY a.region', env), `FROM ${T} AS lv_src WHERE ${R})\nSELECT t0.c0 AS o_0`],
+    ['SQL on Live: a calc view, the range innermost and the lock outside', await sqlOnLive('SELECT region, sum(dbl) AS n FROM t GROUP BY region', calcEnv, [{ type: 'filter', column: 'region', op: 'in', values: ['West'], lock: true } as FilterStep]),
+      `FROM ${T} AS lv_src WHERE ${R}) AS lv_src) AS lv_src WHERE (CAST(coalesce(`],
+  ];
+  for (const [what, q, scan] of shapes) {
+    const sql = 'query' in q ? q.query.sql : '';
+    const stamps = [...sql.matchAll(/lv_src\._PARTITIONTIME (?:>=|<) CAST\(@p(\d+) AS TIMESTAMP\)/g)].map((m) => 'query' in q ? q.query.params[Number(m[1])] : null);
+    ok(`_PARTITIONTIME, ${what}: on the table's scan, once, two TIMESTAMPs at UTC midnight`,
+      onScan(sql, T) && sql.replace(/@p\d+/g, '@p').includes(scan) && sql.split('_PARTITIONTIME').length === 3
+        && JSON.stringify(stamps.map((p) => p && [p.type, p.value])) === '[["timestamp","2024-03-01T00:00:00.000Z"],["timestamp","2025-03-01T00:00:00.000Z"]]', sql || JSON.stringify(q));
+  }
+  // NEGATIVE CONTROL: the range one SELECT out (over a derived table, or a CTE) is not on the scan.
+  ok('NEGATIVE CONTROL: the scan check refuses the range over a derived table or a CTE of the table',
+    !onScan(`SELECT x FROM (SELECT x FROM ${T} AS lv_src) AS lv_src WHERE ${R}`, T) && !onScan(`WITH a AS (SELECT x FROM ${T} AS lv_src) SELECT x FROM a AS lv_src WHERE ${R}`, T)
+      && onScan(`SELECT x FROM ${T} AS lv_src WHERE ${R}`, T));
+}
+
 async function partitionTimeFacts(): Promise<void> {
   const P = (await H.setupOrg(H.ORG_A)).projectId;
   const ds = await H.as(H.ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
@@ -319,6 +396,7 @@ function pruningMeasurement(): void {
 async function main(): Promise<void> {
   rawRangeCompile();
   partitionTime();
+  await H.as(H.ORG_A, partitionTimeShapes); // the SQL text is parsed by DuckDB, in an org
   pruningMeasurement();
   await requiredRange();
   await lookups();

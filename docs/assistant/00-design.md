@@ -375,7 +375,9 @@ partition key that may stop the warehouse skipping data. Two parts are built
   same range (`lookupRequired`): the case fix, and the latest-day probe, whose card then carries the
   sentence and never says a day it found for a period that starts after the range. An ingestion-time
   BigQuery table (`_PARTITIONTIME`, a table source only) gets the range as a TIMESTAMP base filter on the
-  table scan; a required integer-range partition has no default, so an unfiltered question is refused:
+  table scan, in every statement shape (checked against BigQuery's rules, and run against a real table by the
+  warehouse nightly once its scratch dataset is set: `docs/live-data/log.md`, 2026-11-16); a required
+  integer-range partition has no default, so an unfiltered question is refused:
   *This table needs a filter on "tier": add one to the question.*
 - **A half-open range on the raw column, built and OFF.** With the table's facts naming the column a
   partition, sort or cluster key, a range can compile as `col >= start AND col < end + 1 day`, every

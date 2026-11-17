@@ -221,7 +221,8 @@ function rawRange(c: Ctx, col: LiveColumn, f: { from?: string; to?: string }): s
  * half-open on the raw pseudo-column against TIMESTAMPs at UTC midnight, as a partition boundary is. A base
  * filter only, so it is read on the table scan itself. Any other dialect, or a bound that is not an ISO day,
  * is refused: never a cast that would stop the warehouse pruning, and never a dropped filter.
- * UNVERIFIED on a real warehouse: the qualified pseudo-column `lv_src._PARTITIONTIME`.
+ * Checked against BigQuery's rules (docs/live-data/log.md, 2026-11-16) but for the alias qualifier `lv_src.`, which its
+ * documentation never shows: the warehouse nightly runs it on a real table (scripts/warehouseLivePartitionTime.ts).
  */
 function partitionTimeRange(c: Ctx, f: { column: string; from?: string; to?: string }): string | LiveRefusal {
   if (c.d.id !== 'bigquery' || f.column !== '_PARTITIONTIME') return refuse('badQuery');

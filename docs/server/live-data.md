@@ -494,6 +494,19 @@ comparison catches a dropped row rule. The ClickHouse container runs all of it, 
 whether the constructs Ordinate refuses on ClickHouse would agree (`LIFT PROBE` lines in the log and
 the run's summary; they never fail the run).
 
+With `BIGQUERY_SCRATCH_DATASET` set, BigQuery also runs the **partition-time case**
+(`scripts/warehouseLivePartitionTime.ts`). It rewrites one small table there,
+`ordinate_partitiontime`, partitioned by ingestion time with *require partition filter* on. The table
+is rewritten each run and expires on its own three days later. It then asks that table, as a Live
+dataset, a chart, a KPI tile, an answer whose case fix reads it, an empty answer whose latest-day
+check reads it, and an SQL question. Each must answer with the figures of the rows inside the
+default *Last 12 months*, with no "Cannot query over table … without a filter" error. Each must also
+bill at most twice BigQuery's 10 MB minimum and read fewer bytes than the table holds. A control
+checks that BigQuery refuses the same KPI without the range. The table is written with a token of the
+`bigquery` scope that the test mints for that one script. The connector itself never writes. Without
+the variable, the case prints one skip line. `scripts/test-warehousePartitionTime.ts` runs the same
+case against a stand-in BigQuery on every `npm test`.
+
 Last, it **measures date-filter pruning** (`scripts/warehousePruning.ts`): one count over a month
 of a partitioned or clustered table's date column, compiled the way Live sends it today (the column
 cast to a date) and as a plain range on the raw column, priced without running either — a BigQuery
@@ -546,7 +559,7 @@ in [configuration.md](configuration.md).
 | `BIGQUERY_PROJECT` | no | The billing project. Defaults to the key's own. |
 | `BIGQUERY_DATASET` | no | The default dataset, listed first. |
 | `BIGQUERY_LOCATION` | no | Where jobs run, as in the connection form. |
-| `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below. Leave it unset unless you want that probe; never grant write access to the account a real connection uses. |
+| `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below and the partition-time case above. Without it, the probe's `CREATE TABLE` and the partition-time case are skipped. Never grant write access to the account a real connection uses. |
 | `SNOWFLAKE_PRUNING_TABLE`, `SNOWFLAKE_PRUNING_COLUMN` | both or neither | The table (as the connection names it) and its date or timestamp column the pruning measurement prices, ideally a clustering key. Without them, Snowflake's measurement is skipped. |
 | `BIGQUERY_PRUNING_TABLE`, `BIGQUERY_PRUNING_COLUMN` | both or neither | The same for BigQuery. Without them, a public table partitioned by hour that requires a partition filter is priced. |
 | `SNOWFLAKE_PRUNING_MONTH`, `BIGQUERY_PRUNING_MONTH` | no | The month priced, `YYYY-MM`. Defaults to the public table's own month, else last month. |
@@ -584,7 +597,9 @@ roughly 500 small statements, its calculated fields' roughly 400 and Live SQL's 
 warehouse's auto-suspend time. BigQuery: nothing billed in
 the usual case. Every query it runs reads generated or literal rows rather than a table; the one
 table it touches, the public `bigquery-public-data.samples.shakespeare`, is only described and
-dry-run, and both are free.
+dry-run, and both are free. The partition-time case is the exception, and only with
+`BIGQUERY_SCRATCH_DATASET` set. It writes one table of about 1,000 rows and runs about seven small
+queries on it, each billed at BigQuery's 10 MB minimum.
 
 **The read-only scope answer.** Each BigQuery run records, as `spike:` lines in the log and a table
 in the run's summary: which scopes Google granted the query token (from Google's `tokeninfo`),

@@ -18,7 +18,7 @@
 //              scripts/fixtures/snowflake-semantic-view.sql made once (semantic layer part 7, c1)
 //   BigQuery   BIGQUERY_KEY_JSON; BIGQUERY_PROJECT, BIGQUERY_DATASET, BIGQUERY_LOCATION optional;
 //              BIGQUERY_SCRATCH_DATASET optional — a dataset the account may write, for the
-//              spike's CREATE TABLE probe
+//              spike's CREATE TABLE probe and the partition-time fixture
 //
 // Some variables of a warehouse set but not all is a FAILURE, not a skip: a
 // half-configured nightly must not pass by doing nothing.
@@ -40,7 +40,10 @@
 // (warehouseLiveSnowflakeSemantic.ts); without it, that part prints its skip. Each warehouse then runs
 // SQL on Live datasets (warehouseLiveSqlParity.ts, docs/live-data/01-live-sql.md F7): F2's corpus
 // translated, printed for its dialect and run through its runBound over literal twins, against
-// DuckDB running the model's own text — under the same plans and canary. Last, the pruning
+// DuckDB running the model's own text — under the same plans and canary. With BIGQUERY_SCRATCH_DATASET,
+// BigQuery then runs the partition-time case (warehouseLivePartitionTime.ts): a chart, a KPI, an answer's
+// case fix and latest-day probe and SQL on Live through the real executor, on an ingestion-time table it
+// writes there that requires a filter on `_PARTITIONTIME`; without it, one skip line. Last, the pruning
 // measurement (warehousePruning.ts): the same date-filtered count in the cast form and the raw-range
 // form, bytes or partitions from a dry run / EXPLAIN, printed and written as JSON — never failed on
 // its numbers. It reads *_PRUNING_TABLE, *_PRUNING_COLUMN and *_PRUNING_MONTH (see that file).
@@ -177,6 +180,11 @@ async function main(): Promise<void> {
       if (bq.run) await runOne('BigQuery', () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).runBigquery(bq.config, nonce));
       if (bq.run) await runOne('BigQuery live parity', () => parity.runBigqueryParity(bq.config));
       if (bq.run) await runOne('BigQuery live SQL', () => sqlParity.runBigquerySql(bq.config));
+      if (bq.run) {
+        const partitionTime = require('./warehouseLivePartitionTime') as typeof import('./warehouseLivePartitionTime');
+        if (bq.config.scratch) await runOne('BigQuery partition time', () => partitionTime.runPartitionTime(bq.config));
+        else await partitionTime.runPartitionTime(bq.config); // its one skip line
+      }
       // The pruning measurement (warehousePruning.ts): numbers only, never a failure on them.
       const pruning = require('./warehousePruning') as typeof import('./warehousePruning');
       const measures = [
