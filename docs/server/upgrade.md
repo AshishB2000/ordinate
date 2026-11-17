@@ -1013,6 +1013,24 @@ reads and rewrites no turn: an answer stored before this release records no dash
 **What a pod of an older release does:** it ignores `dashboardsFrom` (0039's function stays), so it shows such an answer
 as it did before (no new leak), and an answer it rewrites (a refresh, a save as visual) loses the record.
 
+## The Assistant looks values up in an index beside each table (no migration)
+
+Before the AI call, the Assistant looks for the values a question names ("sales in West" tells it that
+`Orders.region` holds "West"). Earlier releases scanned each dataset's table on every question, so a project
+of large tables had only its first few searched in the time allowed. From this release, with `DATABASE_URL`,
+each dataset has a small Parquet file beside its table, `<id>.values.parquet` (on S3 an object of the table's
+version, `<id>.<version>.values-<tag>.parquet`, registered in `storage_objects` like the table and removed by
+the storage GC with that version), and a question reads them all in one statement (on S3, after one query of
+`storage_objects` for their names) ([design](../assistant/00-design.md), "Values, as built"). It holds the
+distinct short text values of columns with at most 10,000 of them, never a column marked personal or
+financial; nothing goes into Postgres. It is built just after each data write, without making the write wait,
+and a new job, `values:index` (one more row per org in the `jobs` table, every 10 minutes, never at startup),
+builds what is missing, starting with every existing dataset; until a dataset's file is built, its values are
+scanned as before. A pod of the release before writes data without building, which leaves that dataset's file
+stale; it is not read until the job builds it again. **Rolling back:** the older release ignores the files and
+leaves the job's rows unclaimed. To remove the files, delete `*.values.parquet` under `DATA_DIR` (on S3,
+`*.values-*.parquet`); they are built again after the next upgrade.
+
 ## Compose
 
 From a checkout:

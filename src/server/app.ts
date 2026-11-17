@@ -238,6 +238,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       (require('./sharedState') as typeof import('./sharedState')).wireSharedState(pool, app.log, cfg.auditRetentionDays);
       // Meaning search's fingerprints, made by a job per org, never inside a save (PR 7c): nothing is sent until an admin picks a model.
       (require('./fingerprintJob') as typeof import('./fingerprintJob')).wireFingerprints();
+      // The Assistant's value index (a Parquet sidecar per dataset): built after every data write, backfilled by a job per org, never at startup.
+      (require('../ipc/valueIndex') as typeof import('../ipc/valueIndex')).wireValueIndex();
       // Documented source tables' facts, read again once a day per org through the click's door (docs/assistant step 3).
       (require('../ipc/sourceFactsRefresh') as typeof import('../ipc/sourceFactsRefresh')).wireFactsRefresh();
       // Connection passwords/tokens: the encrypted store (T5.3), never the

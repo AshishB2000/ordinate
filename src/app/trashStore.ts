@@ -42,9 +42,9 @@ export function entryPath(projectId: string, type: RecordType, id: string): stri
   return dir && isRecordType(type) && isValidId(id) ? path.join(dir, id + '.json') : '';
 }
 
-/** A dataset's table files, as siblings of its trash entry. */
+/** A dataset's table files, as siblings of its trash entry: its table, its Prepare source, its value index's sidecar. */
 export function parquetNames(id: string): string[] {
-  return [id + '.parquet', id + '.source.parquet'];
+  return [id + '.parquet', id + '.source.parquet', id + '.values.parquet'];
 }
 
 /** The table files plus its snapshots (strictly matched) found in `dir` — what travels with a dataset. */

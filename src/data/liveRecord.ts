@@ -30,7 +30,7 @@ import * as recordFs from '../app/recordFs';
 import * as queryCache from '../engine/queryCache';
 import { isValidId } from '../app/ids';
 import { sanitizeOrigin } from './datasetOrigin';
-import { datasetFilePath, datasetsDir, parquetPath, serialized, sourceParquetPath, writeJsonAtomic } from './datasetRecord';
+import { datasetFilePath, datasetsDir, parquetPath, serialized, sourceParquetPath, valuesPath, writeJsonAtomic } from './datasetRecord';
 import { removeAll as removeSnapshots } from './snapshots';
 import { removeIndex } from '../engine/dataSearchResident';
 import { isLive, liveColumnsOf, newLiveSettings, sanitizeLive } from './liveDataset';
@@ -145,7 +145,7 @@ export async function toLiveRecord(projectId: string, id: string, columns: Parse
   queryCache.invalidateDataset(id, projectId);
   await removeIndex(parquetPath(projectId, id));
   await recordFs.rm(parquetPath(projectId, id), { force: true }).catch(() => undefined);
-  await recordFs.rm(sourceParquetPath(projectId, id), { force: true }).catch(() => undefined);
+  for (const f of [sourceParquetPath(projectId, id), valuesPath(projectId, id)]) await recordFs.rm(f, { force: true }).catch(() => undefined); // and the value index's sidecar
   await removeSnapshots(projectId, id).catch(() => undefined);
   return true;
 }

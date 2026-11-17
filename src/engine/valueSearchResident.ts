@@ -12,6 +12,13 @@
 // Unicode simple case folding RE2's `(?i)` also uses). Case-insensitive in the pattern, not `lower()` on the value:
 // measured on 1,000,000 rows of five text columns (a loaded laptop), lower() and a regex 1,666 ms, `(?i)` 758 ms, the
 // scan alone 214 ms. scripts/test-askValueSearch.ts holds the two Object.is-equal.
+//
+// The value index (src/ipc/valueIndex.ts, a sidecar per dataset) stores each value under its words' KEYS (`valueKeys`) and looks a
+// question word up as a key range (`keyRange`): a superset of what the rule matches, as a key folds every letter of a
+// case class to one string (upper, lower, upper again, a code point at a time: ß and ẞ both "SS", ſ, s and S all "S").
+// What it finds is then tested by `valueMatches`, the rule itself. scripts/test-askValueIndex.ts checks the fold over
+// every code point. `known` (below) is how a row lock confirms the values found: the same statement, `v IN (…)` in
+// place of the pattern.
 
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
@@ -46,27 +53,68 @@ export function valueMatches(value: string, words: readonly string[]): boolean {
   return ws.length > 0 && new RegExp(wordsPattern(ws), 'iu').test(value);
 }
 
+const each = (s: string, f: (c: string) => string): string => Array.from(s, f).join('');
+const ASCII = /^[\x00-\x7f]*$/;
+/** A word's index key: every letter of one case class the same string (above). ASCII: its upper case. */
+export const wordKey = (w: string): string => (ASCII.test(w) ? w.toUpperCase() : each(w, (c) => each(each(c.toUpperCase(), (x) => x.toLowerCase()), (x) => x.toUpperCase())));
+
+/** The keys of a value's words (a word: a run of letters, digits and marks, as the rule's), each once. */
+export function valueKeys(value: string): string[] {
+  return [...new Set((value.match(/[\p{L}\p{N}\p{M}]+/gu) ?? []).map(wordKey))];
+}
+
+/**
+ * The keys a question word finds, as `[lo, hi)` in code point ("C") order: a long word every key it starts (up to its
+ * last code point's successor), a short one its own key alone (nothing sorts between it and itself + U+0001).
+ */
+export function keyRange(word: string): [string, string] {
+  const k = wordKey(word);
+  if (word.length < PREFIX_MIN) return [k, k + '\u0001'];
+  const cps = Array.from(k);
+  const last = cps.pop()!.codePointAt(0)! + 1;
+  return [k, cps.join('') + String.fromCodePoint(last === 0xd800 ? 0xe000 : Math.min(last, 0x10ffff))];
+}
+
 const columnsIn = (columns: ParsedColumn[], cols: readonly number[]): number[] =>
   [...new Set(cols)].filter((i) => Number.isInteger(i) && i >= 0 && i < columns.length).sort((a, b) => a - b);
 
+/**
+ * The hits, by the rule, of `words` in columns `cols` and, in each column of `known`, of exactly its listed values (a
+ * row lock confirming what the value index found, src/ipc/askValues.ts): one statement either way. With `known` alone
+ * the rows are narrowed to those holding a listed value before the unpivot, which is the cost.
+ */
 export async function searchValuesResident(
   src: { parquetPath: string; columns: ParsedColumn[] },
   cols: readonly number[],
   words: readonly string[],
   filters: FilterStep[],
+  known: ReadonlyMap<number, readonly string[]> = new Map(),
 ): Promise<ValueHit[] | null> {
-  const ci = columnsIn(src.columns, cols);
   const ws = words.filter(isWord);
-  if (!ci.length || !ws.length) return [];
+  const ki = columnsIn(src.columns, [...known.keys()]).filter((i) => known.get(i)!.length);
+  const ri = ws.length ? columnsIn(src.columns, cols).filter((i) => !ki.includes(i)) : [];
+  const ci = [...ri, ...ki].sort((a, b) => a - b);
+  if (!ci.length) return [];
   try {
     const params: DuckValue[] = [];
     const preds = filterPredicates(src.columns, filters, params);
-    params.push(`(?i)${wordsPattern(ws)}`, PER_DATASET);
+    const listed = (i: number, v: string): string => {
+      params.push(...known.get(i)!);
+      return `${v} IN (${known.get(i)!.map(() => '?').join(', ')})`;
+    };
+    if (!ri.length) preds.push(`(${ki.map((i) => listed(i, `CAST(${phys(i)} AS VARCHAR)`)).join(' OR ')})`);
+    const tests: string[] = [];
+    if (ri.length) {
+      params.push(`(?i)${wordsPattern(ws)}`);
+      tests.push(ki.length ? `(c IN (${ri.join(', ')}) AND regexp_matches(v, ?))` : 'regexp_matches(v, ?)');
+    }
+    for (const i of ki) tests.push(`(c = ${i} AND ${listed(i, 'v')})`);
+    params.push(PER_DATASET);
     const rows = await runOrderedAsync(src.parquetPath, (from, ord) => {
       const kept = `SELECT ${ord} AS o, UNNEST([${ci.join(', ')}]) AS c, UNNEST([${ci.map((i) => `CAST(${phys(i)} AS VARCHAR)`).join(', ')}]) AS v FROM ${from}`
         + (preds.length ? ` WHERE ${preds.join(' AND ')}` : '');
       // strlen is bytes, never fewer than a JS string's length: a listed value is never cut by the prompt.
-      const found = `SELECT c, v, MIN(o) AS o FROM (${kept}) WHERE strlen(v) <= ${VALUE_BYTES} AND regexp_matches(v, ?) GROUP BY c, v`;
+      const found = `SELECT c, v, MIN(o) AS o FROM (${kept}) WHERE strlen(v) <= ${VALUE_BYTES} AND ${tests.length > 1 ? `(${tests.join(' OR ')})` : tests[0]} GROUP BY c, v`;
       return `SELECT c, ${bomSafe('v')} AS v FROM (${found}) QUALIFY row_number() OVER (PARTITION BY c ORDER BY o) <= ${PER_COLUMN} ORDER BY c, o LIMIT ?;`;
     }, params);
     return rows.map((r) => ({ column: src.columns[Number(r.c)].name, value: String(r.v) }));

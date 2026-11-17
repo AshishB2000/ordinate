@@ -16,6 +16,9 @@
 //    match on Orders and never a West customer's value (NEGATIVE CONTROL: the admin gets both); a column hidden from
 //    viewer nobody never matches (CONTROL: unhidden, it does).
 //
+// All of it on the SCAN, the reference (askValues `_setValueIndex(false)`): with a database every write builds the value
+// index, and scripts/test-askValueIndex.ts holds the index's path equal to this one.
+//
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-askValueSearch.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -282,6 +285,7 @@ async function withDatabase(W: RP.World): Promise<void> {
 (async () => {
   pure();
   stubModel();
+  askValues._setValueIndex(false);
   if (!process.env.DATABASE_URL) {
     await withoutDatabase();
     console.log('skip the viewers\' values: DATABASE_URL is unset (roles need Postgres)');

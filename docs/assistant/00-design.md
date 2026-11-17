@@ -67,7 +67,7 @@ columns, rows a person may not see, and tables their teams weren't given never r
 | Metrics | meaning + words | certified first, retired left out |
 | Glossary terms | meaning + words | other names included |
 | Datasets + columns | meaning + words | "also called" names and descriptions included |
-| Values (Acme, West) | words | the text columns of the datasets found, in the engine, under the caller's row lock ("Values, as built", below) |
+| Values (Acme, West) | words | the text columns of the datasets found: the value index beside each table, confirmed in the engine under the caller's row lock ("Values, as built", below) |
 | Source tables | meaning + words | the project's connections; viewers only on tables their teams were given |
 
 Meaning + words is real since PR 7c, for everything step 3's index holds and the verified examples
@@ -126,25 +126,95 @@ VALUES THE QUESTION NAMES — words of the question found in the datasets above,
   value ("tech" finds Technology), a shorter one only a whole word ("EU", not Europe). Case is ignored
   by Unicode simple case folding, in the pattern itself (`(?i)`): `lower()` on every value cost twice
   as much.
-- **Where:** one DuckDB statement a copy, over its Parquet in place: its text columns unpivoted, the
-  caller's row lock first (`withLockOf`), never a column hidden from them nor one marked personal or
-  financial; at most 3 values a column and 5 a dataset, first seen first; no value over 60 bytes (a
-  prompt would cut it, and a cut value is no stored spelling); 12 lines an ask. A refused door (row
-  rules, a folder) gives no values. A copy that is not resident is skipped, never hydrated. **A Live
-  dataset is skipped:** it keeps no rows here, its profile's sample values are in its facts already,
-  and a warehouse query on every question is no cheap path.
-- **Cost:** at most 18 statements an ask (12 and 6 linked), one after another, since the org's DuckDB
-  worker runs one at a time: past 400 ms the datasets left are skipped (`skipped` on `/metrics`, op
-  `askValues`), and once 12 lines are found the rest are not searched. Measured on a loaded laptop: a
-  1,000,000-row dataset of five text columns 0.7 to 1 s a statement, the budget's Orders a few ms.
-  No Postgres statement; two record reads a copy searched, both memo hits (`test-askBudget`: +2 on
-  Home, a dataset open and the viewer, +6 for the agent's three and for the SQL answer, queries
-  unchanged; 1 statement a case, 3 for the agent, none on a dashboard).
+- **The value index** (with `DATABASE_URL`, whose jobs table runs its backfill: `src/ipc/valueIndex.ts`,
+  `src/engine/valueIndexResident.ts`). A Parquet SIDECAR beside each table, never Postgres:
+  `<id>.values.parquet` in DATA_DIR, or on S3 an object of the table's own version named with a tag
+  (`<id>.<version>.values-<build version>-<marks hash>.parquet`), written as the table is
+  (`parquetStore.writeTableAsync`: temp then rename; an S3 object appears whole). On S3 the storage
+  registry (`storage_objects`, 0009) holds its NAME, as for every table object: registered pending
+  first (a fresh version no record names, so GC collects it if the write dies), then under its table's
+  version once written, so GC keeps it as long as that table and deletes it with it; the version's
+  sidecars of another build version or other marks are deleted then. It holds each text column's distinct values of up to 60
+  bytes and the first row holding each, for a column of at most 10,000 of them (`MAX_DISTINCT`, ⌘K's
+  cap too); never a column marked personal or financial, nor one carrying a marked value. A column
+  hidden from some callers is held and left out per caller on the ask. Each value is one row per word,
+  under the word's key: every letter of a case class folded to one string (upper, lower, upper again,
+  a code point at a time: ß and ẞ both "SS", ſ, s and S all "S"), so a question word is a range of
+  keys (a short word its key, a longer one a prefix) and the rule itself (the same pattern, JS's
+  engine) picks from what that finds. A first row holds the set: the build version, the stamp of the
+  write it read (the record's `updatedAt` and `rowCount`), the columns it holds whole and the catalog
+  marks then. Nothing of it is in a pod's memory.
+- **Built after each write, off its path.** Every data write (an import, a refresh, an incremental
+  append, Prepare, a column edit, an input table's edit, a snapshot restore, Live → extract) goes
+  through `datasets.persist`, which chains the build onto that dataset's write chain once the record
+  is saved (`datasetRecord.afterDataWrite`): the write returns before it, the dataset's next write
+  waits for it, so a build never races one. It is tracked work: a shutdown waits for it, and a test
+  awaits it with `lifecycle.settleWork()`. A build never fails its write, and a sidecar from another
+  write is never read, so nothing depends on when it lands.
+- **The ask, with the index:** first which sidecars are written (`valueIndex.sidecarsOf`): in
+  DATA_DIR the files that exist; on S3 ONE indexed query of the registry for the exact names the
+  datasets' current table versions and catalog marks call for, names only, so a sidecar not written yet
+  or built under other marks is simply not read. Then ONE DuckDB statement over those: each set, and
+  the values its words' ranges find, at most 100 a column. Then each dataset inside its door as before. A column the index holds
+  whole, for a caller with no row lock, is answered from it alone. **For a caller with a row lock,**
+  the values found are confirmed under the lock: one bounded DuckDB statement a dataset with any
+  (`v IN (…)` after the lock), so a value that only rows outside the lock hold, or one a stale sidecar
+  still has, never reaches the prompt. The rest is scanned as below, within the same budget: a
+  dataset with no sidecar or one from another write, a column past the cap (`shortcut:` an id or
+  email column is scanned on every ask while the budget lasts), and, for a locked caller, a word that
+  finds more than 100 values in a column. A failed lookup scans everything. `askValueIndex` on
+  `/metrics` counts datasets answered from the index (`resident`) and not (`skipped`).
+- **Kept current:** the `values:index` job (a row per org in the jobs table, every 10 minutes on any
+  pod, never at startup) builds each dataset whose sidecar is missing (made before this release, a
+  pod killed mid-build) or stale, so a column marked personal leaves the index on its next run
+  (meanwhile no ask reads it, as it is withheld). In DATA_DIR it reads every set (stamp, build version,
+  marks) and removes sidecars whose dataset is gone or Live; on S3 the same one registry query says it,
+  as the name carries the table version, build version and marks, and GC removes what a gone table
+  leaves. The Trash moves a
+  sidecar with its dataset (restored, it is fresh again); a purge, `deleteDataset`, turning an
+  extract Live and a project delete remove it with the table.
+- **The scan** (the reference, and the whole path without a database): one DuckDB statement a copy,
+  over its Parquet in place: its text columns unpivoted, the caller's row lock first (`withLockOf`),
+  never a column hidden from them nor one marked personal or financial; at most 3 values a column and
+  5 a dataset, first seen first; no value over 60 bytes (a prompt would cut it, and a cut value is no
+  stored spelling); 12 lines an ask. A refused door (row rules, a folder) gives no values. A copy that
+  is not resident is skipped, never hydrated. **A Live dataset is skipped:** it keeps no rows here,
+  its profile's sample values are in its facts already, and a warehouse query on every question is no
+  cheap path.
+- **Cost:** DuckDB statements (a scan, or a confirmation) go one after another, since the org's
+  worker runs one at a time, and start only within 400 ms of the ask (`skipped` on `/metrics`, op
+  `askValues`); once 12 lines are found the rest are not searched. The index adds ONE DuckDB statement
+  an ask (the lookup) and no record read; no Postgres statement in DATA_DIR (`test-askBudget`: queries
+  and reads unchanged; the value search's scans there went from 1 a case, 3 for the agent, to none),
+  and on S3 the one registry query (a transaction of 3 client queries). Two record reads a copy
+  searched, both memo hits, as before. Tested on S3 against MinIO in `test-storageS3` (section 7).
+- **Measured** (`VALUE_INDEX_BENCH=1 node scripts/test-askValueIndex.js`, a laptop; 12 datasets of
+  1,000,000 rows, each with text columns of 4, 1,000, 8,000, 500 and 1,000,000 distinct values):
+
+  | | index | scan (before) |
+  |---|---|---|
+  | an ask over the 12, every column it may search held | 18 to 22 ms: the lookup, no other statement; 12 of 12 datasets answered | about 0.5 s, 4 of 12 searched before the budget |
+  | the same, each dataset's id column (past the cap) scanned | 0.37 to 0.41 s, 11 to 12 scans within the budget, 12 of 12 answered for the other columns | as above |
+  | a row lock on each of the 12, every column held | 87 to 89 ms: the lookup and 12 confirmations | as above |
+  | the lookup alone, 12 sidecars | 15 to 16 ms for words naming a few values; 31 to 35 ms for a word naming all 8,000 values of a column in each | none |
+  | build, after the write, one dataset | 0.1 to 0.2 s, the first up to 0.7 s (its two DuckDB statements over the table, then the file); a sidecar of 28,254 rows, 48 KiB beside a table of 6.8 MiB | none |
+  | what a write still costs | nothing on its own path (a 200,000-row write returned before its 60 to 65 ms build); the dataset's next write waits for that build (of two at once, the second took 1.06 s against the first's 0.51 s), and the build's statements take the org's DuckDB worker as any query does | none |
+
+  One scan of one such dataset was 0.13 s on the same machine (the 0.7 to 1 s measured before was a
+  loaded one). In the Postgres version first tried, the lookup was 3 to 11 ms (42 to 94 ms for a broad
+  word) but cost an ask 3 client queries and a write its build's transaction.
 - **Nothing found:** no block, and the prompt is byte for byte what it was.
-- Tested in `test-askValueSearch`: the statement against a JS reference (the same pattern in JS's
-  engine, flags `iu`) Object.is over 320 cases; a viewer of East's rows is never told of West nor of a
-  West customer's value (the admin is); a hidden column never matches (unhidden, it does), nor a
-  personal one; a Live dataset is never hydrated or searched; the time budget; no match, no change.
+- Tested in `test-askValueSearch` (the scan): the statement against a JS reference (the same pattern
+  in JS's engine, flags `iu`) Object.is over 320 cases; a viewer of East's rows is never told of West
+  nor of a West customer's value (the admin is); a hidden column never matches (unhidden, it does),
+  nor a personal one; a Live dataset is never hydrated or searched; the time budget; no match, no
+  change. In `test-askValueIndex` (the index): every code point and its case partners share a key; a
+  save returns before its build and the next write waits for it; the index's VALUES block equals the
+  scan's Object.is over 420 cases (callers with and without row locks, a hidden column, a personal
+  one, each dataset alone and all together) and the prompt byte for byte through `copilot:ask`; the
+  index alone hands a viewer West's customer values, and no prompt of theirs ever carries one
+  (NEGATIVE CONTROL), nor a value planted in the sidecar the table lacks; no sidecar, a stale one or a
+  column past the cap: the scan, the same block; the job, the Trash and the deletes.
 
 **Table facts.** For a source table or Live dataset, the facts stored on its source table doc
 (`facts`, `src/app/sourceTables.ts`; shape `TableFacts`, `src/connectors/tableFacts.ts`) go in as a
