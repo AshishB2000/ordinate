@@ -2,7 +2,8 @@
 // (./LinkCard), phase D: the card says it is a table, not a dataset, links no Data page and offers no Also on, Save as
 // visual or Verify; an editor's Keep as a dataset sends the turn and refreshes the conversation, a refusal says the
 // server's words; the link card shows the server's checks, adds the link through `relationship:save` and asks again,
-// Cancel puts it away, a refusal keeps it; a viewer is offered neither.
+// Cancel puts it away, a refusal keeps it; a blocked link (a Live side) shows the server's sentence, Make a copy of each
+// Live dataset it names (dataset:copyLive) and Dismiss; a viewer is offered neither.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -130,5 +131,57 @@ describe('the checked link', () => {
     serve({});
     withClient(<LinkCard projectId={PID} link={LINK} question="q" busy={false} />);
     expect(screen.queryByTestId('answer-link')).toBeNull();
+  });
+
+  it('a blocked link shows its checks and the server\'s sentence, offers no Add, and Dismiss puts it away', () => {
+    const calls = serve({});
+    const why = 'This link can\'t be saved here: Countries is Live. Make a copy of Countries and link the copy.';
+    withClient(<LinkCard projectId={PID} link={{ ...LINK, checks: { ...LINK.checks, foundPct: null }, blocked: why }} question="amount by territory" busy={false} />);
+    const card = screen.getByTestId('answer-link');
+    expect(within(card).getByTestId('answer-link-blocked').textContent).toBe(why);
+    expect(within(card).getByText('Unique in Countries')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add link and answer' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByTestId('answer-link')).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('NEGATIVE CONTROL: an unblocked link says no such sentence and offers Add, never Make a copy', () => {
+    serve({});
+    withClient(<LinkCard projectId={PID} link={{ ...LINK, copy: [CONN] }} question="q" busy={false} />);
+    expect(screen.queryByTestId('answer-link-blocked')).toBeNull();
+    expect(screen.queryByTestId('answer-link-note')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Make a copy/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add link and answer' })).toBeTruthy();
+  });
+
+  it('a blocked link offers Make a copy of the Live dataset it names, through the Live copy flow (dataset:copyLive)', async () => {
+    const calls = serve({ 'dataset:copyLive': { ok: true, dataset: { id: DOC, name: 'Countries (copy)', rowCount: 3 } } });
+    withClient(<LinkCard projectId={PID} link={{ ...LINK, blocked: 'This link can\'t be saved here.', copy: [CONN] }} question="q" busy={false} />);
+    expect(screen.queryByRole('button', { name: 'Make a copy of Shipments' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Make a copy of Countries' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'dataset:copyLive')).toBe(true));
+    const sent = calls.find((c) => c.channel === 'dataset:copyLive')?.body ?? '';
+    expect(sent).toContain(CONN);
+    expect(sent).not.toContain(DOC);
+  });
+
+  it('two connections: Make a copy of each; NEGATIVE CONTROL: none named, none offered', () => {
+    serve({});
+    withClient(<LinkCard projectId={PID} link={{ ...LINK, blocked: 'Make a copy of each.', copy: [DOC, CONN] }} question="q" busy={false} />);
+    expect(screen.getByRole('button', { name: 'Make a copy of Shipments' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Make a copy of Countries' })).toBeTruthy();
+    cleanup();
+    withClient(<LinkCard projectId={PID} link={{ ...LINK, blocked: 'No copy named.' }} question="q" busy={false} />);
+    expect(screen.queryByRole('button', { name: /Make a copy/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeTruthy();
+  });
+
+  it('a link counted inside a required date range says the server\'s sentence under the checks, and still offers Add', () => {
+    serve({});
+    const note = 'Last 12 months: this table needs a date range';
+    withClient(<LinkCard projectId={PID} link={{ ...LINK, checks: { ...LINK.checks, foundPct: null }, note }} question="q" busy={false} />);
+    expect(screen.getByTestId('answer-link-note').textContent).toBe(note);
+    expect(screen.getByRole('button', { name: 'Add link and answer' })).toBeTruthy();
   });
 });

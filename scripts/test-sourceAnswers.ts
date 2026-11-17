@@ -24,7 +24,15 @@
 //   8. A LIVE SIDE: the same card for a copy and a Live dataset (names and types, TO's key unique, no sampled share):
 //      the Live key counted in ONE warehouse statement through the door, counted by the daily limit under its id, the
 //      cache on a second ask; its counts Object.is the extract's over the same rows (a unique key and a repeating one).
-//      Approve is still refused there, typed (answerLink's shortcut).
+//      No one engine holds both: the card carries `blocked` and `copy` (kept through a reload) in place of Approve,
+//      and Approve anyway is refused in the same sentence, typed (`live_refused`, never `live_dataset`), sending nothing.
+//   9. BOTH LIVE: on ONE connection the card offers Approve, which saves the link counted in ONE warehouse statement
+//      over both tables (counted under FROM's id), its counts Object.is the copies' over the same rows; on TWO
+//      connections the card and Approve say why instead (NEGATIVE CONTROL of the one-connection case).
+//  10. A REQUIRED DATE RANGE: the card's Live key counts and Approve's match count are taken inside "Last 12 months" on a
+//      table whose doc requires a date filter, the card saying so, each Object.is a copy's over the rows in range
+//      (NEGATIVE CONTROL: no such fact, every row), the range kept on the saved relationship and said in the reply; a
+//      required integer-range partition: no card, Approve refused typed.
 // DATABASE_URL only:
 //   7. VIEWERS: the project viewer's prompt never names a source table nor any column-only fact of it; a spec naming one
 //      is answered as a dataset that does not exist; keep and Approve are refused (403); the link refusal is the plain
@@ -53,6 +61,11 @@ const rels: typeof import('../src/analysis/relationships') = require('../src/ana
 const say: typeof import('../src/ai/sourceAnswerMessages') = require('../src/ai/sourceAnswerMessages');
 const missing: typeof import('../src/engine/liveQueryMessages') = require('../src/engine/liveQueryMessages');
 const answerLink: typeof import('../src/ipc/answerLink') = require('../src/ipc/answerLink');
+const relsIpc: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
+const liveSpec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+const needs: typeof import('../src/ai/answerNeeds') = require('../src/ai/answerNeeds');
+const liveRange: typeof import('../src/engine/live/liveDateRange') = require('../src/engine/live/liveDateRange');
+const dateRange: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
 
 const TABLE = 'canary_returns_5d1';
 const COPY_TABLE = 'canary_tickets_5d1';
@@ -236,16 +249,27 @@ async function editorLegs(b: Bench, s: Seeded): Promise<void> {
   fakeMod.resetFake();
   const live = lastAssistant((await ask('till takings by store city', TILLS_ASK)).reply);
   const sent = fakeMod.fake.calls.length;
-  const cached = lastAssistant((await ask('till takings by store city', TILLS_ASK)).reply);
+  const second = await ask('till takings by store city', TILLS_ASK);
+  const cached = lastAssistant(second.reply);
+  const cachedThread = second.reply?.threadId as string;
   budget.setDailyCheckForTest(null);
   ok('8. LIVE SIDE: a copy and a Live dataset get the checked link: the key pair, many-to-one', live?.needs === 'link' && live.link?.from?.datasetId === s.tills && live.link.from.column === 'store_id'
     && live.link.to.datasetId === s.stores && live.link.to.column === 'store_id' && live.link.cardinality === 'many_to_one', JSON.stringify(live));
   ok('8. …its checks: names and types match, unique in Stores, no sampled share (no engine holds both)', live?.link?.checks?.names === true && live.link.checks.types === true && live.link.checks.foundPct === null && live.link.checks.unique === true, JSON.stringify(live?.link?.checks));
   ok('8. …the Live key counted in ONE warehouse statement, counted by the daily limit under its id; asked again, the cache', sent === 1 && probed.join() === s.stores && fakeMod.fake.calls.length === 1
     && fakeMod.fake.calls[0].sql.includes(STORES_TABLE) && JSON.stringify(cached?.link) === JSON.stringify(live?.link), JSON.stringify({ sent, probed, calls: fakeMod.fake.calls.map((c) => c.sql.slice(0, 120)) }));
-  // The answerLink shortcut, pinned: Approve counts matched rows over both tables, which a Live side refuses, typed.
+  // No one engine holds a copy and a Live dataset: the card says so in place of Approve, and the server refuses it too.
+  const mixed = await b.as(async () => say.linkLiveMixed('Stores'));
+  ok('8. …a copy beside a Live dataset: the card carries the sentence in place of Approve, and names the Live side to copy', live?.link?.blocked === mixed
+    && JSON.stringify(live.link.copy) === JSON.stringify([s.stores]), JSON.stringify(live?.link));
+  const reloaded = lastAssistant((await b.call(b.editor, 'copilot:history', { projectId: b.P, threadId: cachedThread })).body);
+  ok('8. …kept on the turn through a reload (the turn sanitizer keeps `blocked` and `copy`)', reloaded?.link?.blocked === mixed && JSON.stringify(reloaded.link.copy) === JSON.stringify([s.stores]), JSON.stringify(reloaded?.link));
+  const planted = needs.sanitizeNeeds({ needs: 'link', link: { ...live?.link, copy: [s.stores, s.countries, 'not-an-id', s.stores] } }).link;
+  ok('8. NEGATIVE CONTROL: the sanitizer keeps only an end of the link to copy, once', JSON.stringify(planted?.copy) === JSON.stringify([s.stores]), JSON.stringify(planted));
+  const sentBefore = fakeMod.fake.calls.length;
   const approve = (await b.call(b.editor, 'relationship:save', { projectId: b.P, relationship: { from: { datasetId: s.tills, column: 'store_id' }, to: { datasetId: s.stores, column: 'store_id' }, cardinality: 'many_to_one' } })).body;
-  ok('8. …Approve with a Live side is still refused, typed (live_dataset), and saves nothing', approve?.ok === false && approve.code === 'live_dataset' && (await b.as(() => rels.listRelationships(b.P))).length === 1, JSON.stringify(approve));
+  ok('8. …Approve anyway (a stale card, a direct call) gets the same sentence, typed (never live_dataset), sends nothing and saves nothing', approve?.ok === false && approve.code === 'live_refused' && approve.error === mixed
+    && fakeMod.fake.calls.length === sentBefore && (await b.as(() => rels.listRelationships(b.P))).length === 1, JSON.stringify(approve));
   const twin = await b.as(async () => (await datasets.saveDataset(b.P, { name: 'Stores copy', sourceKind: 'csv', columns: STORE_COLUMNS, rows: STORE_ROWS as never }))!.id);
   for (const column of ['store_id', 'store_city']) {
     const [onLive, onCopy] = await b.as(async () => [
@@ -255,6 +279,146 @@ async function editorLegs(b: Bench, s: Seeded): Promise<void> {
     ok(`8. DIFFERENTIAL: the Live side's counts of ${column} are Object.is the extract's over the same rows`, !!onLive && !!onCopy && (['rows', 'empty', 'repeatedKeys'] as const).every((k) => Object.is(onLive[k], onCopy[k]))
       && (column === 'store_id' ? onCopy.repeatedKeys === 0 : onCopy.repeatedKeys === 1 && onCopy.empty === 1), JSON.stringify({ onLive, onCopy }));
   }
+  await bothLive(b, s, ask);
+  await ranged(b, s, ask);
+}
+
+/** 9. Two Live datasets: on ONE connection the warehouse counts the link and Approve saves it; on two it is said, not counted. */
+async function bothLive(b: Bench, s: Seeded, ask: (q: string, action: unknown) => Promise<{ reply: any }>): Promise<void> { // any: copilot:ask's reply
+  const VISITS = [['r1', 'z1', 3], ['r2', 'z1', 1], ['r1', 'z2', 4], ['r9', 'z2', 2], [null, 'z1', 1], ['  ', 'z2', 5]];
+  const REGIONS = [['r1', 'North'], ['r2', 'South'], ['r3', 'East'], [null, 'Nowhere']];
+  const ZONES = [['z1', 'Inner'], ['z2', 'Outer']];
+  const VISIT_COLS = [{ name: 'region_code', type: 'text' as const }, { name: 'zone_code', type: 'text' as const }, { name: 'visits', type: 'number' as const }];
+  const REGION_COLS = [{ name: 'region_code', type: 'text' as const }, { name: 'region_label', type: 'text' as const }];
+  const ZONE_COLS = [{ name: 'zone_code', type: 'text' as const }, { name: 'zone_label', type: 'text' as const }];
+  const ids = await b.as(async () => {
+    await fakeMod.loadWarehouseTable('canary_visits_5d1', VISIT_COLS, VISITS as never);
+    await fakeMod.loadWarehouseTable('canary_regions_5d1', REGION_COLS, REGIONS as never);
+    await fakeMod.loadWarehouseTable('canary_zones_5d1', ZONE_COLS, ZONES as never);
+    const other = (await connections.saveConnection(b.P, { name: 'Warehouse two', connectorId: fakeMod.LIVE_FAKE_ID, values: {} }))!;
+    const on = async (name: string, columns: typeof VISIT_COLS, connId: string, table: string) => (await liveRecord.saveLiveRecord(b.P, { name, columns, origin: { kind: 'connection', connId, table } }))!.id;
+    return {
+      visits: await on('Visits', VISIT_COLS, s.connId, 'canary_visits_5d1'),
+      regions: await on('Regions', REGION_COLS, s.connId, 'canary_regions_5d1'),
+      zones: await on('Zones far', ZONE_COLS, other.id, 'canary_zones_5d1'),
+    };
+  });
+  const asked = (category: string) => ({ kind: 'answer', intent: `Visits by ${category}`, spec: { dataset: 'Visits', category, measures: [{ column: 'visits', aggregation: 'sum' }] } });
+  const near = lastAssistant((await ask('visits by region label', asked('region_label'))).reply);
+  ok('9. BOTH LIVE, ONE CONNECTION: the checked link, with Approve (nothing blocked)', near?.needs === 'link' && near.link?.from?.datasetId === ids.visits && near.link.to.datasetId === ids.regions
+    && near.link.to.column === 'region_code' && near.link.cardinality === 'many_to_one' && near.link.blocked === undefined, JSON.stringify(near));
+  const probed: string[] = [];
+  budget.setDailyCheckForTest((_org, datasetId) => { probed.push(datasetId); return { ok: true }; });
+  fakeMod.resetFake();
+  const rel = { from: { datasetId: ids.visits, column: 'region_code' }, to: { datasetId: ids.regions, column: 'region_code' }, cardinality: 'many_to_one' };
+  const saved = (await b.call(b.editor, 'relationship:save', { projectId: b.P, relationship: rel })).body;
+  budget.setDailyCheckForTest(null);
+  ok('9. …APPROVE saves it, counted in ONE warehouse statement over both tables, counted by the daily limit under FROM\'s id', saved?.ok === true && fakeMod.fake.calls.length === 1 && probed.join() === ids.visits
+    && fakeMod.fake.calls[0].sql.includes('canary_visits_5d1') && fakeMod.fake.calls[0].sql.includes('canary_regions_5d1'), JSON.stringify({ saved, probed, n: fakeMod.fake.calls.length }));
+  const twins = await b.as(async () => [
+    (await datasets.saveDataset(b.P, { name: 'Visits copy', sourceKind: 'csv', columns: VISIT_COLS, rows: VISITS as never }))!.id,
+    (await datasets.saveDataset(b.P, { name: 'Regions copy', sourceKind: 'csv', columns: REGION_COLS, rows: REGIONS as never }))!.id,
+  ]);
+  const onCopies = await b.as(async () => relsIpc.keyStats(b.P, (await relsIpc.infoFor(b.P, twins[0]))!, 'region_code', (await relsIpc.infoFor(b.P, twins[1]))!, 'region_code'));
+  const fields = ['matched', 'unmatchedFrom', 'fromKeys', 'fromKeyed', 'toKeys', 'toKeyed'] as const;
+  ok('9. DIFFERENTIAL: the warehouse\'s counts are Object.is the copies\' (relationships.keyStats) over the same rows, and the saved `verified` is theirs',
+    !!onCopies && fields.every((k) => Object.is(saved?.stats?.[k], onCopies[k])) && onCopies.matched === 3 && onCopies.unmatchedFrom === 3
+      && Object.is(saved.relationship.verified.matched, onCopies.matched) && Object.is(saved.relationship.verified.unmatchedFrom, onCopies.unmatchedFrom), JSON.stringify({ live: saved?.stats, onCopies }));
+  const linked = lastAssistant((await ask('visits by region label', asked('region_label'))).reply);
+  ok('9. …after which the same answer is no missing link', linked?.needs !== 'link', JSON.stringify(linked));
+  const apart = await b.as(async () => say.linkLiveApart());
+  const far = lastAssistant((await ask('visits by zone label', asked('zone_label'))).reply);
+  ok('9. TWO CONNECTIONS: the card carries the sentence in place of Approve, and names both to copy (a copy of one is still Live beside a copy)',
+    far?.needs === 'link' && far.link?.to?.datasetId === ids.zones && far.link.blocked === apart && JSON.stringify(far.link.copy) === JSON.stringify([ids.visits, ids.zones]), JSON.stringify(far));
+  ok('9. NEGATIVE CONTROL: the one-connection card names nothing to copy', near?.link?.copy === undefined, JSON.stringify(near?.link));
+  fakeMod.resetFake();
+  const refused = (await b.call(b.editor, 'relationship:save', { projectId: b.P, relationship: { ...rel, to: { datasetId: ids.zones, column: 'zone_code' }, from: { datasetId: ids.visits, column: 'zone_code' } } })).body;
+  const list = await b.as(() => rels.listRelationships(b.P));
+  ok('9. …and Approve anyway is refused in the same sentence, typed, with no warehouse statement and nothing saved', refused?.ok === false && refused.code === 'live_refused' && refused.error === apart
+    && fakeMod.fake.calls.length === 0 && !list.some((r) => r.to.datasetId === ids.zones), JSON.stringify(refused));
+}
+
+
+/**
+ * 10. A REQUIRED DATE RANGE: a Live table whose source doc requires a filter on its date column is counted inside "Last 12
+ * months" (liveDateRange `lookupRequired`), on the card's key counts and on Approve's match count, and the card says so;
+ * every count Object.is a copy's over the rows in range. NEGATIVE CONTROL: the same rows with no such fact are counted
+ * whole (a copy's over every row), with no sentence. A required integer-range partition gives no card and refuses Approve
+ * in its own sentence, never a guessed range.
+ */
+async function ranged(b: Bench, s: Seeded, ask: (q: string, action: unknown) => Promise<{ reply: any }>): Promise<void> { // any: copilot:ask's reply
+  const SENTENCE = 'Last 12 months: this table needs a date range';
+  // Days before the range's own end (the suite's clock may be pinned): 20–60 inside it, 900–1000 before it starts.
+  const end = Date.parse(`${dateRange.resolvePeriodNow(liveRange.REQUIRED_RANGE)!.to}T00:00:00Z`);
+  const ago = (days: number): string => new Date(end - days * 86_400_000).toISOString().slice(0, 10);
+  const IN = [['b1', 'g1', ago(20)], ['b2', 'g2', ago(40)], ['b3', 'g1', ago(60)], ['b6', null, ago(30)]];
+  const BOOKINGS = [...IN, ['b4', 'g9', ago(900)], ['b5', 'g2', ago(1000)]];
+  const GUESTS = [['g1', 'Ana'], ['g2', 'Bo'], ['g3', 'Cy']];
+  const BOOKING_COLS = [{ name: 'booking_code', type: 'text' as const }, { name: 'guest_code', type: 'text' as const }, { name: 'day', type: 'date' as const }];
+  const GUEST_COLS = [{ name: 'guest_code', type: 'text' as const }, { name: 'guest_label', type: 'text' as const }];
+  const TIER_COLS = [{ name: 'tier', type: 'number' as const }, { name: 'guest_code', type: 'text' as const }];
+  const facts = (columns: { name: string; type: string }[], partition: object) => ({ columns, partition, readAt: '2026-11-01T00:00:00Z', readBy: 'ed@acme.test' });
+  const ids = await b.as(async () => {
+    await fakeMod.loadWarehouseTable('canary_bookings_5d1', BOOKING_COLS, BOOKINGS as never);
+    await fakeMod.loadWarehouseTable('canary_bookings_open_5d1', BOOKING_COLS, BOOKINGS as never);
+    await fakeMod.loadWarehouseTable('canary_guests_5d1', GUEST_COLS, GUESTS as never);
+    await fakeMod.loadWarehouseTable('canary_tiers_5d1', TIER_COLS, [[1, 'g1'], [2, 'g2']] as never);
+    const required = async (table: string, f: object) => {
+      const made = await store.createSourceDoc(b.P, s.connId, table, {});
+      if (!made.ok) throw new Error('fixture: a source doc');
+      await store.updateSourceDoc(b.P, s.connId, made.docId, (d) => ({ ...d, facts: f as never }));
+    };
+    await required('canary_bookings_5d1', facts([{ name: 'day', type: 'DATE' }], { columns: ['day'], method: 'DAY', required: true }));
+    await required('canary_tiers_5d1', facts([{ name: 'tier', type: 'INT64' }], { columns: ['tier'], method: 'RANGE', required: true }));
+    const on = async (name: string, columns: typeof BOOKING_COLS, table: string) => (await liveRecord.saveLiveRecord(b.P, { name, columns, origin: { kind: 'connection', connId: s.connId, table } }))!.id;
+    return {
+      bookings: await on('Bookings', BOOKING_COLS, 'canary_bookings_5d1'),
+      open: await on('Bookings open', BOOKING_COLS, 'canary_bookings_open_5d1'),
+      guests: await on('Guests', GUEST_COLS, 'canary_guests_5d1'),
+      tiers: await on('Tiers', TIER_COLS as never, 'canary_tiers_5d1'),
+    };
+  });
+  const card = lastAssistant((await ask('bookings by guest label', { kind: 'answer', intent: 'Bookings by guest', spec: { dataset: 'Bookings', category: 'guest_label', measures: [{ column: 'booking_code', aggregation: 'count' }] } })).reply);
+  ok('10. RANGED: the card counts the Live key inside the range its table requires, and says so (and still offers Approve)', card?.needs === 'link' && card.link?.to?.datasetId === ids.guests
+    && card.link.note === SENTENCE && card.link.blocked === undefined && card.link.cardinality === 'many_to_one', JSON.stringify(card?.link));
+  const copies = await b.as(async () => {
+    const save = async (name: string, columns: object[], rows: unknown[][]) => (await datasets.saveDataset(b.P, { name, sourceKind: 'csv', columns: columns as never, rows: rows as never }))!.id;
+    return { inRange: await save('Bookings in range', BOOKING_COLS, IN), all: await save('Bookings all', BOOKING_COLS, BOOKINGS), guests: await save('Guests copy', GUEST_COLS, GUESTS) };
+  });
+  const counts = (id: string) => b.as(async () => answerLink.keyCounts(b.P, (await datasets.getDatasetMeta(b.P, id))!, 'guest_code'));
+  const [onRanged, onOpen, inRange, all] = [await counts(ids.bookings), await counts(ids.open), await counts(copies.inRange), await counts(copies.all)];
+  const same3 = (x: typeof onRanged, y: typeof onRanged): boolean => !!x && !!y && (['rows', 'empty', 'repeatedKeys'] as const).every((k) => Object.is(x[k], y[k]));
+  ok('10. DIFFERENTIAL: the ranged key counts are Object.is a copy\'s over the rows in range, with the sentence', same3(onRanged, inRange) && onRanged?.note === SENTENCE && inRange?.rows === 4, JSON.stringify({ onRanged, inRange }));
+  ok('10. NEGATIVE CONTROL: the same rows with no such fact are counted whole, Object.is a copy\'s over every row, with no sentence (and the range mattered)',
+    same3(onOpen, all) && onOpen?.note === undefined && !same3(onRanged, onOpen), JSON.stringify({ onOpen, all }));
+  const fields = ['matched', 'unmatchedFrom', 'fromKeys', 'fromKeyed', 'toKeys', 'toKeyed'] as const;
+  const save = async (from: string) => (await b.call(b.editor, 'relationship:save', { projectId: b.P, relationship: { from: { datasetId: from, column: 'guest_code' }, to: { datasetId: ids.guests, column: 'guest_code' }, cardinality: 'many_to_one' } })).body;
+  const stats = (from: string) => b.as(async () => relsIpc.keyStats(b.P, (await relsIpc.infoFor(b.P, from))!, 'guest_code', (await relsIpc.infoFor(b.P, copies.guests))!, 'guest_code'));
+  const [savedRanged, savedOpen, onInRange, onAll] = [await save(ids.bookings), await save(ids.open), await stats(copies.inRange), await stats(copies.all)];
+  ok('10. DIFFERENTIAL: Approve\'s match count over two Live datasets is taken inside the range too, Object.is the copies\' over the rows in range',
+    savedRanged?.ok === true && !!onInRange && fields.every((k) => Object.is(savedRanged.stats?.[k], onInRange[k])) && onInRange.matched === 3, JSON.stringify({ live: savedRanged?.stats, onInRange }));
+  ok('10. NEGATIVE CONTROL: …and with no such fact over every row, Object.is the copies\' over every row',
+    savedOpen?.ok === true && !!onAll && fields.every((k) => Object.is(savedOpen.stats?.[k], onAll[k])) && onAll.matched !== onInRange?.matched, JSON.stringify({ live: savedOpen?.stats, onAll }));
+  // The range the counts were taken in is kept on the relationship (the sanitizer keeps it on every read) and said in the reply.
+  const resolved = dateRange.resolvePeriodNow(liveRange.REQUIRED_RANGE)!;
+  const listed = (await b.call(b.editor, 'relationship:list', { projectId: b.P })).body?.relationships as { id: string; verified: { range?: object } }[];
+  const rangeOf = (id: string): string => JSON.stringify(listed.find((r) => r.id === id)?.verified.range ?? null);
+  ok('10. …the saved relationship keeps the range its counts were taken in, read back through the list, and the reply says it',
+    JSON.stringify(savedRanged.relationship.verified.range) === JSON.stringify({ from: resolved.from, to: resolved.to }) && rangeOf(savedRanged.relationship.id) === JSON.stringify({ from: resolved.from, to: resolved.to })
+      && JSON.stringify(savedRanged.notes) === JSON.stringify([SENTENCE]), JSON.stringify({ saved: savedRanged.relationship.verified, notes: savedRanged.notes }));
+  ok('10. NEGATIVE CONTROL: …one counted over every row keeps no range and says nothing, and one saved before (no range) reads as before',
+    savedOpen.relationship.verified.range === undefined && savedOpen.notes === undefined && rangeOf(savedOpen.relationship.id) === 'null'
+      && listed.some((r) => r.verified.range === undefined && r.id !== savedOpen.relationship.id), JSON.stringify(listed.map((r) => r.verified)));
+  const raw = { from: { datasetId: ids.bookings, column: 'guest_code' }, to: { datasetId: ids.guests, column: 'guest_code' }, cardinality: 'many_to_one' };
+  const kept = (range: unknown) => JSON.stringify(rels.sanitizeRelationship({ ...raw, verified: { matched: 1, unmatchedFrom: 0, range } })?.verified);
+  ok('10. …the sanitizer keeps an ISO-day range and drops anything else (the counts then read as every row\'s)',
+    kept({ from: '2025-11-01', to: '2026-10-31' }) === '{"matched":1,"unmatchedFrom":0,"range":{"from":"2025-11-01","to":"2026-10-31"}}'
+      && [{ from: 'last year' }, 'Last 12 months', null, { to: 20261031 }].every((r) => kept(r) === '{"matched":1,"unmatchedFrom":0}'));
+  const tiers = await b.as(async () => answerLink.keyCounts(b.P, (await datasets.getDatasetMeta(b.P, ids.tiers))!, 'guest_code'));
+  const tierSave = await save(ids.tiers);
+  const unfilled = liveSpec.refuse('requiredFilter', 'tier').message;
+  ok('10. A REQUIRED INTEGER-RANGE PARTITION: no counts (so no card), and Approve refused in its own sentence, typed, never a guessed range',
+    tiers === null && tierSave?.ok === false && tierSave.code === 'live_refused' && tierSave.error === unfilled, JSON.stringify({ tiers, tierSave }));
 }
 
 async function viewerLegs(b: Bench, s: Seeded, W: RP.World): Promise<void> {

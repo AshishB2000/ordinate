@@ -23,6 +23,7 @@ import type { LiveFilter, LiveIR } from '../src/engine/live/liveSpec';
 
 const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 const profile: typeof import('../src/engine/live/profileSql') = require('../src/engine/live/profileSql');
+const keyMatch: typeof import('../src/engine/live/compileKeyMatch') = require('../src/engine/live/compileKeyMatch');
 const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const fs: typeof import('fs') = require('fs');
@@ -47,6 +48,8 @@ const BUILDERS: [string, (env: CompileEnv) => Compiled | { ok: true; query: Comp
   ['compileChart', (env) => compile.compileChart(textIr, { kind: 'text' }, env)],
   ['compileCaseMatches', (env) => compile.compileCaseMatches('region', ['south'], env)],
   ['compileKeyCheck', (env) => compile.compileKeyCheck('region', env)],
+  // a link's two sides, each over its own base (the TO side's is read twice: its IN list and its counts)
+  ['compileKeyMatch', (env) => keyMatch.compileKeyMatch({ column: 'region', env, lock: [] }, { column: 'region', env, lock: [] })],
   ['compileProfile', (env) => profile.compileProfile(env, { rows: 1000, percent: 5, samplingKey: true })],
   ['compileProfile (LIMIT only)', (env) => profile.compileProfile(env, { rows: 1000, limitOnly: true })],
 ];
@@ -123,8 +126,9 @@ const found = builders(srcFiles());
 // Snowflake semantic encoder (c1) finishes one SEMANTIC_VIEW statement.
 // sql/print.ts ×1: SQL on Live datasets (docs/live-data/01-live-sql.md F1) — each dataset read through its view, whose
 // WHERE holds the base filters (test-liveSqlCompile's golden shapes bind them in every dialect).
-ok('inventory: the builders are exactly compile.ts ×7, formulaSql.ts ×0, profileSql.ts ×2, semantic/snowflake.ts ×1 and sql/print.ts ×1',
-  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1], ['src/engine/live/sql/print.ts', 1]]), show(found.finishers));
+// compileKeyMatch.ts ×1: a link's counts over two Live datasets on one connection, each side through `whereOf`.
+ok('inventory: the builders are exactly compile.ts ×7, compileKeyMatch.ts ×1, formulaSql.ts ×0, profileSql.ts ×2, semantic/snowflake.ts ×1 and sql/print.ts ×1',
+  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/compileKeyMatch.ts', 1], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1], ['src/engine/live/sql/print.ts', 1]]), show(found.finishers));
 ok('inventory: every builder function ends its statement through whereOf, sampledFrom or viewBody', found.unbased.length === 0, show(found.unbased));
 const planted = new Map([...srcFiles(), ['src/engine/live/keyCheckSql.ts', "const b = new ParamSink();\nexport function compileKeyCheck(): unknown {\n  return b.finish('SELECT 1', d, []);\n}\n"]]);
 const caught = builders(planted);

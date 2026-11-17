@@ -453,10 +453,38 @@ only and there is no sampled share found (`foundPct: null`, the card leaves that
 where it lives (`answerLink.keyCounts`, the table notes' key check: rows, empty keys, repeated keys): `extractCounts` on
 a copy, and on a Live dataset ONE bounded statement (`compileKeyCheck`, now taking the lock) through `liveLookup`, so
 `warehouse()`, the budget and the daily limit under its id, the `orgKey` cache, inside `withLockOf` (the column gate,
-then the caller's row lock as bound filters). TO's key unique gives many-to-one (one-to-one when FROM's is too). A gate's
-refusal, a semantic layer or a failed statement gives the plain sentence, never a guessed card. Shortcut: **Approve is
-still refused there**, typed (`live_dataset`): `relationship:save` counts matched rows over both tables, and the
-Relationships page leaves Live datasets out (L2.6); it waits on joins across a Live connection (L4).
+then the caller's row lock as bound filters). On a table whose source doc requires a date filter the key is counted
+inside the range every question gets (`lookupRequired`: "Last 12 months" on a required date column, BigQuery's
+`_PARTITIONTIME` among the base filters), and the card says so under its checks (`link.note`, *Last 12 months: this
+table needs a date range*). TO's key unique gives many-to-one (one-to-one when FROM's is too). A gate's refusal, a
+semantic layer, a required integer-range partition (no default range, never a guessed one) or a failed statement gives
+the plain sentence, never a guessed card.
+
+**Approve a link with a Live side** (`src/ipc/linkLive.ts`). `relationship:save` counts matched rows over both tables,
+so it needs one engine that holds both:
+
+- **Both Live on ONE connection:** that warehouse counts it, in ONE statement (`compileKeyMatch`,
+  `src/engine/live/compileKeyMatch.ts`: `keyStatsResident`'s six counts, each side over its own base filters and the
+  caller's lock, values bound in one sink, a match as `IN` over TO's non-NULL keys) through `liveLookup` with the TO
+  side as its second target: `warehouse()`, the budget, the daily limit under FROM's id, the `orgKey` cache keyed on
+  both epochs at the lower cache age, inside `withLockOf` on each side, nested, and each side inside the date range
+  its table requires, as the card's counts are (a required integer-range partition refuses it in its own sentence). The card offers **Add link and answer**
+  as for two copies, and the saved `verified` is the warehouse's. Counted inside a required range, the relationship
+  keeps it (`verified.range`, ISO days, additive: a relationship saved before has none and reads as before), the save
+  reply says it (`notes`, *Last 12 months: this table needs a date range*), and the Relationships page shows it beside
+  the figure (the diagram's edge label and the table: *in Nov 2025 – Oct 2026*), as does the New relationship toast. A
+  link saved there is not yet followed by a Live chart (joins across a Live connection, L4): the same answer gets the
+  linked-column refusal, as on copies.
+- **Any other mix** (a Live dataset beside a copy, Live datasets on two connections): no engine holds both, so nothing
+  is counted. The card shows its checks and, in place of Approve, ONE catalog sentence (`link.blocked`, kept on the turn
+  through `sanitizeNeeds`, so a reload shows the same): *This link can't be saved here: Stores is Live, so its rows are
+  in its warehouse and the other table's are in Ordinate. Make a copy of Stores and link the copy.* (two connections:
+  *…the two Live datasets ask different connections, and no one warehouse holds both tables. Make a copy of each and
+  link the copies.*, since a copy of one is still Live beside a copy), with **Make a copy of Stores** (each Live
+  dataset `link.copy` names: the Live copy flow, `dataset:copyLive` through `<MakeCopyButton>`, an editor's) and
+  **Dismiss**. `relationship:save` refuses the pair in the same sentence, typed
+  (`live_refused`, never `live_dataset`), before any statement: a stale card, a model import or a direct call gets
+  the same words.
 
 **The seam for Ask an editor (#525):** the stored turn carries `needs: 'link' | 'copy'` (`src/ai/answerNeeds.ts`, kept on
 every read and write as `suggest` is), the two reasons its contract has; its button attaches where `needs` is set.
@@ -476,11 +504,23 @@ makes exactly one Live dataset and re-points the turn, a second makes none, its 
 and Verify refused before; the link card's pair and checks, kept on reload, Approve saving one relationship, after which
 it is no missing link; with a Live side (§8) the card, its Live key counted in one statement counted under its id and
 cached on a second ask, its counts `Object.is` the extract's over the same rows (a unique key and a repeating one),
-Approve refused typed. With Postgres: the viewer's prompt names no table and holds no column only the table's facts
-have (NEGATIVE CONTROL: the editor's), a spec naming one answered as missing, keep and Approve 403, the viewer's link
-refusal plain (NEGATIVE CONTROL: the editor's card), with a Live side too and no statement sent. Vitest: `web/src/features/assistant/sourceAnswer.test.tsx`. e2e:
-`web/e2e/source-tables.e2e.ts` step 5, the table's answer in the dock, kept, and the link card, in both themes
-(`dock-source-table`, `dock-source-kept`, `dock-link`).
+the card's `blocked` sentence kept through a reload and Approve refused in it, typed, sending nothing; with both sides
+Live (§9) on one connection Approve saving the link in one statement over both tables counted under FROM's id, its
+counts `Object.is` the copies' `keyStats` over the same rows, and on two connections the sentence instead (NEGATIVE
+CONTROL); a required date range (§10) on the card's key counts (with its sentence) and on Approve's match count, each
+`Object.is` a copy's over the rows in range (NEGATIVE CONTROL: the same rows with no such fact, counted whole), and a
+required integer-range partition giving no card and refusing Approve typed; the range kept on the saved relationship,
+read back through the list and said in the reply (NEGATIVE CONTROL: counted over every row, none), the sanitizer keeping
+only an ISO-day range and only an end of the link to copy. `scripts/test-keyCheck.ts` holds `compileKeyMatch` to `keyStatsJs` field by field (text, number, date,
+mixed types, empty sides, a lock on each side); `test-liveBaseCompile` checks it carries each side's base filters;
+`test-liveSafetyNet` calls `relationship:save` on a Live dataset beside a copy (refused, typed). With Postgres: the
+viewer's prompt names no table and holds no column only the table's facts have (NEGATIVE CONTROL: the editor's), a spec
+naming one answered as missing, keep and Approve 403, the viewer's link refusal plain (NEGATIVE CONTROL: the editor's
+card), with a Live side too and no statement sent. Vitest: `web/src/features/assistant/sourceAnswer.test.tsx` (a
+blocked card: the sentence, no Add, Make a copy of each Live dataset through `dataset:copyLive`, Dismiss; a ranged
+card's sentence under the checks) and `web/src/features/data/data.test.tsx` (the range beside the figure, none on a
+relationship saved before). e2e: `web/e2e/source-tables.e2e.ts` step 5, the table's answer in the dock, kept, and the link card, in both themes
+(`dock-source-table`, `dock-source-kept`, `dock-link`, `dock-link-blocked`).
 
 ### Explore, as built (phase D)
 
@@ -531,9 +571,9 @@ An editor explores a documented warehouse table as if it were a dataset, with no
   Vitest: `web/src/features/explore/sourceTable.test.tsx`. e2e: `web/e2e/source-tables.e2e.ts` step 6, desktop and phone
   (`explore-source-table`, `-answer`, `-copy`, `-kept`, `-phone`).
 
-**Left:** a warehouse probe for a link with a Live side; a source answer's turn is reopened under its view, so a
-caller who is no longer an editor gets no figures (a hide); filter values on a table (a sample would be a warehouse
-read per picker, so it waits for keep).
+**Left:** a sampled share found for two Live datasets on one connection (the card ranks them by names and types); a
+source answer's turn is reopened under its view, so a caller who is no longer an editor gets no figures (a hide);
+filter values on a table (a sample would be a warehouse read per picker, so it waits for keep).
 
 ## Access is given to teams
 

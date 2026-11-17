@@ -42,3 +42,13 @@ export function cannotCombine(): string {
 export function linkProposed(from: string, to: string): string {
   return t('sourceAnswerMessages.has_no_link_to_yet_so', { from, to });
 }
+
+/** A link between a Live dataset and a copy: no one engine holds both tables, so its matches cannot be counted. */
+export function linkLiveMixed(live: string): string {
+  return t('sourceAnswerMessages.this_link_can_t_be_saved', { live });
+}
+
+/** A link between Live datasets on two connections: no one warehouse holds both tables. */
+export function linkLiveApart(): string {
+  return t('sourceAnswerMessages.this_link_can_t_be_saved_2');
+}

@@ -16,6 +16,7 @@
 //   compileCaseMatches  the stored spellings of the text values a question names
 //                       (an AI answer asks it before the five above, L2.4)
 //   compileKeyCheck     a declared key's rows, empties and repeats ("Check now", spec D2)
+//   compileKeyMatch     a link's matched keys across two sources on one connection (./compileKeyMatch)
 //
 // THE RULES (copied from the resident layer so live and extract mean the same):
 //   - Identifiers come ONLY from the declared schema, quoted per dialect; a name
@@ -105,7 +106,7 @@ export function partsOf(m: LiveMeasure): Part[] {
 
 // ── Preparation: the checks every statement shares ───────────────────────────
 
-interface Prepared {
+export interface Prepared {
   c: Ctx;
   from: string;
   /** The base filters `whereOf` ANDs in: none when they already sit innermost, in the calc layers. */
@@ -147,7 +148,8 @@ function namesOf(ir: LiveIR): string[] {
   return names;
 }
 
-function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
+/** `b`: the statement's one sink, shared when one statement reads two sources (./compileKeyMatch). */
+export function prepare(ir: LiveIR, env: CompileEnv, b: ParamSink = new ParamSink()): Prepared | LiveRefusal {
   if (!ir || typeof ir !== 'object' || !Array.isArray(ir.measures) || !Array.isArray(ir.filters)) return refuse('badQuery');
   // A layer's metric has no SQL here: aggregating a table ourselves would go around the layer (part 7, D12).
   const metric = ir.measures.find(isMetricMeasure);
@@ -166,7 +168,7 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
     // THE GATE: a text column is never summed — loud, never a wrong figure.
     if (NUMERIC_AGGS.has(m.aggregation) && columnOf(columns, m.column)!.type !== 'number') return refuse('notNumeric', m.column);
   }
-  const c: Ctx = { d, b: new ParamSink(), columns, ...(env.keys?.length ? { keys: env.keys } : {}) };
+  const c: Ctx = { d, b, columns, ...(env.keys?.length ? { keys: env.keys } : {}) };
   const inner = fromItem(d, env.source);
   // A calc the statement reads: one derived table per calc it needs (./calcLayers), the base filters innermost,
   // before any calc exists. None: today's FROM and WHERE, byte for byte.
@@ -177,7 +179,7 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
 }
 
 /** The dataset's base filters, then the question's: every statement's WHERE. */
-function whereOf(p: Prepared, ir: LiveIR): string | LiveRefusal {
+export function whereOf(p: Prepared, ir: LiveIR): string | LiveRefusal {
   const preds = predicates(p.c, [...p.base, ...ir.filters]);
   if (isRefusal(preds)) return preds;
   return preds.length ? ` WHERE ${preds.join(' AND ')}` : '';

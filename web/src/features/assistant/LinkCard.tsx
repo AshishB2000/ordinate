@@ -3,6 +3,10 @@
 // *Link Shipments.country_id → Countries.country_id? Names match · Types match · 98% of sampled values found · Unique in
 // Countries*. **Add link and answer** saves it through `relationship:save` (counted over the full tables again) and
 // asks the question again; **Cancel** puts the card away. Every figure is the server's, shown as it came.
+// A Live key counted inside the date range its table requires says so under the checks (`note`, the server's sentence).
+// A link no one engine can count (a Live dataset beside a copy, or Live datasets on two connections) comes `blocked`:
+// the checks, the server's sentence saying why and what would let it, **Make a copy of** each Live dataset it names (the
+// Live copy flow, ../live/LiveOff `MakeCopyButton`, an editor's), and **Dismiss**.
 //
 // An editor's: the server sends the card only to one who may add the link. Everyone else reads the turn's sentence.
 
@@ -12,6 +16,7 @@ import { rpc } from '../../api/client';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { useCanEdit } from '../projects/api';
+import { MakeCopyButton } from '../live/LiveOff';
 import type { AnswerLink } from './api';
 import s from './LinkCard.module.css';
 
@@ -78,12 +83,29 @@ export function LinkCard({ projectId, link, question, onAsk, busy }: {
           <li key={c}>{c}</li>
         ))}
       </ul>
+      {link.note && (
+        <p className={s.note} data-testid="answer-link-note">
+          {link.note}
+        </p>
+      )}
+      {link.blocked && (
+        <p className={s.blocked} data-testid="answer-link-blocked">
+          <Icon name="info" size={12} />
+          <span>{link.blocked}</span>
+        </p>
+      )}
       <div className={s.actions}>
-        <Button size="sm" variant="primary" loading={state === 'saving'} disabled={busy || !question} onClick={() => void add()}>
-          Add link and answer
-        </Button>
+        {link.blocked &&
+          (link.copy ?? []).map((id) => (
+            <MakeCopyButton key={id} projectId={projectId} datasetId={id} variant="secondary" size="sm" label={`Make a copy of ${id === link.from.datasetId ? link.from.dataset : link.to.dataset}`} />
+          ))}
+        {!link.blocked && (
+          <Button size="sm" variant="primary" loading={state === 'saving'} disabled={busy || !question} onClick={() => void add()}>
+            Add link and answer
+          </Button>
+        )}
         <Button size="sm" variant="ghost" disabled={state === 'saving'} onClick={() => setState('closed')}>
-          Cancel
+          {link.blocked ? 'Dismiss' : 'Cancel'}
         </Button>
       </div>
       {error && (

@@ -11,6 +11,12 @@ export interface AnswerLink {
   cardinality: 'many_to_one' | 'one_to_one';
   /** What the card says: the names normalise alike, the declared types agree, the sampled share found (a percent to one decimal), TO's key unique. */
   checks: { names: boolean; types: boolean; foundPct: number | null; unique: boolean };
+  /** The counts were taken inside the date range a Live table requires: its sentence (*Last 12 months: this table needs a date range*). */
+  note?: string;
+  /** Why this link can't be saved here (a Live side no one engine can count with the other, src/ipc/linkLive.ts): the card offers no Approve. */
+  blocked?: string;
+  /** With `blocked`: the Live datasets (one end or both) whose copies would let it be saved — the card's "Make a copy". */
+  copy?: string[];
 }
 
 export interface AnswerNeeds { needs?: 'link' | 'copy'; link?: AnswerLink }
@@ -40,6 +46,8 @@ export function sanitizeNeeds(raw: unknown): AnswerNeeds {
     link: {
       from, to, cardinality: l.cardinality,
       checks: { names: c.names === true, types: c.types === true, foundPct: typeof pct === 'number' && Number.isFinite(pct) && pct >= 0 && pct <= 100 ? pct : null, unique: c.unique === true },
+      ...(text(l.note, 300) ? { note: String(l.note) } : {}),
+      ...(text(l.blocked, 600) ? { blocked: String(l.blocked), copy: Array.isArray(l.copy) ? [...new Set(l.copy.filter((id) => id === from.datasetId || id === to.datasetId))] : [] } : {}),
     },
   };
 }

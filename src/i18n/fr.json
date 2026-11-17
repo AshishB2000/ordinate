@@ -867,6 +867,8 @@
   "sourceAnswerMessages.ordinate_has_not_read_the_columns": "Ordinate n’a pas encore lu les colonnes de {table}. Lisez d’abord ses informations dans l’onglet Tables de la connexion.",
   "sourceAnswerMessages.these_can_t_be_combined_yet": "Ceux-ci ne peuvent pas encore être combinés.",
   "sourceAnswerMessages.this_answer_is_not_read_straight": "Cette réponse n’est pas lue directement dans une table de l’entrepôt.",
+  "sourceAnswerMessages.this_link_can_t_be_saved": "Ce lien ne peut pas être enregistré ici : {live} est Live, ses lignes sont donc dans son entrepôt et celles de l’autre table dans Ordinate. Faites une copie de {live} et liez la copie.",
+  "sourceAnswerMessages.this_link_can_t_be_saved_2": "Ce lien ne peut pas être enregistré ici : les deux jeux de données Live interrogent des connexions différentes, et aucun entrepôt ne contient les deux tables. Faites une copie de chacun et liez les copies.",
   "sourceAnswerMessages.warehouse_table_not_a_dataset_computed": "table de l’entrepôt, pas un jeu de données : calculé en direct par l’entrepôt",
   "sourceTableMessages.only_a_dataset_built_from_a": "Seul un jeu de données construit à partir d'une connexion nomme ses tables source.",
   "sourceTableMessages.that_connection_is_gone": "Cette connexion n'existe plus.",

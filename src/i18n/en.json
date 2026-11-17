@@ -864,6 +864,8 @@
   "sourceAnswerMessages.ordinate_has_not_read_the_columns": "Ordinate has not read the columns of {table} yet. Read its facts on the connection's Tables tab first.",
   "sourceAnswerMessages.these_can_t_be_combined_yet": "These can't be combined yet.",
   "sourceAnswerMessages.this_answer_is_not_read_straight": "This answer is not read straight from a warehouse table.",
+  "sourceAnswerMessages.this_link_can_t_be_saved": "This link can't be saved here: {live} is Live, so its rows are in its warehouse and the other table's are in Ordinate. Make a copy of {live} and link the copy.",
+  "sourceAnswerMessages.this_link_can_t_be_saved_2": "This link can't be saved here: the two Live datasets ask different connections, and no one warehouse holds both tables. Make a copy of each and link the copies.",
   "sourceAnswerMessages.warehouse_table_not_a_dataset_computed": "warehouse table, not a dataset: computed live by the warehouse",
   "sourceTableMessages.only_a_dataset_built_from_a": "Only a dataset built from a connection names its source tables.",
   "sourceTableMessages.that_connection_is_gone": "That connection is gone.",

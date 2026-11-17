@@ -33,6 +33,7 @@ import { closedToCaller } from '../data/rowAccess';
 import { fanOutReads } from './vizFanOut';
 import { fanOutMetricReads } from './metricFanOut';
 import { manySideColumnGroups } from '../analysis/fanOutPlan';
+import { liveLinkStats } from './linkLive';
 
 type Infos = Map<string, DsInfo>;
 
@@ -302,14 +303,18 @@ export async function saveRelationshipChecked(projectId: string, raw: any): Prom
   if (!from.columns.some((c) => c.name === rel.from.column) || !to.columns.some((c) => c.name === rel.to.column)) {
     return { ok: false, error: relationshipColumnGone() };
   }
-  const stats = await keyStats(projectId, from, rel.from.column, to, rel.to.column);
+  // A Live side: counted in its warehouse when both are Live on one connection, else refused in its sentence (./linkLive).
+  const live = await liveLinkStats(projectId, rel.from, rel.to);
+  if (live && !live.ok) return live;
+  const stats = live ? live.stats : await keyStats(projectId, from, rel.from.column, to, rel.to.column);
   if (!stats) return { ok: false, error: relationshipColumnGone() };
-  rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom };
+  // A Live table that requires a date range was counted inside it: the range is kept with the counts, and said.
+  rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom, ...(live?.range && { range: live.range }) };
   rel.warning = rels.relWarning(stats, (await getTableDoc(projectId, rel.to.datasetId)).key, rel.to.column); // always fresh: never the caller's
   // A label that IS sent, even empty, is the user's (an empty one clears it); only an absent one keeps the edge's own.
   const saved = await rels.saveRelationship(projectId, raw && typeof raw === 'object' && 'label' in raw ? { ...rel, label: rel.label ?? '' } : rel);
   if (!saved) return { ok: false, error: relationshipNotSaved() };
-  return { ok: true, relationship: withMatchPct(saved), stats };
+  return { ok: true, relationship: withMatchPct(saved), stats, ...(live?.note && { notes: [live.note] }) };
 }
 
 /**

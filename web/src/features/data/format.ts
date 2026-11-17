@@ -39,6 +39,17 @@ const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-di
 export const day = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 export const dayInYear = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+const monthInYear = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/**
+ * The date range a relationship's counts were taken in (a Live table that requires one): "Nov 2025 – Oct 2026"; '' for
+ * none. shortcut: whole months, as REQUIRED_RANGE (the only range today) is; show days if a range ever ends mid-month.
+ */
+export function rangeText(r: { from?: string; to?: string } | undefined): string {
+  const m = (iso?: string): string => (iso ? monthInYear.format(new Date(`${iso}T00:00:00Z`)) : '');
+  return r && (r.from || r.to) ? [m(r.from), m(r.to)].filter(Boolean).join(' – ') : '';
+}
+
 /** "2:14 PM" today, "Mar 4 · 2:14 PM" otherwise (hubCapture.ts formatSidebarTime). */
 export function stamp(iso: string | undefined): string {
   const d = new Date(iso ?? '');

@@ -867,6 +867,8 @@
   "sourceAnswerMessages.ordinate_has_not_read_the_columns": "Ordinate はまだ {table} の列を読み取っていません。先に接続の「テーブル」タブで情報を読み取ってください。",
   "sourceAnswerMessages.these_can_t_be_combined_yet": "これらはまだ組み合わせられません。",
   "sourceAnswerMessages.this_answer_is_not_read_straight": "この回答はウェアハウスのテーブルから直接読んだものではありません。",
+  "sourceAnswerMessages.this_link_can_t_be_saved": "このリンクはここでは保存できません。{live} は Live のため、その行はウェアハウスにあり、もう一方のテーブルの行は Ordinate にあります。{live} のコピーを作成し、そのコピーをリンクしてください。",
+  "sourceAnswerMessages.this_link_can_t_be_saved_2": "このリンクはここでは保存できません。2 つの Live データセットは別々の接続を使っており、両方のテーブルを持つウェアハウスはありません。それぞれのコピーを作成し、コピー同士をリンクしてください。",
   "sourceAnswerMessages.warehouse_table_not_a_dataset_computed": "ウェアハウスのテーブル（データセットではありません）：ウェアハウスがライブで計算",
   "sourceTableMessages.only_a_dataset_built_from_a": "接続から作られたデータセットだけが、そのソーステーブルを指定できます。",
   "sourceTableMessages.that_connection_is_gone": "その接続は削除されました。",

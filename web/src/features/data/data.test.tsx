@@ -504,6 +504,19 @@ describe('Relationships: labels (plan 09)', { timeout: 20_000 }, () => {
     expect(within(row).getByText('date')).toBeTruthy();
   });
 
+  it('a link counted inside a Live table\'s required range says it beside the figure; one saved before reads as before', async () => {
+    const C = '5b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
+    const ranged: Relationship = { ...REL, id: '6b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', from: { datasetId: C, column: 'guest_code' }, to: { datasetId: B, column: 'date' }, label: undefined,
+      verified: { matched: 3, unmatchedFrom: 1, range: { from: '2025-11-01', to: '2026-10-31' } }, matchPct: 75 };
+    renderTab({ 'relationship:list': { body: { ok: true, relationships: [REL, ranged] } }, 'dataset:list': { body: [...DS, ds(C, 'Bookings')] } });
+    const cell = await screen.findByTestId('rel-range');
+    expect(cell.textContent).toBe('in Nov 2025 – Oct 2026');
+    expect(within(cell.closest('tr')!).getByText('Bookings')).toBeTruthy();
+    expect(screen.getAllByTestId('rel-range')).toHaveLength(1); // NEGATIVE CONTROL: the edge saved with no range shows none
+    expect(screen.getByRole('button', { name: /Bookings\.guest_code to Dates\.date, many to one, 75% matched in Nov 2025 – Oct 2026$/ }).textContent).toBe('N:1 · 75% · Nov 2025 – Oct 2026');
+    expect(screen.getByRole('button', { name: /Sales\.order_date to Dates\.date, many to one, 100% matched$/ }).textContent).toBe('Booked · N:1 · 100%');
+  });
+
   it('the New relationship dialog sends the label typed', async () => {
     const cand = { from: 'ship_date', to: 'date', name: 0.5, typeMatch: true, rate: 1, ratePct: 100 };
     const calls = serve({

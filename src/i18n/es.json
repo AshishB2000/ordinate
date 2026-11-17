@@ -867,6 +867,8 @@
   "sourceAnswerMessages.ordinate_has_not_read_the_columns": "Ordinate aún no ha leído las columnas de {table}. Lee primero sus datos en la pestaña Tablas de la conexión.",
   "sourceAnswerMessages.these_can_t_be_combined_yet": "Estos aún no se pueden combinar.",
   "sourceAnswerMessages.this_answer_is_not_read_straight": "Esta respuesta no se lee directamente de una tabla del almacén.",
+  "sourceAnswerMessages.this_link_can_t_be_saved": "Este vínculo no se puede guardar aquí: {live} es Live, así que sus filas están en su almacén de datos y las de la otra tabla, en Ordinate. Haga una copia de {live} y vincule la copia.",
+  "sourceAnswerMessages.this_link_can_t_be_saved_2": "Este vínculo no se puede guardar aquí: los dos conjuntos de datos Live consultan conexiones distintas y ningún almacén de datos contiene ambas tablas. Haga una copia de cada uno y vincule las copias.",
   "sourceAnswerMessages.warehouse_table_not_a_dataset_computed": "tabla del almacén, no un conjunto de datos: calculado en vivo por el almacén",
   "sourceTableMessages.only_a_dataset_built_from_a": "Solo un conjunto de datos creado a partir de una conexión nombra sus tablas de origen.",
   "sourceTableMessages.that_connection_is_gone": "Esa conexión ya no existe.",

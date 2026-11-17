@@ -61,12 +61,14 @@ export function useMakeCopy(projectId: string, datasetId: string, open?: (copyId
 }
 
 /** The action itself; an editor's (it saves a dataset), so a viewer is not offered it — the sentence beside it says who can. */
-export function MakeCopyButton({ projectId, datasetId, open, variant = 'primary', size }: {
+export function MakeCopyButton({ projectId, datasetId, open, variant = 'primary', size, label = 'Make a copy' }: {
   projectId: string;
   datasetId: string;
   open?: (copyId: string) => string;
   variant?: 'primary' | 'secondary';
   size?: 'sm' | 'md';
+  /** Where it names the dataset (the Assistant's link card, which may offer two). */
+  label?: string;
 }) {
   const copy = useMakeCopy(projectId, datasetId, open);
   const canEdit = useCanEdit(projectId);
@@ -81,7 +83,7 @@ export function MakeCopyButton({ projectId, datasetId, open, variant = 'primary'
       title="Import the same source as a new dataset that keeps its rows here. This Live dataset stays as it is."
       onClick={() => copy.mutate()}
     >
-      Make a copy
+      {label}
     </Button>
   );
 }
