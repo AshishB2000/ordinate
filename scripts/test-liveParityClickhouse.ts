@@ -6,6 +6,9 @@
 // path exactly as the DuckDB run does (scripts/liveParityMatrix.ts: `Object.is`,
 // ~1e-13 on float sums only). The pins (scripts/liveParityPins.ts) run again here.
 //
+// Then the Live join cases (scripts/warehouseLiveJoins.ts): charts across saved links, Object.is joinJs, through
+// the real door and executor, on three more tables in the same scratch database.
+//
 // The fixture lives in a scratch database, dropped at the end, in MergeTree
 // tables typed as ClickHouse types them (Nullable Float64 / Int32 / Int16 /
 // Decimal(38, 0) / Date / String).
@@ -75,6 +78,8 @@ async function main(chUrl: string): Promise<void> {
         `${s.statements} statements through runBound, whole run ${Date.now() - t0} ms (matrix ${report.ms} ms: ${report.charts} charts, ${report.metrics} metrics, ${report.answers} answers); ${calcs}`);
       summaryLine(`- clickhouse: ${s.statements} statements, ${failureCount() === 0 ? 'every check passed' : `**${failureCount()} failed**`}; ${calcs}`);
       ok(`clickhouse: every chart statement answered (${s.charts}), each re-sorted by its ranks before shaping`, s.charts > 0);
+      // Live charts across links on MergeTree tables in the scratch database: join_use_nulls, the multi-hop ON, the pick.
+      await (require('./warehouseLiveJoins') as typeof import('./warehouseLiveJoins')).runJoins(c.engine, { connectorId: 'clickhouse', values: c.values, secrets: c.secrets }, ok);
     } finally {
       await c.close();
     }

@@ -243,6 +243,9 @@ function chCell(v: Cell, store: Store): string {
 export interface ChParity {
   engine: ParityEngine;
   seen: Observed;
+  /** Where the ClickHouse connector connects: the scratch database. */
+  values: Record<string, unknown>;
+  secrets: Record<string, string>;
   version: string;
   database: string;
   close(): Promise<void>;
@@ -276,7 +279,7 @@ export async function clickhouseParity(raw: string, address: string): Promise<Ch
     },
   };
   return {
-    engine, seen, version, database: db,
+    engine, seen, values, secrets, version, database: db,
     async close(): Promise<void> {
       await chAdmin(t, `DROP DATABASE IF EXISTS ${db}`).catch(() => undefined);
     },

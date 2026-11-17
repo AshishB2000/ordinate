@@ -43,7 +43,10 @@
 // DuckDB running the model's own text — under the same plans and canary. With BIGQUERY_SCRATCH_DATASET,
 // BigQuery then runs the partition-time case (warehouseLivePartitionTime.ts): a chart, a KPI, an answer's
 // case fix and latest-day probe and SQL on Live through the real executor, on an ingestion-time table it
-// writes there that requires a filter on `_PARTITIONTIME`; without it, one skip line. Last, the pruning
+// writes there that requires a filter on `_PARTITIONTIME`; without it, one skip line. Before it, Live charts across
+// saved links (warehouseLiveJoins.ts): a related category, split and filter, two hops, drill-across and the dirty
+// repeated key's pick, Object.is joinJs, every statement through warehouse() — Snowflake over literal tables, BigQuery
+// over three tables it rewrites in BIGQUERY_SCRATCH_DATASET (without it, one skip line). Last, the pruning
 // measurement (warehousePruning.ts): the same date-filtered count in the cast form and the raw-range
 // form, bytes or partitions from a dry run / EXPLAIN, printed and written as JSON — never failed on
 // its numbers. It reads *_PRUNING_TABLE, *_PRUNING_COLUMN and *_PRUNING_MONTH (see that file).
@@ -180,6 +183,11 @@ async function main(): Promise<void> {
       if (bq.run) await runOne('BigQuery', () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).runBigquery(bq.config, nonce));
       if (bq.run) await runOne('BigQuery live parity', () => parity.runBigqueryParity(bq.config));
       if (bq.run) await runOne('BigQuery live SQL', () => sqlParity.runBigquerySql(bq.config));
+      // Live charts across links (warehouseLiveJoins.ts): Snowflake over literal tables, BigQuery over tables in its scratch dataset.
+      const joins = require('./warehouseLiveJoins') as typeof import('./warehouseLiveJoins');
+      if (sf.run) await runOne('Snowflake live joins', () => joins.runSnowflakeJoins(sf.config));
+      if (bq.run && joins.bigqueryJoinsPlan(bq.config).run) await runOne('BigQuery live joins', () => joins.runBigqueryJoins(bq.config));
+      else if (bq.run) await joins.runBigqueryJoins(bq.config); // its one skip line, or its failure
       if (bq.run) {
         const partitionTime = require('./warehouseLivePartitionTime') as typeof import('./warehouseLivePartitionTime');
         if (bq.config.scratch) await runOne('BigQuery partition time', () => partitionTime.runPartitionTime(bq.config));

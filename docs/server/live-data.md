@@ -507,6 +507,34 @@ checks that BigQuery refuses the same KPI without the range. The table is writte
 the variable, the case prints one skip line. `scripts/test-warehousePartitionTime.ts` runs the same
 case against a stand-in BigQuery on every `npm test`.
 
+Each warehouse also runs the **Live join cases** (`scripts/warehouseLiveJoins.ts`): charts across
+saved relationships (PR #569), each compiled into one warehouse statement. Three tables,
+Orders → Customers → Zones, linked many to one, hold the edge cases of one SQL statement across tables:
+
+- a customer key repeated with identical rows and with differing rows;
+- NULL, empty and whitespace keys on both sides, which match nothing;
+- `C1` beside `c1`;
+- a zone key of −0 beside 0.
+
+Each chart is asked through the real chart door, executor and connector: a related category, a
+related split, a related filter, two hops and a drill-across measure. Each must equal, figure for
+figure, what Ordinate's own join (joinJs) draws from the same rows. The repeated key with differing
+rows must show its smallest row, which is the documented divergence from a copy. Every statement
+must have gone through the one warehouse door.
+
+The tables are held differently on each warehouse:
+
+- **Snowflake:** literal defining queries, so the read-only role is enough.
+- **BigQuery:** three tables rewritten in `BIGQUERY_SCRATCH_DATASET` each run (`ordinate_join_orders`,
+  `_customers`, `_zones`, about 40 rows in all), which expire on their own three days later. Each
+  statement must bill at most 30 MB: BigQuery's 10 MB minimum for each of the three tables. Without
+  the variable, the join cases print one skip line.
+- **ClickHouse:** the `clickhouse` job writes the tables in its scratch database, after the matrix.
+
+`scripts/test-warehouseLiveJoins.ts` runs the same cases on every `npm test` against the test
+warehouse (DuckDB). Measures on a related table and KPI tiles across a link are not asked on Live
+yet, so they are a named TODO list in the script, and the fixture is ready for them.
+
 Last, it **measures date-filter pruning** (`scripts/warehousePruning.ts`): one count over a month
 of a partitioned or clustered table's date column, compiled the way Live sends it today (the column
 cast to a date) and as a plain range on the raw column, priced without running either — a BigQuery
@@ -559,7 +587,7 @@ in [configuration.md](configuration.md).
 | `BIGQUERY_PROJECT` | no | The billing project. Defaults to the key's own. |
 | `BIGQUERY_DATASET` | no | The default dataset, listed first. |
 | `BIGQUERY_LOCATION` | no | Where jobs run, as in the connection form. |
-| `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below and the partition-time case above. Without it, the probe's `CREATE TABLE` and the partition-time case are skipped. Never grant write access to the account a real connection uses. |
+| `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below, the partition-time case and the Live join cases above. Without it, the probe's `CREATE TABLE`, the partition-time case and BigQuery's join cases are skipped. Never grant write access to the account a real connection uses. |
 | `SNOWFLAKE_PRUNING_TABLE`, `SNOWFLAKE_PRUNING_COLUMN` | both or neither | The table (as the connection names it) and its date or timestamp column the pruning measurement prices, ideally a clustering key. Without them, Snowflake's measurement is skipped. |
 | `BIGQUERY_PRUNING_TABLE`, `BIGQUERY_PRUNING_COLUMN` | both or neither | The same for BigQuery. Without them, a public table partitioned by hour that requires a partition filter is priced. |
 | `SNOWFLAKE_PRUNING_MONTH`, `BIGQUERY_PRUNING_MONTH` | no | The month priced, `YYYY-MM`. Defaults to the public table's own month, else last month. |
@@ -599,7 +627,10 @@ the usual case. Every query it runs reads generated or literal rows rather than 
 table it touches, the public `bigquery-public-data.samples.shakespeare`, is only described and
 dry-run, and both are free. The partition-time case is the exception, and only with
 `BIGQUERY_SCRATCH_DATASET` set. It writes one table of about 1,000 rows and runs about seven small
-queries on it, each billed at BigQuery's 10 MB minimum.
+queries on it, each billed at BigQuery's 10 MB minimum. The Live join cases also need the variable.
+They rewrite three tables of about 40 rows in all with three small scripts, which read no table. They
+then run about five queries, each billed at 10 MB for each table it reads, so about 100 MB a night.
+On Snowflake they are about five more small statements.
 
 **The read-only scope answer.** Each BigQuery run records, as `spike:` lines in the log and a table
 in the run's summary: which scopes Google granted the query token (from Google's `tokeninfo`),
