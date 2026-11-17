@@ -447,9 +447,16 @@ was SQL (two calls, Not checked).
   `ordinate_turn_shows` already reads: a viewer whose folder closes Countries neither sees nor counts the answer, no new
   migration (`test-folderSafetyNet` section 6). A related dataset the caller only reaches (D9, through a dashboard they
   open) refuses the card `figures_only`, as the answer door refuses its own dataset (section 4).
-- **Live:** a Live dataset on either side is refused in the chart door's typed sentence (`live_refused`, *A field from a
-  related dataset cannot be combined with a live dataset yet.*), never `live_dataset` (`test-liveSafetyNet`), until Live
-  joins land in `src/engine/live`.
+- **Live:** a Live asked dataset's joined card (`src/ipc/liveAnswers.ts`) takes its chart from the same door
+  (`answerJoined.joinedLive`), which sends a chart whose tables are all Live on ONE connection to the Live join's
+  executor (`src/ipc/liveJoin.ts`: one statement in that warehouse, each related table under the caller's lock, the
+  executor's `orgKey` cache), ranked and cut as a copy's card; the Live card's own parts (the case fix, periods, split
+  chips from the profile) are as before. `test-answerJoinsLive`: the card Object.is the same encoding's Live chart
+  through the door and the copy path's card over the same rows (a related category, a related split, a labelled link, an
+  own filter and a top-N), one model call from the ask, Save as visual, the snapshot's print over both Live tables,
+  `factsFrom`, no Live dataset hydrated. Any other mix (a Live dataset beside a copy, either way round; two connections)
+  gets the door's own typed sentence (`live_refused`, *This chart can't use Customers copy with Orders: …*), never
+  `live_dataset`, nothing sent (`test-answerJoinsLive`, `test-liveSafetyNet`).
 - **Cost:** `test-askBudget` case (h): Home's ask with one link, 95 queries and 185 record reads; the same ask joined, 95
   queries and 204 reads (19 more record reads, every one a memo hit; no query more), measured with meaning off (the
   suite runs the case last, with meaning on: 109 / 185 and 109 / 204). Every other case is unchanged. `test-answerSql`
@@ -459,7 +466,8 @@ was SQL (two calls, Not checked).
 **Left out:** a measure, a filter or a glossary term on a related dataset (a spec's measures and filters are the asked
 dataset's own); a split through a labelled relationship (a visual has no `seriesVia` either), and a model naming a
 labelled one for its category (the block lists each dataset by its default path; a stored or explained spec keeps its
-`categoryVia`); a bare linked name repaired to its dataset (rejection, not repair); Live joins (above). A caller whom
+`categoryVia`); a bare linked name repaired to its dataset (rejection, not repair); a Live join beside a copy or across two
+connections (the door's sentence, above). A caller whom
 row rules lock on the asked dataset is still shown its LINKED DATASETS (a linked dataset can be answered on its own),
 though the door refuses them a join (`related`); the block does not say so for them.
 
@@ -613,8 +621,8 @@ so it needs one engine that holds both:
   reply says it (`notes`, *Last 12 months: this table needs a date range*), and the Relationships page shows it beside
   the figure (the diagram's edge label and the table: *in Nov 2025 – Oct 2026*), as does the New relationship toast. A
   link saved there is followed by a dashboard's Live chart (charts across a link on one connection, L4: docs/live-data/log.md,
-  2026-11-16). The Assistant's chart form takes the link's fields on copies ("Joins in the chart form, as built"); an
-  answer naming a Live dataset for its category still gets the typed Live refusal until it is routed to that executor.
+  2026-11-16), and by the Assistant's chart form ("Joins in the chart form, as built"): an answer naming a Live dataset
+  on the same connection for its category is drawn by that executor, a mix in its sentence.
 - **Any other mix** (a Live dataset beside a copy, Live datasets on two connections): no engine holds both, so nothing
   is counted. The card shows its checks and, in place of Approve, ONE catalog sentence (`link.blocked`, kept on the turn
   through `sanitizeNeeds`, so a reload shows the same): *This link can't be saved here: Stores is Live, so its rows are

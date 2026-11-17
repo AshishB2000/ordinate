@@ -1678,5 +1678,5 @@ follows.)
 - **Not verified on a real engine.** No warehouse nightly has run the joined statement: `row_number()` with a binary
   ORDER BY (Snowflake `TO_BINARY`, BigQuery `BYTES`, Databricks `BINARY`), ClickHouse's multi-hop `LEFT JOIN … ON` over a
   previous join's column, and whether BigQuery treats the related table's partition filter inside its scan as pruning.
-  Still refused: a KPI across a link (`liveCardMetric` keeps `related`), an AI answer's (the Assistant's chart form,
-  its own change), a related measure.
+  Still refused: a KPI across a link (`liveCardMetric` keeps `related`), a related measure. The Assistant's chart form
+  follows the same links through this door (docs/assistant/00-design.md, "Joins in the chart form, as built").
