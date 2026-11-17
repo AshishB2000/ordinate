@@ -201,7 +201,7 @@ const MESSAGES: Record<Exclude<LiveRefusalCode, LayerRefusalCode>, Sentence> = {
   semanticPending: { key: 'liveRefusals.this_dataset_asks_another_tool_s', text: () => msg.liveSemanticPending() },
   requiredFilter: { key: 'liveRefusals.this_table_needs_a_filter_on', param: 'column', text: (c) => msg.liveRequiredFilter(c) },
   joinKeyTypes: { key: 'liveRefusals.a_live_chart_can_t_follow', param: 'column', text: (c) => msg.liveJoinKeyTypes(c) },
-  relatedMeasure: { key: 'liveRefusals.a_measure_from_a_related_dataset', text: () => msg.liveRelatedMeasure() },
+  relatedMeasure: { key: 'liveRefusals.a_related_dataset_s_measure_can', text: () => msg.liveRelatedMeasure() },
 };
 
 export function refuse(code: Exclude<LiveRefusalCode, LayerRefusalCode>, arg = ''): LiveRefusal {

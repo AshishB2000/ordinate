@@ -176,6 +176,9 @@ async function computeCardMetricUnlocked(
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
   const live = await liveMetaOf(projectId, datasetId);
   if (live && 'snapshot' in spec && spec.snapshot) throw new LiveFigureError({ ok: false, code: 'live_refused', reason: 'snapshot', error: liveSnapshotRefused() }); // D8: not compiled yet
+  // A many-side measure is that table's own KPI (./metricFanOut), as a Live chart's drill-across is (./vizFanOut).
+  const liveFanned = live && !('metric' in spec) ? await fanOutMetricFor(projectId, datasetId, spec, filters, params, computeCardMetric) : null;
+  if (liveFanned) return liveFanned;
   if (live) return liveCardMetric(projectId, live, spec, filters);
   if ('metric' in spec) return { ok: false, value: null }; // a layer's metric where no layer is: the dataset is gone or no longer Live
   // A snapshot (D8): this same body over the rows on its latest (or earliest) day (./snapshotDoors). The day is in the filters, so in the cache key. Per entity: its own path and key.

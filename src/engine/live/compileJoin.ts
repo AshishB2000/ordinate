@@ -19,8 +19,12 @@
 //      deterministic. Where a key's rows DISAGREE on a column read, Live and a copy may show different rows: a named
 //      divergence (docs/live-data/log.md, 2026-11-16), pinned by scripts/test-liveJoins.ts — Live equals joinJs over
 //      that table with its smallest row first.
-//   3. NO FAN-IN is not needed: a measure on a related table is refused before this (ipc/liveJoin, `relatedMeasure`),
-//      and the primary's rows never repeat.
+//   3. NO FAN-IN: a related row reached by many primary rows counts ONCE per group for a measure on it. After rule 2 a
+//      related row IS its key, so `lv_src` exposes `lv_r<t>` (table t's `lv_k`) for each table a measure sits on, and
+//      ./compile masks the measure's input to the first row of each (group key…, lv_r<t>) — `fanInMask`, a window over
+//      the filtered rows, as joinResident's `maskedCol` (no group for a KPI). Every row of such a partition holds the
+//      same related row, so which one survives is irrelevant: rule 2's pick chooses the row, the mask counts it once.
+//      A measure on the primary needs none: its rows never repeat.
 //   An unmatched row reads NULL (on ClickHouse only with `join_use_nulls`, else the type's default), and a hop after
 //   one that found nothing finds nothing, as in joinJs.
 //
@@ -67,6 +71,18 @@ export function setJoinCutForTest(on: boolean): void {
   cutOneSide = on;
 }
 
+// Test seam: the negative control drops the fan-in mask (scripts/test-liveJoinMeasures.ts).
+let maskFanIn = true;
+export function setJoinMaskForTest(on: boolean): void {
+  maskFanIn = on;
+}
+
+/** Rule 3: `v` on the first row of its partition only (NULL on the rest). `by`: window-ready keys (no float on BigQuery: `partitionOf`). */
+export function fanInMask(v: string, by: string[]): string {
+  if (!maskFanIn) return v;
+  return `CASE WHEN row_number() OVER (PARTITION BY ${by.join(', ')} ORDER BY ${by.join(', ')}) = 1 THEN ${v} END`;
+}
+
 /** Rule 1: `col`'s join key, NULL when empty; text as bytes; −0 and 0 one number (String(-0) is '0'), so they share a partition. */
 function joinKey(c: Ctx, col: LiveColumn): string {
   const k = keyOf(c, col);
@@ -74,7 +90,7 @@ function joinKey(c: Ctx, col: LiveColumn): string {
 }
 
 /** A key as a window's PARTITION BY: BigQuery partitions by no float, so a number key goes there as its round-trip text (17 digits). */
-function partitionOf(c: Ctx, key: string, col: LiveColumn): string {
+export function partitionOf(c: Pick<Ctx, 'd'>, key: string, col: Pick<LiveColumn, 'type'>): string {
   return col.type === 'number' && c.d.id === 'bigquery' ? `FORMAT('%.17g', ${key})` : key;
 }
 
@@ -135,7 +151,15 @@ export function joinPrepare(ir: LiveIR, env: CompileEnv & { join: LiveJoin }, b:
   }
   const sel = read.map((i) => `lv_t${at[i].table}.lv_c${i} AS lv_c${i}`);
   if (!sel.length) return refuse('badQuery');
+  // Rule 3: each related table a measure sits on, its row exposed (only then, so every other statement is unchanged).
+  const tableOf = (m: LiveColumnMeasure): number => at[index.get(m.column) ?? -1]?.table ?? 0;
+  const masked = [...new Set(ms.map(tableOf).filter((t) => t > 0))].sort((x, y) => x - y);
+  for (const t of masked) sel.push(`lv_t${t}.lv_k AS lv_r${t}`);
   if (d.id === 'clickhouse') b.suffix = JOIN_NULLS;
   const c: Ctx = { d, b, columns: merged, ref: (x) => `${SRC}.lv_c${index.get(x.name)}` };
-  return { c, from: `(SELECT ${sel.join(', ')} FROM ${parts.join(' ')}) AS lv_src`, base: [], ms, inner };
+  const rowOf = (m: LiveColumnMeasure): string | null => {
+    const t = tableOf(m);
+    return t > 0 ? partitionOf(c, `${SRC}.lv_r${t}`, columnOf(sides[t].env.columns, sides[t].via!.to)!) : null;
+  };
+  return { c, from: `(SELECT ${sel.join(', ')} FROM ${parts.join(' ')}) AS lv_src`, base: [], ms, inner, ...(masked.length ? { rowOf } : {}) };
 }

@@ -181,9 +181,9 @@ export function liveJoinKeyTypes(column: string): string {
   return t('liveRefusals.a_live_chart_can_t_follow', { column });
 }
 
-/** A measure from a related dataset on a Live chart (ipc/liveJoin): each related row would have to be counted once per group. */
+/** A related measure on a Live chart by week-calendar periods (engine/live/compile): days roll up past the mask that counts each related row once per group. */
 export function liveRelatedMeasure(): string {
-  return t('liveRefusals.a_measure_from_a_related_dataset');
+  return t('liveRefusals.a_related_dataset_s_measure_can');
 }
 
 /** A Live chart that reads a copy through a link (ipc/liveJoin): no one engine holds both tables. */

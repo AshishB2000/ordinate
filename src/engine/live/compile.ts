@@ -58,9 +58,9 @@ import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
 import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicates } from './compileFilter';
 import type { LiveJoin } from './compileJoin';
-import { joinPrepare } from './compileJoin';
+import { fanInMask, joinPrepare, partitionOf } from './compileJoin';
 import type { Total } from './compileDistinct';
-import { distinctKey, foldedDistinct, totalAt, withTotals } from './compileDistinct';
+import { distinctKey, foldedDistinct, nullSafeOn, totalAt, withTotals } from './compileDistinct';
 import type { LiveCalc } from '../../data/liveCalcs';
 import { calcFrom, namesCalc } from './calcLayers';
 
@@ -121,6 +121,8 @@ export interface Prepared {
   ms: LiveColumnMeasure[];
   /** A join's filters already applied inside its tables' scans (./compileJoin): `whereOf` leaves them out. */
   inner?: (f: LiveFilter) => boolean;
+  /** A join's measure on a related table: that row's window key, to count it once per group (./compileJoin rule 3); null on the primary. */
+  rowOf?: (m: LiveColumnMeasure) => string | null;
 }
 
 function badName(name: unknown): boolean {
@@ -222,7 +224,8 @@ export function compileMetric(ir: LiveIR, env: CompileEnv): Compiled {
   if (isRefusal(p)) return p;
   if (p.ms.length !== 1) return refuse('badQuery');
   const m = p.ms[0];
-  const v = measureInput(p.c, m);
+  const row = p.rowOf?.(m);
+  const v = row ? 'lv_v0' : measureInput(p.c, m);
   const sel: string[] = [];
   const cols: string[] = [];
   for (const part of partsOf(m)) {
@@ -231,7 +234,9 @@ export function compileMetric(ir: LiveIR, env: CompileEnv): Compiled {
   }
   const where = whereOf(p, ir);
   if (isRefusal(where)) return where;
-  return { ok: true, query: p.c.b.finish(`SELECT ${sel.join(', ')} FROM ${p.from}${where}`, p.c.d, cols) };
+  // A related measure counts each related row once over the whole (filtered) result (./compileJoin rule 3).
+  const from = row ? `(SELECT ${fanInMask(measureInput(p.c, m), [row])} AS lv_v0 FROM ${p.from}${where}) AS lv_m` : `${p.from}${where}`;
+  return { ok: true, query: p.c.b.finish(`SELECT ${sel.join(', ')} FROM ${from}`, p.c.d, cols) };
 }
 
 // ── The probes ───────────────────────────────────────────────────────────────
@@ -350,6 +355,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   if (ir.top !== undefined && (!Number.isInteger(ir.top) || ir.top < 1 || ir.order !== 'value')) return refuse('badQuery');
   // Days roll up into a week calendar's periods in ./shape.ts, which no distinct count survives (part 5, D2).
   if (key.kind === 'days' && p.ms.some((m) => m.aggregation === 'countd')) return refuse('distinctByWeekCalendar');
+  if (key.kind === 'days' && p.ms.some((m) => p.rowOf?.(m))) return refuse('relatedMeasure'); // …nor a related row's mask
 
   const g = keyExpr(c, catCol, key);
   if (isRefusal(g)) return g;
@@ -374,12 +380,23 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const ms = p.ms;
   const m0 = ms[0];
   const gs = s ? 'lv_g, lv_s' : 'lv_g';
+  const text = key.kind === 'text';
+  // A related measure counts each related row once per (category, series) group (./compileJoin rule 3): its input is
+  // masked over the filtered rows in a layer of its own — on a text axis after the fold, whose rank (as capText's)
+  // reads the unmasked rows. (Days roll up into week periods in ./shape.ts, past any mask: refused above.)
+  const rows = ms.map((m) => p.rowOf?.(m) ?? null);
+  const masks = rows.some((r) => r !== null);
+  const sKey = s && !seriesText ? partitionOf(c, 'lv_s', { type: 'number' }) : 'lv_s';
+  const maskOf = (i: number, v: string, g: string): string => (rows[i] ? fanInMask(v, [g, ...(s ? [sKey] : []), `lv_r${i}`]) : v);
+  const layered = masks && !text;
   const base = [`${g} AS lv_g`];
   if (s) base.push(`${s} AS lv_s`);
-  ms.forEach((m, i) => base.push(`${measureInput(c, m)} AS lv_v${i}`));
+  ms.forEach((m, i) => base.push(`${measureInput(c, m)} AS lv_${layered ? 'u' : 'v'}${i}`));
+  rows.forEach((r, i) => { if (r) base.push(`${r} AS lv_r${i}`); });
   const grp = ms.flatMap((m, i) => partsOf(m).map((pt) => `${d.toDouble(aggOf(d, pt, `lv_v${i}`))} AS lv_a${i}${pt}`));
   const ctes = [
-    `lv_base AS (SELECT ${base.join(', ')} FROM ${p.from}${where})`,
+    ...(layered ? [`lv_raw AS (SELECT ${base.join(', ')} FROM ${p.from}${where})`, `lv_base AS (SELECT ${gs}, ${ms.map((_m, i) => `${maskOf(i, `lv_u${i}`, 'lv_g')} AS lv_v${i}`).join(', ')} FROM lv_raw)`]
+      : [`lv_base AS (SELECT ${base.join(', ')} FROM ${p.from}${where})`]),
     `lv_grp AS (SELECT ${gs}, ${grp.join(', ')} FROM lv_base GROUP BY ${gs})`,
   ];
 
@@ -388,7 +405,6 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   let last = 'lv_grp';
   let k = 'lv_g';
   let part = (i: number, pt: ColumnPart): string => `lv_a${i}${pt}`;
-  const text = key.kind === 'text';
   // A distinct count is counted again from rows wherever this statement folds or ranks (./compileDistinct.ts).
   const distinct = ms.some((m) => m.aggregation === 'countd');
   const again = !!s && m0.aggregation === 'countd';
@@ -400,12 +416,13 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
       ...t.ctes,
       `lv_tot AS (${withTotals('lv_grp', [[t, 'lv_ct']])})`,
       `lv_rank AS (SELECT *, dense_rank() OVER (ORDER BY ${byValue('lv_ct', 'lv_g')}) AS lv_cr FROM lv_tot)`,
-      `lv_fold AS (SELECT CASE WHEN lv_cr <= ${CATEGORY_CAP} THEN lv_g ELSE ${keep} END AS lv_k${s ? ', lv_s' : ''}${distinct ? ', lv_g' : ''}, ` +
+      `lv_fold AS (SELECT CASE WHEN lv_cr <= ${CATEGORY_CAP} THEN lv_g ELSE ${keep} END AS lv_k${s ? ', lv_s' : ''}${distinct || masks ? ', lv_g' : ''}, ` +
         `${ms.flatMap((m, i) => partsOf(m).map((pt) => `lv_a${i}${pt}`)).join(', ')}, max(lv_cr) OVER () AS lv_n FROM lv_rank)`,
-      `lv_out AS (SELECT ${[`lv_k${s ? ', lv_s' : ''}`, ...reagg, `${d.toDouble('max(lv_n)')} AS lv_nc`].join(', ')} FROM lv_fold GROUP BY lv_k${s ? ', lv_s' : ''})`,
-      ...(distinct ? foldedDistinct(c, ms, !!s, seriesText) : []),
+      ...(masks ? maskedFold(c, ms, !!s, (i, v) => maskOf(i, v, 'lv_kk'))
+        : [`lv_out AS (SELECT ${[`lv_k${s ? ', lv_s' : ''}`, ...reagg, `${d.toDouble('max(lv_n)')} AS lv_nc`].join(', ')} FROM lv_fold GROUP BY lv_k${s ? ', lv_s' : ''})`,
+          ...(distinct ? foldedDistinct(c, ms, !!s, seriesText) : [])]),
     );
-    last = distinct ? 'lv_outd' : 'lv_out';
+    last = distinct && !masks ? 'lv_outd' : 'lv_out';
     k = 'lv_k';
     part = (i, pt) => `lv_b${i}${pt}`;
   }
@@ -450,6 +467,23 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const top = ir.top !== undefined && !s ? ` WHERE lv_cr2 <= ${c.b.bind('number', ir.top)}` : '';
   const sql = `WITH ${ctes.join(',\n')}\nSELECT ${out.join(', ')} FROM lv_ord${top} ORDER BY lv_cr2${s ? ', lv_sr' : ''}`;
   return { ok: true, query: c.b.finish(sql, d, cols) };
+}
+
+/**
+ * A folded text axis with a related measure: every part counted ONCE from the rows under their folded key, each related
+ * row masked per (folded key, series) as joinJs masks after capText — never "Other" re-added from masked categories,
+ * which would count a related row reached from two of them twice. Ends in `lv_out`; `lv_bk` (`lv_kk`) as foldedDistinct's.
+ */
+function maskedFold(c: Ctx, ms: LiveColumnMeasure[], split: boolean, mask: (i: number, v: string) => string): string[] {
+  const d = c.d;
+  const by = split ? 'lv_kk, lv_s' : 'lv_kk';
+  const parts = ms.flatMap((m, i) => partsOf(m).map((pt) => `${d.toDouble(aggOf(d, pt, `lv_w${i}`))} AS lv_b${i}${pt}`));
+  return [
+    'lv_kmap AS (SELECT DISTINCT lv_g, lv_k, lv_n FROM lv_fold)',
+    `lv_kb AS (SELECT lv_kmap.lv_k AS lv_kk, lv_kmap.lv_n AS lv_kn, lv_base.* FROM lv_base JOIN lv_kmap ON ${nullSafeOn('lv_base.lv_g', 'lv_kmap.lv_g', true)})`,
+    `lv_bk AS (SELECT lv_kb.*, ${ms.map((_m, i) => `${mask(i, `lv_v${i}`)} AS lv_w${i}`).join(', ')} FROM lv_kb)`,
+    `lv_out AS (SELECT ${['lv_kk AS lv_k', ...(split ? ['lv_s'] : []), ...parts, `${d.toDouble('max(lv_kn)')} AS lv_nc`].join(', ')} FROM lv_bk GROUP BY ${by})`,
+  ];
 }
 
 // The case fix and the key check live in ./compileLookups (this file's size); re-exported for their callers.

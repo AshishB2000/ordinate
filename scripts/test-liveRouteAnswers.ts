@@ -392,9 +392,10 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
 
   ok('THE SPY: nothing here asked getDataset for the Live dataset', !hydrated.slice(from).includes(L), show(hydrated.slice(from)));
 
-  // AFTER the spy, because this case IS the safety net: a saved filter that reaches the Live dataset through a
-  // relationship makes the join ask for its table, and getDataset refuses. The tile answers that ONE card
-  // `live_dataset`, so the facts say n/a for it — the dock beside that dashboard still answers.
+  // AFTER the spy: a saved filter that reaches the Live dataset through a relationship makes a COPY's KPI join a Live
+  // table, which no one engine holds. The copy's metric join says so, typed (`live_refused`, related: the chart join's
+  // sentence, docs/live-data/log.md 2026-11-17) before any table is read; the facts say n/a for that ONE card, and the
+  // dock beside that dashboard still answers.
   const joined = await H.as(ORG_A, async () => {
     const side = await H.datasets.saveDataset(P, { name: 'Targets', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' as const }, { name: 'units', type: 'number' as const }], rows: [['North', 5], ['South', 7]] });
     if (!side) return null;
@@ -409,7 +410,7 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
     const refused = (await post('analysis:tiles', { projectId: P, params: [], items: [{ kind: 'metric', datasetId: joined.side, column: 'units', aggregation: 'sum', filters: acrossFilter }] })).value[0];
     const acrossFacts = await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'analysis', id: joined.across!.id })).then((f) => f.text, (err: unknown) => `THREW ${String(err)}`);
     const plainFacts = (await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'analysis', id: joined.plain!.id }))).text;
-    ok('copilot: a card its tile refuses as live_dataset is n/a in the facts, and the question is still answered', refused.ok === false && refused.code === 'live_dataset'
+    ok('copilot: a card its tile refuses typed (live_refused, related) is n/a in the facts, and the question is still answered', refused.ok === false && refused.code === 'live_refused' && refused.reason === 'related'
       && acrossFacts.includes('- Units: n/a'), show([refused, acrossFacts]));
     ok('NEGATIVE CONTROL: without that filter the same card has its figure', /^- Units: 12$/m.test(plainFacts), plainFacts);
   } else {

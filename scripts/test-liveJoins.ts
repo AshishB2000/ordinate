@@ -16,7 +16,7 @@
 //      a Live dataset beside a copy, and on another connection, refuses typed (`related`) and sends nothing (the
 //      same chart over one connection answers: case 1); a COPY whose link reaches a Live dataset (its category, or a
 //      Live drill-across question on a copy many side) refuses typed, before any table is read (control: two copies);
-//      a measure on a related table refuses (`relatedMeasure`);
+//      a measure on a related table answers (its fan-in mask and parity: scripts/test-liveJoinMeasures.ts);
 //      a reverse hop refuses in the copy's own sentence; a number key linked to text refuses (`joinKeyTypes`).
 //   4. LOCK: the executor under a lock on Customers equals joinJs over the locked customers (NEGATIVE CONTROL: no
 //      lock, every customer).
@@ -228,7 +228,7 @@ void (async () => {
   }
   {
     const r = await chart(L.orders, { category: 'region', categoryDatasetId: L.customers, values: [M('zid', 'sum', L.customers)] });
-    ok('a measure on a related table: refused, typed (relatedMeasure)', refusedAs(r, 'relatedMeasure'), show(r));
+    ok('a measure on a related table answers, each customer once per region (its parity: scripts/test-liveJoinMeasures.ts)', r.ok === true && r.data.series[0].values[r.data.labels.indexOf('South')] === 2, show(r));
     const rev = await chart(L.customers, { category: 'oid', categoryDatasetId: L.orders, values: [M('cid', 'count')] });
     const revCopy = await chart(X.customers, { category: 'oid', categoryDatasetId: X.orders, values: [M('cid', 'count')] });
     ok('a reverse hop (Customers → its many side): refused, typed (related), in the copy\'s own sentence', refusedAs(rev, 'related') && revCopy.ok === false
