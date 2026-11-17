@@ -490,7 +490,8 @@ ok('prompt: offers "answer" and describes its spec', /"answer"/.test(sa.CHAT_SYS
   ok('term: its id and its squashed name resolve too, beside a column filter', byId.ok && byId.spec.filters.length === 2
     && A.validateAnswerSpec({ ...RAW, filters: [{ term: 'e.m.e.a' }] }, [DS], { terms: TERMS }).ok);
   const far = A.validateAnswerSpec({ ...RAW, filters: [{ term: 'Budget EU' }] }, [DS, OTHER], { terms: TERMS });
-  ok('term: a term of another dataset is refused with a reason (an answer never joins)', !far.ok && /another dataset/.test(far.reason), JSON.stringify(far));
+  ok('term: a term of another dataset is kept WITH that dataset (its steps pinned there; the door refuses one it cannot reach, test-answerJoinMeasures)',
+    far.ok && JSON.stringify(far.spec.filters) === JSON.stringify([{ term: TERMS.find((t) => t.name === 'Budget EU')!.id, datasetId: TERMS.find((t) => t.name === 'Budget EU')!.datasetId }]), JSON.stringify(far));
   const none = A.validateAnswerSpec({ ...RAW, filters: [{ term: 'APAC' }] }, [DS], { terms: TERMS });
   ok('term: a word no term answers to is refused, never dropped', !none.ok && /no glossary term called "APAC"/.test(none.reason));
   ok('NEGATIVE CONTROL: without the term list, a term filter is refused', !A.validateAnswerSpec({ ...RAW, filters: [{ term: 'EMEA' }] }, [DS]).ok);

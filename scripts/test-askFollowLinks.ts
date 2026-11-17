@@ -83,7 +83,7 @@ function block(): void {
   };
   const b = linkedFacts.linkedBlock([entry]);
   ok('block: the line names the links, then the columns as the facts list them', b.text.split('\n').at(-1)!.startsWith('- Regions (linked to Purchases via Purchases.customer_id → Customers.id, then Customers.region_id → Regions.id): id (text), region (text'), b.text);
-  ok('block: it says a linked dataset may give the category or split, measures and filters staying the dataset\'s own', b.text.startsWith('LINKED DATASETS') && b.text.includes('"categoryDataset"') && b.text.includes('measures and filters stay'));
+  ok('block: it says a linked dataset may give the category, split, a measure or a filter, each naming it', b.text.startsWith('LINKED DATASETS') && b.text.includes('"categoryDataset"') && b.text.includes('"dataset" inside') && b.text.includes('not a relative period'));
   const many = linkedFacts.linkedBlock(Array.from({ length: 40 }, (_, i) => ({ ...entry, schema: { ...entry.schema, name: `D${i}`, columns: Array.from({ length: 12 }, (_, c) => ({ name: `column_${c}`, type: 'text' })) } })));
   const shown = many.text.split('\n').filter((l) => l.startsWith('- D')).length;
   ok(`block: at most ${linkedFacts.LINKED_FACTS_MAX} characters of datasets, then "(more not shown)"`, shown > 0 && shown < 40 && many.text.endsWith('- (more linked datasets not shown)'), `${shown} shown`);

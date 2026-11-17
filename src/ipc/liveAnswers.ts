@@ -96,7 +96,7 @@ export async function liveCaseFix(
   const labelOf = (column: string, v: string) => labels?.get(column)?.find((l) => caseKey(l.label) === caseKey(v));
   const asked = new Map<string, Set<string>>();
   for (const f of filters) {
-    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) continue;
+    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op) || f.datasetId) continue; // a related dataset's filter: as asked (./answerJoin)
     const col = columns.find((c) => c.name === f.column);
     if (!col || col.type !== 'text') continue;
     const keys = asked.get(col.name) ?? new Set<string>();
@@ -246,7 +246,7 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   const withheld = await liveWithheld(projectId, meta.id, meta);
   for (const name of joined ? joined.withheld : []) withheld.add(name); // a related dataset's marks hold for its category or split
   const said = withheldFilters(spec.filters, withheld);
-  const on = { category: joined?.category?.meta.name, series: joined?.series?.meta.name };
+  const on = { category: joined?.category?.meta.name, series: joined?.series?.meta.name, datasets: joined?.names };
   const factsIn = {
     title: spec.title, datasetName: meta.name, describe: describeAnswer(spec, on), data, categoryIsDate: isDate, additive, filterLabels,
     saidFilterLabels: labelsOf(said), caption, asOf: utcLabel(r.asOf.at),

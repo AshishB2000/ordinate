@@ -37,3 +37,8 @@ export function alertNoYearsBack(): string {
 export function alertAcross(category: string): string {
   return t('answerAlertMessages.one_number_for_every_together_under', { category });
 }
+
+/** A measure, filter or glossary term from a linked dataset (ai/answerJoin): an alert's subject is one dataset's column and filters. */
+export function alertNoLinked(): string {
+  return t('answerAlertMessages.an_alert_watches_one_dataset_s');
+}

@@ -14,6 +14,7 @@ import type { VizMeasure } from '../analysis/visuals';
 import { ANSWER_CHART_TYPES, defaultAnswerChart, filterOp, parseAgg, resolveColumn } from './answerSpec';
 import type { AnswerSpec, SpecDataset, SpecMetric } from './answerSpec';
 import { WITHHELD } from './columnNotes';
+import { filterOn } from './answerJoin';
 
 /** The patch's own two keys, as the prompt spells them (scripts/test-suggestedAction.ts ties the two). */
 export const REFINE_KEY = 'refine';
@@ -68,6 +69,7 @@ export function refineSpec(
 
   const carried = (m: VizMeasure): unknown => {
     const calc = m.calc ? { calc: m.calc } : {}; // its "Calculate as" goes with it, validated again (./answerCalc)
+    if (m.datasetId) return { column: m.column, aggregation: m.aggregation, datasetId: m.datasetId, ...(m.via ? { via: m.via } : {}), ...calc }; // a related dataset's (./answerJoin)
     const metric = m.metricId ? metrics.find((x) => x.id === m.metricId) : undefined;
     if (metric?.external && metric.datasetId === dataset.id) return { metric: metric.name, ...calc }; // a layer's metric: it has no column to carry
     const byName = !!metric && !metric.hasFilters && metric.column === m.column && (parseAgg(metric.aggregation) || 'sum') === m.aggregation
@@ -78,6 +80,7 @@ export function refineSpec(
 
   const added: unknown[] = [];
   const gone = new Set<string>();
+  const goneOn = new Set<string>(); // a related dataset's filter the patch restates (./answerJoin): by its column, case aside
   // A drop the dataset has no column for is handed on as a filter on that name:
   // the validator then refuses it by the name that was said, like any other.
   const unknownDrops: unknown[] = [];
@@ -88,6 +91,7 @@ export function refineSpec(
   }
   for (const f of ([] as unknown[]).concat(p.filters ?? [])) {
     const o = f && typeof f === 'object' ? (f as Record<string, unknown>) : {};
+    if ([o.dataset, o.datasetId].some((d) => d != null && d !== '') && typeof o.column === 'string') { goneOn.add(o.column.trim().toLowerCase()); added.push(f); continue; }
     const name = real(o.column);
     // A period with no column lands on a metric's own date (the validator's D9 rule): it replaces the stored period, never stacks on it.
     if (o.period !== undefined && (o.column == null || o.column === '')) for (const x of previous.filters) if ('period' in x) gone.add(x.column);
@@ -117,7 +121,7 @@ export function refineSpec(
     dataset: previous.datasetId,
     category: p.category ?? previous.category,
     measures: p.measures ?? (p.measure != null ? [p.measure] : previous.measures.map(carried)),
-    filters: [...previous.filters.filter((f) => !('column' in f && gone.has(f.column))), ...added, ...unknownDrops],
+    filters: [...previous.filters.filter((f) => !('column' in f && (filterOn(f) ? goneOn.has(f.column.toLowerCase()) : gone.has(f.column)))), ...added, ...unknownDrops],
   };
   // A related dataset's category or split (./answerJoin) goes with it: the patch's own when it names a new one, which
   // `real` (the asked dataset's columns) cannot read, so it is never the same axis or the split moved onto it.
@@ -146,7 +150,7 @@ export function refineSpec(
 }
 
 // The join fields last: a spec without them says exactly what it said before they existed.
-const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'calc', 'kind', 'along', 'dimension', 'restart', 'window', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain', 'categoryDatasetId', 'categoryVia', 'seriesDatasetId'];
+const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'calc', 'kind', 'along', 'dimension', 'restart', 'window', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain', 'categoryDatasetId', 'categoryVia', 'seriesDatasetId', 'via'];
 
 /**
  * Two specs that draw the same chart: everything but the title, and a measure's

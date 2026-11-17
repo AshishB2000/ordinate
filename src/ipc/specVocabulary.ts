@@ -127,8 +127,10 @@ export function specNames(specs: readonly unknown[]): { datasets: string[]; meas
   for (const raw of specs) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
     const o = raw as Record<string, unknown>;
-    // The datasets a category or split is read from too (../ai/answerJoin): named as `dataset` is.
-    for (const d of [o.dataset ?? o.datasetId, o.categoryDatasetId ?? o.categoryDataset, o.seriesDatasetId ?? o.seriesDataset]) {
+    // The datasets a category, split, measure or filter is read from too (../ai/answerJoin): named as `dataset` is.
+    const on = (x: unknown): unknown => (x && typeof x === 'object' ? (x as Record<string, unknown>).dataset ?? (x as Record<string, unknown>).datasetId : undefined);
+    const parts = [...(Array.isArray(o.measures) ? o.measures : []), ...arr(o.filters)].map(on);
+    for (const d of [o.dataset ?? o.datasetId, o.categoryDatasetId ?? o.categoryDataset, o.seriesDatasetId ?? o.seriesDataset, ...parts]) {
       const ds = str(d);
       if (ds) out.datasets.push(ds.trim());
     }

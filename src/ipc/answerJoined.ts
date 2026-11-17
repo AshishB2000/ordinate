@@ -1,5 +1,5 @@
-// The figures of an answer whose category or split is a RELATED dataset's column (docs/assistant/00-design.md, "Joins,
-// as built") — MAIN PROCESS. Not a second join: the card asks THE chart door (./visuals `vizDataFor`) with the spec's
+// The figures of an answer whose category, split, a measure, a filter or a term is a RELATED dataset's (docs/assistant/
+// 00-design.md, "Joins in the chart form, as built") — MAIN PROCESS. Not a second join: the card asks THE chart door (./visuals `vizDataFor`) with the spec's
 // encoding (../ai/answerJoin `specEncoding`), so the join plan (many → one only, the reverse refused in the planner's
 // sentence), the fan-out rules, the folder check, row lock and hidden columns of every table it reads, and the answer
 // cache are a visual's own. A spec with no related field never comes here: ./answers draws it on its rows.
@@ -26,17 +26,21 @@ import { withheldColumns } from '../app/sharePolicy';
 import { isLive } from '../data/liveDataset';
 import { liveWithheld } from './liveProfile';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
-import { relatedIds, specEncoding } from '../ai/answerJoin';
+import { filterOn, relatedIds, relatedRefs, specEncoding } from '../ai/answerJoin';
 import type { AnswerSpec, SpecDataset } from '../ai/answerSpec';
-import { chartReads } from './relationships';
+import { chartReads, projectModel } from './relationships';
+import { findPath } from '../analysis/joinPlan';
 import { vizDataFor } from './visuals';
 import type { Failure } from './answers';
 
 /** A related side as the card reads it: its record, and its columns as the caller sees them (a hidden one is no chip). */
 export interface JoinedSide { meta: DatasetMeta; columns: ParsedColumn[] }
 
-/** `withheld`: the category or split names a related dataset marks personal or financial (a model never reads their labels). */
-export interface Joined { ok: true; category?: JoinedSide; series?: JoinedSide; withheld: string[]; metas: DatasetMeta[] }
+/**
+ * `withheld`: the category, split or a filter's column a related dataset marks personal or financial (a model never reads
+ * their labels or values). `names`: each related dataset's name by id, for the card's words.
+ */
+export interface Joined { ok: true; category?: JoinedSide; series?: JoinedSide; withheld: string[]; metas: DatasetMeta[]; names: Record<string, string> }
 
 /**
  * The related sides of a joined spec, or why its card cannot be drawn: a related dataset in a folder the caller cannot
@@ -44,8 +48,8 @@ export interface Joined { ok: true; category?: JoinedSide; series?: JoinedSide; 
  * the planner, and a mix of Live and copies to the chart door, each of which says so in its own sentence.
  */
 export async function joinedSides(projectId: string, spec: AnswerSpec): Promise<Joined | Failure> {
-  const out: Joined = { ok: true, withheld: [], metas: [] };
-  for (const [key, id, column] of [['category', spec.categoryDatasetId, spec.category], ['series', spec.seriesDatasetId, spec.series]] as const) {
+  const out: Joined = { ok: true, withheld: [], metas: [], names: {} };
+  for (const [key, id, column] of relatedRefs(spec)) {
     if (!id || !column || id === spec.datasetId) continue;
     const meta = await datasets.getDatasetMeta(projectId, id);
     if (!meta) {
@@ -60,10 +64,23 @@ export async function joinedSides(projectId: string, spec: AnswerSpec): Promise<
       continue;
     }
     if (!meta.columns.some((c) => c.name === column)) return { ok: false, reason: `"${column}" is no longer a column of ${meta.name}.` };
-    out[key] = { meta, columns: dropHidden(meta.columns, await hiddenColumnsFor(projectId, id)) };
-    // A Live one's set is its facts' own, stricter one (./liveProfile): pending and detected columns too.
-    if ((isLive(meta) ? await liveWithheld(projectId, id, meta) : await withheldColumns(projectId, id)).has(column)) out.withheld.push(column);
-    if (!out.metas.includes(meta)) out.metas.push(meta);
+    if (key === 'category' || key === 'series') out[key] = { meta, columns: dropHidden(meta.columns, await hiddenColumnsFor(projectId, id)) };
+    // A Live one's set is its facts' own, stricter one (./liveProfile): pending and detected columns too. A measure's figure is no label.
+    if (key !== 'measure' && (isLive(meta) ? await liveWithheld(projectId, id, meta) : await withheldColumns(projectId, id)).has(column)) out.withheld.push(column);
+    if (!out.metas.some((m) => m.id === meta.id)) out.metas.push(meta);
+    out.names[meta.id] = meta.name;
+  }
+  // A filter pinned to a dataset the planner cannot reach (the many side): its sentence, as a related category's is.
+  // The planner itself says a glossary term's (the pin's first use) for one, which a plain filter is not.
+  // A many-side measure's own dataset is the door's to judge (a drill-across narrows that side by it).
+  const measured = new Set(spec.measures.map((m) => m.datasetId));
+  const pinned = spec.filters.flatMap((f) => (!('term' in f) && filterOn(f) && filterOn(f) !== spec.datasetId && !measured.has(filterOn(f)) ? [filterOn(f) as string] : []));
+  if (pinned.length) {
+    const { rels, infos } = await projectModel(projectId, spec.datasetId);
+    for (const id of new Set(pinned)) {
+      const p = infos.has(id) ? findPath(spec.datasetId, id, rels, (x) => infos.get(x)?.name || 'A dataset') : { ok: true as const };
+      if (!p.ok) return { ok: false, reason: p.error };
+    }
   }
   return out;
 }
@@ -119,23 +136,28 @@ export async function joinedLive(projectId: string, spec: AnswerSpec, filters: A
   return { ok: true, data: isDate ? data : ranked(data, spec.top), category: v.category, warnings: [], notes: [...v.warnings, ...(v.category?.note ? [v.category.note] : [])], asOf: v.asOf };
 }
 
-/** Every dataset a joined answer reads, its own first: the related ones and its join plan's tables (./relationships chartReads). */
+/**
+ * Every dataset a joined answer reads, its own first: the related ones and its join plan's tables (./relationships
+ * chartReads), a related filter's path too. A related term's own table is in `relatedIds`.
+ */
 export async function answerReads(projectId: string, spec: AnswerSpec): Promise<string[]> {
-  return [...new Set([spec.datasetId, ...relatedIds(spec), ...(await chartReads(projectId, spec.datasetId, specEncoding(spec), []))])];
+  const pinned = specFilterSteps({ filters: spec.filters.filter((f) => !('term' in f) && filterOn(f)) }, [], []).steps;
+  return [...new Set([spec.datasetId, ...relatedIds(spec), ...(await chartReads(projectId, spec.datasetId, specEncoding(spec), pinned))])];
 }
 
 /**
  * A stored joined spec's related datasets as the validator reads them, and their names; null when one is gone or no
  * longer has its column (by exact name, as the card reads it): a follow-up then starts afresh.
  */
-export async function relatedOfStored(projectId: string, spec: AnswerSpec): Promise<{ datasets: SpecDataset[]; on: { category?: string; series?: string } } | null> {
+export async function relatedOfStored(projectId: string, spec: AnswerSpec): Promise<{ datasets: SpecDataset[]; on: { category?: string; series?: string; datasets: Record<string, string> } } | null> {
   const out: SpecDataset[] = [];
-  const on: { category?: string; series?: string } = {};
-  for (const [key, id, column] of [['category', spec.categoryDatasetId, spec.category], ['series', spec.seriesDatasetId, spec.series]] as const) {
-    if (!id || !column) continue;
+  const on: { category?: string; series?: string; datasets: Record<string, string> } = { datasets: {} };
+  for (const [key, id, column] of relatedRefs(spec)) {
+    if (!id || id === spec.datasetId || (!column && key !== 'filter')) continue; // a term's dataset has no column of its own here
     const meta = await datasets.getDatasetMeta(projectId, id);
-    if (!meta || !meta.columns.some((c) => c.name === column)) return null;
-    on[key] = meta.name;
+    if (!meta || (column && !meta.columns.some((c) => c.name === column))) return null;
+    if (key === 'category' || key === 'series') on[key] = meta.name;
+    on.datasets[meta.id] = meta.name;
     if (!out.some((d) => d.id === meta.id)) out.push({ id: meta.id, name: meta.name, columns: meta.columns });
   }
   return { datasets: out, on };

@@ -54,7 +54,7 @@ export const LOOSE_MAX_DISTINCT = 10_000;
 export function heldValues(filters: AnswerFilter[], columns: ParsedColumn[], rows: Cell[][]): Held {
   const held: Held = new Map();
   for (const f of filters) {
-    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op) || held.has(f.column)) continue;
+    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op) || f.datasetId || held.has(f.column)) continue; // a related dataset's: as asked (./answerJoin)
     const ci = columns.findIndex((c) => c.name === f.column);
     if (ci < 0 || columns[ci].type !== 'text') continue;
     const byKey = new Map<string, string>();
@@ -78,7 +78,7 @@ export function heldValues(filters: AnswerFilter[], columns: ParsedColumn[], row
  */
 export function canonicaliseTextFilters(steps: FilterStep[], held: Held): void {
   for (const s of steps) {
-    const byKey = MATCH_OPS.has(s.op) ? held.get(s.column) : undefined;
+    const byKey = MATCH_OPS.has(s.op) && !s.datasetId ? held.get(s.column) : undefined; // a related table's step: as asked (./answerJoin)
     if (!byKey) continue;
     const fix = (v: Cell): Cell => (typeof v === 'string' ? byKey.get(exactKey(v)) ?? v : v);
     if (s.value !== undefined) s.value = fix(s.value);
@@ -105,7 +105,7 @@ export function matchValues(spec: AnswerSpec, held: Held, labels?: FilterLabels)
   // app does rewrite still gets its "Matched …" note (`matched` never passes MAX_MATCHED).
   let budget = MAX_MATCHED - (spec.matched?.length ?? 0);
   const filters = spec.filters.map((f): AnswerFilter => {
-    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) return f;
+    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op) || f.datasetId) return f;
     const column = f.column;
     const byKey = held.get(column);
     if (!byKey || byKey.size > LOOSE_MAX_DISTINCT) return f;
@@ -165,7 +165,7 @@ export function nearestValueFixes(
   spec: AnswerSpec, held: Held, withheld: ReadonlySet<string>, say: (column: string, value: string) => string = (_column, value) => value,
 ): NoMatch | null {
   for (const [i, f] of spec.filters.entries()) {
-    if ('term' in f || 'period' in f || (f.op !== '=' && f.op !== 'in') || withheld.has(f.column)) continue;
+    if ('term' in f || 'period' in f || (f.op !== '=' && f.op !== 'in') || f.datasetId || withheld.has(f.column)) continue;
     const byKey = held.get(f.column);
     if (!byKey || byKey.size > LOOSE_MAX_DISTINCT) continue;
     const said = [f.value, ...(f.values ?? [])].find((v): v is string => typeof v === 'string' && !byKey.has(exactKey(v)));

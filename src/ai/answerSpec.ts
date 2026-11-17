@@ -43,7 +43,8 @@ import { NUMBER_AGGREGATIONS } from '../data/aggregations';
 import { sanitizeTableCalc } from '../analysis/tableCalc';
 // A measure's `calc`, read as the engine's table calculation; its refusals are catalog sentences (./answerMessages).
 import { DATE_ORDER_KINDS, readAnswerCalc } from './answerCalc';
-import { rawVia, storedJoin } from './answerJoin';
+import { filterOn, rawVia, storedJoin, storedOn } from './answerJoin';
+import { relatedPeriodRefused } from './answerMessages';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -51,11 +52,14 @@ import { rawVia, storedJoin } from './answerJoin';
 export type AnswerPeriod = Exclude<PeriodPreset, 'custom'>;
 const PERIODS: ReadonlySet<string> = new Set(PERIOD_PRESETS.filter((p) => p !== 'custom'));
 
-/** One filter as the APP stores it: an ordinary comparison, a relative period, or a reference to a glossary term (a door expands it). */
+/**
+ * One filter as the APP stores it: an ordinary comparison, a relative period, or a reference to a glossary term (a door
+ * expands it). `datasetId`: the related dataset a comparison or a term filters, its steps pinned there (./answerJoin).
+ */
 export type AnswerFilter =
-  | { column: string; op: FilterOp; value?: Cell; values?: Cell[] }
+  | { column: string; op: FilterOp; value?: Cell; values?: Cell[]; datasetId?: string }
   | PeriodFilter
-  | { term: string };
+  | { term: string; datasetId?: string };
 
 /** `n`: how many, on a last-N period only ("last 30 days"). `yearsBack`: the same period that many years earlier. */
 export type PeriodFilter = { column: string; period: AnswerPeriod; n?: number; yearsBack?: number }; // a type, not an interface: it passes as a Record (verifiedPick)
@@ -372,10 +376,13 @@ export function validateAnswerSpec(
   if (measuresRaw.length > MAX_MEASURES) return { ok: false, reason: `At most ${MAX_MEASURES} measures.` };
   const measures: VizMeasure[] = [];
   for (const [i, m] of measuresRaw.entries()) {
-    const r = resolveMeasure(m, ds.columns, opts.metrics || [], ds.id, ds.names);
+    const mo = m && typeof m === 'object' ? (m as Record<string, unknown>) : {};
+    const on = relatedOf(mo.dataset ?? mo.datasetId, ds, datasets); // a related dataset's column, a visual's `datasetId` (no metric of it)
+    if (typeof on === 'string') return { ok: false, reason: on };
+    const r = resolveMeasure(m, (on ?? ds).columns, on ? [] : opts.metrics || [], (on ?? ds).id, (on ?? ds).names);
     if (typeof r === 'string') return { ok: false, reason: r };
-    if ('unknown' in r) return unknownName('measure', 'measure column', r.unknown, ds.id, i);
-    measures.push(r);
+    if ('unknown' in r) return unknownName('measure', 'measure column', r.unknown, (on ?? ds).id, i);
+    measures.push(on ? { ...r, datasetId: on.id, ...(rawVia(mo.via) ? { via: rawVia(mo.via) } : {}) } : r);
   }
 
   let series: string | undefined;
@@ -410,14 +417,20 @@ export function validateAnswerSpec(
       const said = (f as { term: unknown }).term;
       const t = matchTerm(said, opts.terms || []);
       if (!t) return { ok: false, reason: `There is no glossary term called "${String(said)}".` };
-      if (t.datasetId !== ds.id) return { ok: false, reason: `"${t.name}" is a term of another dataset, not ${ds.name}.` }; // an answer's filters are its own dataset's (only its category or split joins, ./answerJoin)
-      filters.push({ term: t.id });
+      // Another dataset's term filters THAT table, its steps pinned there: the door expands it, or refuses one it cannot reach (../analysis/termExpand).
+      // A stored reference (by id) names that dataset beside it; one without is an older answer's, refused as the card door refuses it.
+      if (t.datasetId !== ds.id && said === t.id && (f as { datasetId?: unknown }).datasetId !== t.datasetId) return { ok: false, reason: `"${t.name}" is a term of another dataset, not ${ds.name}.` };
+      filters.push(t.datasetId === ds.id ? { term: t.id } : { term: t.id, datasetId: t.datasetId });
       continue;
     }
-    const r = resolveFilter(f, ds.columns, ds.names, periodOn);
+    const fo = f && typeof f === 'object' ? (f as Record<string, unknown>) : {};
+    const on = relatedOf(fo.dataset ?? fo.datasetId, ds, datasets); // a related dataset's column: its step pinned there
+    if (typeof on === 'string') return { ok: false, reason: on };
+    const r = resolveFilter(f, (on ?? ds).columns, (on ?? ds).names, on ? '' : periodOn);
     if (typeof r === 'string') return { ok: false, reason: r };
-    if ('unknown' in r) return unknownName('filter', 'filter column', r.unknown, ds.id, i);
-    filters.push(r);
+    if ('unknown' in r) return unknownName('filter', 'filter column', r.unknown, (on ?? ds).id, i);
+    if (on && 'period' in r) return { ok: false, reason: relatedPeriodRefused(r.column, on.name, ds.name) }; // its days need that dataset's cells
+    filters.push(on ? { ...r, datasetId: on.id } : r);
   }
 
   const wanted = typeof o.chartType === 'string' ? o.chartType.trim() : '';
@@ -489,13 +502,13 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
         ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }
         : { column: m.column, aggregation: m.aggregation };
       const calc = sanitizeTableCalc(m.calc); // a table calculation, whitelisted as a visual's (analysis/tableCalc)
-      return calc ? { ...out, calc } : out;
+      return { ...out, ...storedOn(m, o.datasetId, true), ...(calc ? { calc } : {}) }; // a related dataset's measure (./answerJoin)
     });
   if (!measures.length) return undefined;
   const filters: AnswerFilter[] = [];
   for (const f of Array.isArray(o.filters) ? o.filters.slice(0, MAX_FILTERS) : []) {
     if (f && typeof f.column !== 'string' && typeof f.term === 'string' && UUID_RE.test(f.term)) {
-      filters.push({ term: f.term }); // a reference to a glossary term: kept whole, nothing else of it
+      filters.push({ term: f.term, ...storedOn(f, o.datasetId, false) }); // a reference to a glossary term (and its dataset): nothing else of it
       continue;
     }
     if (!f || typeof f.column !== 'string') continue;
@@ -505,7 +518,7 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
       const out: AnswerFilter = { column: f.column, op: f.op as FilterOp };
       if (f.value === null || typeof f.value === 'string' || typeof f.value === 'number') out.value = f.value;
       if (Array.isArray(f.values)) out.values = f.values.filter((v: unknown) => v === null || typeof v === 'string' || typeof v === 'number');
-      filters.push(out);
+      filters.push(Object.assign(out, storedOn(f, o.datasetId, false)));
     }
   }
   const spec: AnswerSpec = {
@@ -629,9 +642,10 @@ export function specFilterSteps(
   const labels: string[] = [];
   for (const f of spec.filters) {
     if ('term' in f || hasTermType(f)) throw termError(f); // a door expands it; never skipped, never dropped
-    const ci = columns.findIndex((c) => c.name === f.column);
-    if (ci < 0) continue;
+    const ci = filterOn(f) ? -2 : columns.findIndex((c) => c.name === f.column); // a related dataset's: pinned there, never this table's same-named column
+    if (ci === -1) continue;
     if ('period' in f) {
+      if (ci < 0) throw new Error('A related period'); // refused by the validator; never stored (sanitizeStoredSpec)
       const cells = rows.map((r) => (r ? r[ci] ?? null : null));
       const p = answerPeriod(f);
       labels.push(`${f.column}: ${p.label}`);
@@ -660,6 +674,7 @@ export function specFilterSteps(
       const step: FilterStep = { type: 'filter', column: f.column, op: f.op };
       if (f.value !== undefined) step.value = f.value;
       if (f.values) step.values = f.values;
+      if (f.datasetId) step.datasetId = f.datasetId;
       steps.push(step);
       const v = f.values ? f.values.join(', ') : f.value === undefined ? '' : String(f.value);
       labels.push(`${f.column} ${f.op}${v ? ' ' + v : ''}`);

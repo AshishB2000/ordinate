@@ -32,10 +32,10 @@ function calcWords(calc: TableCalc | undefined): string {
 }
 
 /** The spec in words — "sum of revenue by region, split by tier", "a running total of sum of revenue by month" — for `AnswerFactsInput.describe`. */
-/** `on`: the related datasets' names a category or split is read from (./answerJoin). */
-export function describeAnswer(spec: AnswerSpec, on: { category?: string; series?: string } = {}): string {
-  const ms = spec.measures.map((m) => `${calcWords(m.calc)}${aggWord(m.aggregation)} of ${m.column}`).join(', ');
+/** `on`: the related datasets' names a category or split is read from, and every related dataset's by id (a measure's) (./answerJoin). */
+export function describeAnswer(spec: AnswerSpec, on: { category?: string; series?: string; datasets?: Record<string, string> } = {}): string {
   const from = (name: string | undefined): string => (name ? ` (from ${name})` : '');
+  const ms = spec.measures.map((m) => `${calcWords(m.calc)}${aggWord(m.aggregation)} of ${m.column}${from(m.datasetId && on.datasets?.[m.datasetId])}`).join(', ');
   return `${ms} by ${spec.category}${from(on.category)}${spec.series ? `, split by ${spec.series}${from(on.series)}` : ''}`;
 }
 
@@ -48,7 +48,7 @@ export function describeAnswer(spec: AnswerSpec, on: { category?: string; series
  */
 export function withheldFilters(filters: AnswerFilter[], withheld: ReadonlySet<string>): AnswerFilter[] {
   return filters.map((f) => ('term' in f || 'period' in f || !withheld.has(f.column) || (f.value === undefined && !f.values)
-    ? f : { column: f.column, op: f.op, value: WITHHELD }));
+    ? f : { column: f.column, op: f.op, value: WITHHELD, ...(f.datasetId ? { datasetId: f.datasetId } : {}) }));
 }
 
 const GUARD_LINE =

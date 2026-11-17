@@ -16,6 +16,7 @@ import type { FilterStep } from '../data/transforms';
 import { PERIOD_OP } from '../data/filterOps';
 import { AGGREGATIONS } from '../data/aggregations';
 import { sanitizeStoredSpec, type AnswerSpec } from '../ai/answerSpec';
+import { filterOn } from '../ai/answerJoin';
 import { expandAnswerTerms } from '../analysis/termExpand';
 import { getMetric } from '../analysis/metrics';
 import { testRule } from '../analysis/alertStore';
@@ -64,6 +65,8 @@ async function draft(projectId: string, raw: unknown): Promise<AnswerAlert> {
   if (spec.top) return { ok: false, reason: say.alertNoTop() };
   if (!AGGS.has(m.aggregation)) return { ok: false, reason: say.alertNoTotal() };
   if (spec.filters.some((f) => 'period' in f && f.yearsBack)) return { ok: false, reason: say.alertNoYearsBack() };
+  // A subject names its column on its own dataset, unpinned (a metric reads a bare one at its nearest owner): a linked one is refused.
+  if (m.datasetId || spec.filters.some((f) => filterOn(f))) return { ok: false, reason: say.alertNoLinked() };
   const x = await expandAnswerTerms(projectId, spec); // a term it cannot apply throws, typed
   const filters = [...alertSteps(x.spec.filters), ...x.steps];
   const label = m.metricId ? (await getMetric(projectId, m.metricId))?.name : undefined;

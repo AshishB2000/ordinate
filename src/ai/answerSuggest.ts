@@ -86,7 +86,9 @@ function substitute(raw: Record<string, unknown>, miss: SpecMiss, put: string): 
   if (miss.part === 'measure') {
     const measures = Array.isArray(raw.measures) ? raw.measures.slice() : [raw.measure];
     const agg = readMeasure(measures[at])?.agg;
-    measures[at] = agg === undefined || agg === null || agg === '' ? { column: put } : { column: put, aggregation: agg };
+    const was: Record<string, unknown> = measures[at] && typeof measures[at] === 'object' ? (measures[at] as Record<string, unknown>) : {};
+    const on = Object.fromEntries(['dataset', 'datasetId', 'via'].flatMap((k) => (was[k] === undefined ? [] : [[k, was[k]]]))); // its related dataset stays (./answerJoin)
+    measures[at] = { ...(agg === undefined || agg === null || agg === '' ? { column: put } : { column: put, aggregation: agg }), ...on };
     return { ...raw, measures };
   }
   const filters = Array.isArray(raw.filters) ? raw.filters.slice() : [];

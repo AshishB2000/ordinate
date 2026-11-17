@@ -29,10 +29,15 @@ export async function vocabulary(projectId: string, want: VocabularyWant): Promi
   return { datasets: (await specDatasets(projectId)).filter((d) => !only || only.has(d.id)), metrics: await specMetrics(projectId), terms: await specTerms(projectId) };
 }
 
-/** Does a raw spec name a related dataset for `field` ("categoryDataset" or its id key)? */
-const hasKey = (raw: unknown, field: 'categoryDataset' | 'seriesDataset'): boolean => {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+/** Does `item` name a related dataset for `field` ("categoryDataset" or its id key; a measure's or filter's own "dataset")? */
+const hasKey = (item: unknown, field: 'categoryDataset' | 'seriesDataset' | 'dataset'): boolean => {
+  const o = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
   return [o[field], o[`${field}Id`]].some((v) => v !== undefined && v !== null && v !== '');
+};
+/** The raw spec's `index`-th measure or filter, as the validator read it. */
+const rawPart = (raw: unknown, part: 'measures' | 'filters', index?: number): unknown => {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return index === undefined ? undefined : ([] as unknown[]).concat(o[part] ?? (part === 'measures' ? o.measure ?? [] : []))[index];
 };
 
 /** At most this many datasets step 3 finds for a dataset name that missed, by its words and by its spelling: "Did you mean"'s candidates. */
@@ -85,7 +90,8 @@ export async function checkAction(
   if (!v.ok) {
     // A column of a dataset this one links to (./askLinks; an agent follows no links): named without its dataset it is refused (only a category or split may be one's, named so), never "Did you mean" another.
     // A name missed on the related dataset a category or split was read from (../ai/answerJoin) is "Did you mean" there, never a link of it.
-    const related = (v.miss?.part === 'category' && hasKey(raw, 'categoryDataset')) || (v.miss?.part === 'series' && hasKey(raw, 'seriesDataset'));
+    const related = (v.miss?.part === 'category' && hasKey(raw, 'categoryDataset')) || (v.miss?.part === 'series' && hasKey(raw, 'seriesDataset'))
+      || (v.miss?.part === 'measure' && hasKey(rawPart(raw, 'measures', v.miss.index), 'dataset')) || (v.miss?.part === 'filter' && hasKey(rawPart(raw, 'filters', v.miss.index), 'dataset'));
     const linked = !only && !related && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkedColumnOf(projectId, v.miss.datasetId, v.miss.said) : null;
     const on = linked && all.find((d) => d.id === v.miss?.datasetId);
     if (linked && on) return { ok: false, reason: linkedColumnRefused(linked.column, linked.dataset, on.name) };

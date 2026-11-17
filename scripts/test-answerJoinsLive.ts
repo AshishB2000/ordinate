@@ -10,6 +10,9 @@
 //   2. THE MIX: Live Orders with its category from a copy, and a copy with its category from Live Customers, each get
 //      the door's own typed sentence (`live_refused`, the same words `visual:data` says), never `live_dataset`, and
 //      send nothing. NEGATIVE CONTROL: the all-Live card answers (1).
+//   1b. A RELATED MEASURE gets the door's typed sentence (the executor's `relatedMeasure`, live_refused), a related
+//      glossary term its typed `term` sentence, each word for word what visual:data says, never live_dataset, nothing
+//      sent; a related FILTER (pinned to Live Customers) is the door's Live chart and the copy card's figures (Object.is).
 //   3. THE ASK: a model's answer naming the linked Live dataset is the chart form, ONE model call; Save as visual keeps
 //      the join and the visual draws the card's figures; the snapshot's print reads both Live tables; the turn's
 //      `factsFrom` names the related one.
@@ -110,6 +113,34 @@ void (async () => {
   const sent = fake.calls.length;
   const hit = await card(spec(L.orders, L.customers));
   ok('asked again, the executor\'s own cache answers: no statement', hit.ok === true && fake.calls.length === sent, String(fake.calls.length - sent));
+
+  // ── 1b. A measure, a filter or a term from the related Live dataset (scripts/test-answerJoinMeasures on copies) ──
+  // A related measure: the Live join's executor masks it as a copy does (the fan-in mask, compiled into the statement),
+  // so the card is the door's Live chart in the warehouse. A pinned filter: the door's Live chart, in the warehouse.
+  {
+    const before = fake.calls.length;
+    const relM = (x: { orders: string; customers: string }) => spec(x.orders, x.customers, { category: 'status', categoryDatasetId: undefined, measures: [{ column: 'seg', aggregation: 'count', datasetId: x.customers }] });
+    const m = await card(relM(L));
+    const mDoor = await chart(L.orders, { category: 'status', values: [{ column: 'seg', aggregation: 'count', datasetId: L.customers }] });
+    const mCopy = await card(relM(X));
+    ok('live: a related measure (counted once per related row) is the door\'s Live chart in the warehouse (Object.is), and the copy path\'s card over the same rows',
+      m.ok === true && m.asOf?.mode === 'live' && sameFigures(m.data, mDoor?.data) && sameFigures(m.data, mCopy?.data && { ...mCopy.data, series: mCopy.data.series.map((s: { name: string }, i: number) => ({ ...s, name: m.data.series[i]?.name })) })
+      && fake.calls.length > before, show([m.asOf?.mode, m.data, mDoor?.data, mCopy?.data])); // the copy names its series by its own dataset ("Customers copy.seg"): compared by position
+    const fSpec = spec(L.orders, L.customers, { category: 'status', categoryDatasetId: undefined, filters: [{ column: 'region', op: '=', value: 'North', datasetId: L.customers }] });
+    const f = await card(fSpec);
+    const fDoor = await chart(L.orders, { category: 'status', values: SUM }, [{ type: 'filter', column: 'region', op: '=', value: 'North', datasetId: L.customers }]);
+    const fCopy = await card(spec(X.orders, X.customers, { category: 'status', categoryDatasetId: undefined, filters: [{ column: 'region', op: '=', value: 'North', datasetId: X.customers }] }));
+    ok('live: a related filter (pinned to Live Customers) is the door\'s Live chart in the warehouse (Object.is), and the copy path\'s card over the same rows',
+      f.ok === true && f.asOf?.mode === 'live' && sameFigures(f.data, fDoor?.data) && sameFigures(f.data, fCopy?.data), show([f, fDoor, fCopy]));
+    // A glossary term of Live Customers: a term reaches another table only on copies (analysis/termExpand), refused typed.
+    const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+    const north = (await as(() => terms.saveTerm(P, { name: 'North customers', datasetId: L.customers, filters: [{ type: 'filter', column: 'region', op: '=', value: 'North' }] } as never)))!;
+    const tSent = fake.calls.length;
+    const t = await post('answer:card', { projectId: P, spec: { ...fSpec, filters: [{ term: north.id, datasetId: L.customers }] } });
+    const tDoor = await chart(L.orders, { category: 'status', values: SUM }, [{ type: 'term', term: north.id }]);
+    ok('live: a related glossary term is refused in the door\'s typed sentence (term), word for word visual:data\'s, never live_dataset, nothing sent',
+      t.value.ok === false && t.value.code === 'term' && tDoor.ok === false && t.value.reason === tDoor.error && !/live_dataset/.test(t.body) && fake.calls.length === tSent, show([t.value, tDoor]));
+  }
 
   // ── 2. The mix: the door's own typed sentence, never live_dataset, nothing sent ──
   await as(async () => {
