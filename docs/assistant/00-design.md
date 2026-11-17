@@ -528,8 +528,8 @@ was SQL (two calls, Not checked).
     filter; one with a filter through a relationship is still refused), MCP (`specEncoding`; no `aggregate` hint).
   - *Alert me* refuses a related measure, filter or term (`alertNoLinked`): an alert's subject is a bare column, which a
     metric reads at its nearest owner, unpinned. The Assistant has no other single-number answer: a KPI is not a kind.
-  - *Live:* a related measure gets the door's typed sentence (the Live join's `relatedMeasure`, `live_refused`) until the
-    Live join takes one; a related filter on Live tables of one connection is the warehouse's (the Live join applies the
+  - *Live:* a related measure is the warehouse's too (the Live join compiles the fan-in mask, `test-answerJoinsLive`
+    holds it to the door's Live chart and the copy's card); a related filter on Live tables of one connection is the warehouse's (the Live join applies the
     pinned step); a related term is refused typed `term` (`expandOne`: no Live term across a link), never `live_dataset`.
   - *The prompt:* still ONE call. The action line names `"dataset"` inside a measure or filter; the LINKED DATASETS block
     says a category, split, measure or filter (no period) may come from an entry, and that a measure there counts once per
@@ -546,7 +546,7 @@ was SQL (two calls, Not checked).
     (a measure read from Finance's dataset hides and uncounts the turn). `test-askBudget`: no query more.
 
 **Left out:** a relative period on a related date column (above); a measure naming a saved metric of a related dataset;
-the loose value match and case fix on a related filter (its value as asked); a related measure or term on Live (the
+the loose value match and case fix on a related filter (its value as asked); a related term on Live (the
 door's sentence) and a related measure, filter or term in Alert me; a split through a labelled relationship (a visual has
 no `seriesVia` either), and a model naming a labelled one for its category or measure (the block lists each dataset by its
 default path; a stored or explained spec keeps its `categoryVia` or measure `via`); a filter through a relationship (a
