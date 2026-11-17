@@ -11,12 +11,24 @@ import { closedToCaller } from '../data/rowAccess';
 import { getDatasetMeta } from '../data/datasets';
 import { opens } from '../server/authz/folderGate';
 import type { FactTableDoc } from '../ai/columnNotes';
+import { sanitizeRange, type LiveRange } from '../data/liveRange';
 
 export type TableRole = '' | 'fact' | 'dimension';
 const ROLES: readonly string[] = ['fact', 'dimension'];
 
-/** Counted over the whole table when the key was last checked. Derived, never typed by a person. */
-export interface KeyCheck { rows: number; empty: number; repeatedKeys: number; checkedAt: string }
+/**
+ * Counted over the whole table when the key was last checked — or, with `range`, over the days a Live table that
+ * requires a date range was held to (../data/liveRange). Derived, never typed by a person.
+ */
+export interface KeyCheck {
+  rows: number;
+  empty: number;
+  repeatedKeys: number;
+  checkedAt: string;
+  range?: LiveRange;
+  /** A reply's sentence for `range` (ipc/tableDocs `said`), in the reader's language; never stored (the sanitizer drops it). */
+  note?: string;
+}
 
 export interface TableDoc {
   role: TableRole;
@@ -44,7 +56,8 @@ function sanitizeKeyCheck(raw: unknown): KeyCheck | undefined {
   const o = raw as Record<string, unknown> | null;
   if (!o || typeof o !== 'object') return undefined;
   if (!count(o.rows) || !count(o.empty) || !count(o.repeatedKeys) || typeof o.checkedAt !== 'string') return undefined;
-  return { rows: o.rows, empty: o.empty, repeatedKeys: o.repeatedKeys, checkedAt: o.checkedAt.slice(0, MAX_STAMP) };
+  const range = sanitizeRange(o.range);
+  return { rows: o.rows, empty: o.empty, repeatedKeys: o.repeatedKeys, checkedAt: o.checkedAt.slice(0, MAX_STAMP), ...(range && { range }) };
 }
 
 export function sanitizeTableDoc(raw: unknown): TableDoc {
@@ -158,7 +171,8 @@ export async function tableFacts(projectId: string, datasetId: string): Promise<
   if (doc.role) out.role = doc.role;
   if (key) {
     out.key = key;
-    if (doc.keyCheck) out.keyState = doc.keyCheck.repeatedKeys > 0 ? 'repeats' : 'unique';
+    // A key unique over a range is not said to be the table's; one that repeats there repeats in the table too.
+    if (doc.keyCheck && !(doc.keyCheck.range && doc.keyCheck.repeatedKeys === 0)) out.keyState = doc.keyCheck.repeatedKeys > 0 ? 'repeats' : 'unique';
   }
   if (doc.grain) out.grain = doc.grain;
   else if (key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[key]?.displayName || key}`;

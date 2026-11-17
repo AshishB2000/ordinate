@@ -61,3 +61,8 @@ export function liveValuesNotListed(limit: string): string {
 export function liveSampleRefused(): string {
   return t('liveProfileMessages.the_columns_were_synced_but_a');
 }
+
+/** The table requires a filter on a column with no default range (an integer-range partition): no sample is guessed for it. */
+export function liveSampleNeedsFilter(column: string): string {
+  return t('liveProfileMessages.no_sample_was_read_this_table', { column });
+}

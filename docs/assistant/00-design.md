@@ -373,7 +373,12 @@ partition key that may stop the warehouse skipping data. Two parts are built
   question that already filters the column (its own filter, a lock or a base filter) is left alone, and
   so is a table with no such fact. The facts are records only: no warehouse call. A lookup takes the
   same range (`lookupRequired`): the case fix, and the latest-day probe, whose card then carries the
-  sentence and never says a day it found for a period that starts after the range. An ingestion-time
+  sentence and never says a day it found for a period that starts after the range. The two readers whose
+  result is STORED, the key check ("Check now") and the schema sync's sample, read inside the range too and store its
+  days beside the result (`range`, `src/data/liveRange.ts`); the About tab's key line and the Schema tab's sample line
+  say the same sentence, the Assistant's facts say the sample is "of the last 12 months" with its days, and a key unique
+  over the range is told to the Assistant, and shown on the Data model overview, as not checked rather than unique. An
+  ingestion-time
   BigQuery table (`_PARTITIONTIME`, a table source only) gets the range as a TIMESTAMP base filter on the
   table scan, in every statement shape (checked against BigQuery's rules, and run against a real table by the
   warehouse nightly once its scratch dataset is set: `docs/live-data/log.md`, 2026-11-16); a required
@@ -1093,8 +1098,8 @@ source table can answer, a question needing an undefined link, and a question on
   doesn't hurt pruning on a given warehouse, leave that dialect alone. Lookups and partitions that are
   not a declared date: answered (`docs/live-data/log.md`, 2026-11-16). The answers' case fix and the
   latest-day probe carry the required range; BigQuery's `_PARTITIONTIME` gets it as a TIMESTAMP base
-  filter; a required integer-range partition refuses an unfiltered question, naming the column. Not
-  covered yet: the key check ("Check now") and the schema sync's profile and probes still read the
-  whole table, so BigQuery refuses them on a table that requires a partition filter (a typed failure).
+  filter; a required integer-range partition refuses an unfiltered question, naming the column. The key check and
+  the schema sync's sample: answered (`docs/live-data/log.md`, 2026-11-16, "Required ranges on the stored readers").
+  Not covered yet: the Assistant's link card counts a Live key (`answerLink.keyCounts`) over every row.
 - **Folders and `/p/` links (phase E).** A published dashboard keeps working for its audience;
   whether moving its folder should warn about published links too.

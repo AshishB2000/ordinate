@@ -260,6 +260,8 @@ describe('About tab: an editor', () => {
       [counts(1_200, { rows: 9_000 }), 'Key line_id · 1,200 values repeat · checked Oct 3'],
       [counts(0, { empty: 1, checkedAt: '2025-12-24T12:00:00Z' }), 'Key line_id · unique · 1 row has no key · checked Dec 24, 2025'],
       [counts(2, { empty: 3, checkedAt: new Date().toISOString() }), 'Key line_id · 2 values repeat · 3 rows have no key · checked today'],
+      // A Live table that requires a date range: the count is that range's, and the server's sentence says so.
+      [counts(1, { range: { from: '2024-03-01', to: '2025-02-28' }, note: 'Last 12 months: this table needs a date range' }), 'Key line_id · 1 value repeats · Last 12 months: this table needs a date range · checked Oct 3'],
     ];
     for (const [keyCheck, text] of cases) {
       renderTab({ [GET]: reply(doc({ key: 'line_id', keyCheck })) });

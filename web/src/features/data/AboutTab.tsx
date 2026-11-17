@@ -59,6 +59,7 @@ function keyCounts(key: string, c: KeyCheck): { text: string; unique: boolean; w
   const unique = c.repeatedKeys === 0;
   const parts = [`Key ${key}`, unique ? 'unique' : plural(c.repeatedKeys, 'value repeats', 'values repeat')];
   if (c.empty > 0) parts.push(`${plural(c.empty, 'row has', 'rows have')} no key`);
+  if (c.note) parts.push(c.note); // counted over the date range a Live table requires, not every row
   const on = dayOf(c.checkedAt);
   return { text: parts.join(' · '), unique, when: on ? `checked ${on}` : '' };
 }

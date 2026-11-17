@@ -4,6 +4,8 @@
 // An extract is counted by SQL over its Parquet (engine/keyCheckResident.ts) with the JS reference
 // (analysis/keyCheck.ts) behind it. A Live dataset is counted ONLY here, on "Check now": one statement
 // through `liveLookup` — its budget, daily limit, timeout and typed failure. A key save never asks the warehouse.
+// On a table that requires a date range (engine/live/liveDateRange) the count is held to it and stored with its days,
+// and a reply says so in the figures' sentence; a required column with no default range is said, and nothing counted.
 //
 // When a dataset's rows change (`afterTableData`, riding the quality hook) the key is counted again and every
 // relationship into the dataset is re-verified, its stored warning with it.
@@ -17,7 +19,7 @@ import { isRowPolicyError } from '../data/rowAccess';
 import { getTableDoc, readableTableDoc, setTableDoc, writeKeyCheck } from '../app/tableDocs';
 import type { TableDoc, TablePatch } from '../app/tableDocs';
 import { hierarchyProblem } from '../app/hierarchies';
-import { keyCheckFailed, keyNotAColumn, noKeyToCheck, tableNotesNotRead, tableNotesNotSaved } from '../app/tableDocMessages';
+import { keyCheckFailed, keyCheckNeedsFilter, keyNotAColumn, noKeyToCheck, tableNotesNotRead, tableNotesNotSaved } from '../app/tableDocMessages';
 import { logger } from '../app/logger';
 import { listRelationships, relWarning, updateRelationships } from '../analysis/relationships';
 import type { RelWarning, Relationship } from '../analysis/relationships';
@@ -27,6 +29,8 @@ import type { KeyCheckCounts } from '../analysis/keyCheck';
 import { keyCheckResident } from '../engine/keyCheckResident';
 import { compileKeyCheck } from '../engine/live/compile';
 import { liveLookup } from '../engine/live/liveQuery';
+import { lookupRequired, requiredRangeNote } from '../engine/live/liveDateRange';
+import type { LiveRange } from '../data/liveRange';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import * as trace from '../engine/residentTrace';
 
@@ -72,17 +76,33 @@ export async function runKeyCheck(projectId: string, datasetId: string): Promise
   if (!meta.columns.some((c) => c.name === key)) return { ok: false, error: keyNotAColumn(key) };
   let counts: KeyCheckCounts | null;
   let checkedAt = new Date().toISOString();
+  const held: { range?: LiveRange; needs?: string } = {};
   if (isLive(meta)) {
-    const r = await liveLookup(projectId, datasetId, (t) => compileKeyCheck(key, t.env));
-    if (!r.ok) return { ok: false, error: r.error, code: r.code };
+    // What its table requires (../engine/live/liveDateRange): the count is held to that range and stored with it; a
+    // required column with no default range skips it, never guessed.
+    const r = await liveLookup(projectId, datasetId, (t) => {
+      const need = lookupRequired(t, []);
+      if (!need.ok) {
+        held.needs = need.params.column;
+        return need;
+      }
+      if (need.range) held.range = need.range;
+      return compileKeyCheck(key, need.env, need.filters);
+    });
+    if (!r.ok) return { ok: false, error: held.needs === undefined ? r.error : keyCheckNeedsFilter(held.needs), code: r.code };
     counts = keyCheckFromRow(r.rows[0]);
     checkedAt = r.asOf.at;
   } else {
     counts = await extractCounts(projectId, datasetId, key);
   }
   if (!counts) return { ok: false, error: keyCheckFailed() };
-  const table = await writeKeyCheck(projectId, datasetId, key, { ...counts, checkedAt });
+  const table = await writeKeyCheck(projectId, datasetId, key, { ...counts, checkedAt, ...(held.range && { range: held.range }) });
   return { ok: true, table: table ?? (await getTableDoc(projectId, datasetId)) };
+}
+
+/** The doc as a channel replies it: a key check held to a range carries that range's sentence (the reader's language), for the screen to show beside its counts. */
+function said(doc: TableDoc): TableDoc {
+  return doc.keyCheck?.range ? { ...doc, keyCheck: { ...doc.keyCheck, note: requiredRangeNote() } } : doc;
 }
 
 /** A refusal the route types (a Live dataset, a row lock) passes through; everything else is the handler's to say. */
@@ -189,7 +209,7 @@ interface Args { projectId?: unknown; datasetId?: unknown; patch?: TablePatch }
 export function register(): void {
   ipcMain.handle('catalog:getTable', async (_e, { projectId, datasetId }: Args = {}) => {
     try {
-      return { ok: true, table: await readableTableDoc(str(projectId), str(datasetId)) };
+      return { ok: true, table: said(await readableTableDoc(str(projectId), str(datasetId))) };
     } catch (err) {
       return failure(err, tableNotesNotRead());
     }
@@ -214,7 +234,7 @@ export function register(): void {
         if (table.key) table = await countedAfterSave(p, d, table);
         await recheckRelationshipsTo(p, d);
       }
-      return { ok: true, table };
+      return { ok: true, table: said(table) };
     } catch (err) {
       return failure(err, tableNotesNotSaved());
     }
@@ -222,7 +242,8 @@ export function register(): void {
 
   ipcMain.handle('catalog:checkKey', async (_e, { projectId, datasetId }: Args = {}) => {
     try {
-      return await runKeyCheck(str(projectId), str(datasetId));
+      const r = await runKeyCheck(str(projectId), str(datasetId));
+      return r.ok ? { ok: true, table: said(r.table) } : r;
     } catch (err) {
       return failure(err, keyCheckFailed());
     }

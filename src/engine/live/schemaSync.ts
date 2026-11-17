@@ -60,6 +60,9 @@ import type { ProfileFigures } from './profileSql';
 import { compileProfile, compileSamplingKeyProbe, profiledColumns, samplePercent, sampleRowsFor, samples, shapeProfile } from './profileSql';
 import type { LiveFilter } from './liveSpec';
 import { baseOfLive } from './liveBase';
+import { dateFactsOf, lookupRequired, requiresOf, type Requires } from './liveDateRange';
+import * as connections from '../../connectors/connections';
+import type { LiveRange } from '../../data/liveRange';
 import { logger } from '../../app/logger';
 import { syncSemantic } from './semantic/semanticSync';
 
@@ -72,9 +75,12 @@ export interface SampleFailure {
   error: string;
   /** `tooCostly`: the estimate, in bytes. */
   bytes?: number;
+  /** `requiredFilter`: the column the table requires a filter on, with no default range. */
+  needs?: string;
 }
 
-export type SampleOutcome = { ok: true; rows: number; method: 'sample' | 'limit' } | SampleFailure;
+/** `range`: the days the sample was held to, its table requiring a date range (./liveDateRange). */
+export type SampleOutcome = { ok: true; rows: number; method: 'sample' | 'limit'; range?: LiveRange } | SampleFailure;
 
 export interface SyncReport {
   ok: true;
@@ -182,20 +188,36 @@ async function attempt(t: LiveTarget, env: CompileEnv, plan: SamplePlan, signal:
  *
  * The base filters are the dataset's (D13), adapted against the columns just
  * read; their columns are always among those profiled (`profiledColumns`).
+ *
+ * A TABLE THAT REQUIRES A DATE RANGE (./liveDateRange `lookupRequired`) is
+ * read inside it, LIMIT only: an engine's sample clause samples every
+ * partition, and BigQuery's percent is the whole table's. The range's days are
+ * stored with the profile. A required column with no default range skips the
+ * sample, typed, naming it. `req` is read against the columns just read, never
+ * the stored ones: a required column added now is held to its range at once.
  */
 async function sampleProfile(
   t: LiveTarget,
+  req: Requires,
   columns: DeclaredColumn[],
   base: LiveFilter[],
   rowEstimate: number | undefined,
   signal: AbortSignal,
 ): Promise<{ outcome: SampleOutcome; figures?: ProfileFigures }> {
-  const cols = profiledColumns(columns.map((c) => ({ name: c.name, type: c.type, sourceType: c.sourceType })), base);
+  const need = lookupRequired({ ...req, env: base.length ? { ...t.env, base } : t.env }, []);
+  if (!need.ok) {
+    trace.recordLive(opOf(t), 'refused');
+    const needs = need.params.column ?? '';
+    return { outcome: { ok: false, code: 'live_refused', reason: need.code, error: msg.liveSampleNeedsFilter(needs), needs } };
+  }
+  const held = [...(need.env.base ?? []), ...need.filters]; // the base filters, then the partition time and the required date ranges
+  const cols = profiledColumns(columns.map((c) => ({ name: c.name, type: c.type, sourceType: c.sourceType })), held);
   const env: CompileEnv = { dialect: t.dialect, source: t.source, columns: cols };
-  if (base.length) env.base = base;
-  let plan: SamplePlan = { rows: sampleRowsFor(cols.length) };
+  if (held.length) env.base = held;
+  const range = need.range;
+  let plan: SamplePlan = range ? { rows: sampleRowsFor(cols.length), limitOnly: true } : { rows: sampleRowsFor(cols.length) };
   try {
-    if (t.source.kind === 'table') {
+    if (t.source.kind === 'table' && !range) {
       const percent = samplePercent(plan.rows, rowEstimate);
       if (percent !== undefined) plan.percent = percent;
       const probe = compileSamplingKeyProbe(env);
@@ -220,7 +242,7 @@ async function sampleProfile(
     }
     if (!('figures' in got)) return got;
     trace.recordLive(opOf(t), 'warehouse');
-    return { outcome: { ok: true, rows: got.figures.rows, method: samples(env, plan) ? 'sample' : 'limit' }, figures: got.figures };
+    return { outcome: { ok: true, rows: got.figures.rows, method: samples(env, plan) ? 'sample' : 'limit', ...(range && { range }) }, figures: got.figures };
   } catch (err: unknown) {
     return { outcome: callFailure(t, err) };
   }
@@ -228,6 +250,7 @@ async function sampleProfile(
 
 function skipOf(f: SampleFailure): SampleSkip {
   if (f.reason === 'tooCostly') return 'tooCostly';
+  if (f.needs !== undefined) return 'needsFilter';
   return f.code === 'live_refused' ? 'refused' : 'failed';
 }
 
@@ -254,6 +277,7 @@ function nextProfile(
       sampledAt: now,
       sampleRows: sampled.figures.rows,
       method: sampled.outcome.method,
+      ...(sampled.outcome.range && { range: sampled.outcome.range }),
       columns: columns.map((d) => {
         const f = byName.get(d.name);
         const c: LiveColumnProfile = { name: d.name };
@@ -274,9 +298,11 @@ function nextProfile(
     }),
   };
   if (!sampled.outcome.ok) out.skipped = skipOf(sampled.outcome);
+  if (!sampled.outcome.ok && sampled.outcome.needs !== undefined) out.needs = sampled.outcome.needs;
   if (prev?.sampledAt) out.sampledAt = prev.sampledAt;
   if (prev?.sampleRows !== undefined) out.sampleRows = prev.sampleRows;
   if (prev?.method) out.method = prev.method;
+  if (prev?.range) out.range = prev.range; // the kept figures' own range
   return out;
 }
 
@@ -328,8 +354,11 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
   // sample, typed (the last sync's figures are kept), and the columns still sync.
   const based = baseOfLive(t.live, next);
   if (!based.ok) trace.recordLive(opOf(t), 'refused');
+  // What its tables require, of the columns just read (./liveDateRange): records only, no warehouse call.
+  const conn = await connections.getConnection(projectId, origin.connId);
+  const req = requiresOf(await dateFactsOf(projectId, origin, conn ?? undefined, next), t.dialect, t.source);
   const sampled = based.ok
-    ? await sampleProfile(t, next, based.base, read.rowEstimate, signal)
+    ? await sampleProfile(t, req, next, based.base, read.rowEstimate, signal)
     : { outcome: { ok: false as const, code: 'live_refused' as const, reason: based.code, error: based.message } };
   if (signal.aborted) return { ok: false, code: 'live_cancelled', error: qmsg.liveCancelled() };
   const now = new Date().toISOString();

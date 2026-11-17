@@ -1,19 +1,24 @@
 // The About tab's calls: a dataset's role, key, grain and guide (src/ipc/tableDocs.ts,
 // src/app/tableDocs.ts). Contracts carry inputs only, so each reply is narrowed here by
-// hand. The key check's counts are the server's, counted over every row: the screen only
-// formats them. A caller row access rules restrict gets the doc without `keyCheck`.
+// hand. The key check's counts are the server's, counted over every row (or over the date
+// range a Live table requires, which `note` says): the screen only formats them. A caller
+// row access rules restrict gets the doc without `keyCheck`.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { okOr, useWrite, type Fail, type Relationship } from './api';
 
-/** Counted over the whole table when the key was last checked (src/app/tableDocs.ts KeyCheck). */
+/** Counted over the whole table when the key was last checked, or over `range` (src/app/tableDocs.ts KeyCheck). */
 export interface KeyCheck {
   rows: number;
   empty: number;
   /** Distinct non-empty keys seen on two or more rows. */
   repeatedKeys: number;
   checkedAt: string;
+  /** The days a Live table's required date range held the count to. Absent: every row. */
+  range?: { from?: string; to?: string };
+  /** The server's sentence for `range` ("Last 12 months: this table needs a date range"). */
+  note?: string;
 }
 
 export type TableRole = '' | 'fact' | 'dimension';

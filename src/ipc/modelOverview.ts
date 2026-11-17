@@ -27,7 +27,10 @@ export interface ModelTable {
   datasetId: string;
   role: TableRole;
   key: string;
-  /** '' = no key; unchecked = never counted, or the count is hidden from this caller. */
+  /**
+   * '' = no key; unchecked = never counted, the count is hidden from this caller, or it found no repeats only within the
+   * date range a Live table requires (`keyCheck.range`): unique there is not unique in the table. Repeats there repeat in it.
+   */
   keyState: '' | 'unchecked' | 'unique' | 'repeats';
   /** The catalog record doc's (`dataset:<id>`). */
   description: string;
@@ -92,7 +95,7 @@ export async function modelOverview(projectId: string): Promise<{ tables: ModelT
       datasetId: d.id,
       role: doc?.role ?? '',
       key,
-      keyState: !key ? '' : !check ? 'unchecked' : check.repeatedKeys > 0 ? 'repeats' : 'unique',
+      keyState: !key ? '' : !check ? 'unchecked' : check.repeatedKeys > 0 ? 'repeats' : check.range ? 'unchecked' : 'unique',
       description,
       alwaysApplied: { kind: live ? 'live' : 'prepare', steps: redactBaseFilters(filters, closed) }, // the one REDACT of a filter list (PR 08)
       calculated: calcs.map((s) => ({ name: s.name, formula: closed ? '' : s.expression })),

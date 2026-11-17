@@ -24,6 +24,7 @@
 
 import type { ParsedColumn } from './parse';
 import type { DatasetMeta } from './datasets';
+import { sanitizeRange, type LiveRange } from './liveRange';
 
 /** Sample values kept per low-cardinality text column. */
 export const PROFILE_SAMPLE_VALUES = 20;
@@ -46,9 +47,12 @@ const MAX_MISSING = 200;
 const MAX_NAME = 512;
 const MAX_TYPE = 200;
 
-/** Why a sync read no sample: too costly by the estimate, the warehouse failed, or a limit refused it. */
-export type SampleSkip = 'tooCostly' | 'failed' | 'refused';
-const SKIPS: ReadonlySet<string> = new Set<SampleSkip>(['tooCostly', 'failed', 'refused']);
+/**
+ * Why a sync read no sample: too costly by the estimate, the warehouse failed, a limit refused it, or the table
+ * requires a filter on a column with no default range (`needs`).
+ */
+export type SampleSkip = 'tooCostly' | 'failed' | 'refused' | 'needsFilter';
+const SKIPS: ReadonlySet<string> = new Set<SampleSkip>(['tooCostly', 'failed', 'refused', 'needsFilter']);
 
 /** One column as the last sync saw it. */
 export interface LiveColumnProfile {
@@ -74,6 +78,10 @@ export interface LiveProfile {
   method?: 'sample' | 'limit';
   /** The last sync read no sample, and why — the figures, if any, are an earlier sync's. */
   skipped?: SampleSkip;
+  /** `skipped: 'needsFilter'`: the required column the sample has no range for. */
+  needs?: string;
+  /** The days the sample was held to, its table requiring a date range (./liveRange). Absent: any row. */
+  range?: LiveRange;
   columns: LiveColumnProfile[];
 }
 
@@ -131,6 +139,13 @@ export function sanitizeProfile(raw: unknown): LiveProfile | undefined {
   if (rows !== undefined) out.sampleRows = rows;
   if (o.method === 'sample' || o.method === 'limit') out.method = o.method;
   if (typeof o.skipped === 'string' && SKIPS.has(o.skipped)) out.skipped = o.skipped as SampleSkip;
+  if (out.skipped === 'needsFilter') {
+    const needs = nameOf(o.needs);
+    if (needs) out.needs = needs;
+    else out.skipped = 'refused'; // no column to name: said as a refused sample
+  }
+  const range = sanitizeRange(o.range);
+  if (range) out.range = range;
   return out;
 }
 
