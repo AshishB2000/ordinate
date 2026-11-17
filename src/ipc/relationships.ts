@@ -34,6 +34,8 @@ import { fanOutReads } from './vizFanOut';
 import { fanOutMetricReads } from './metricFanOut';
 import { manySideColumnGroups } from '../analysis/fanOutPlan';
 import { liveLinkStats } from './linkLive';
+import { isLive } from '../data/liveDataset';
+import { liveJoinMixed } from '../engine/liveRefusals';
 
 type Infos = Map<string, DsInfo>;
 
@@ -87,6 +89,21 @@ async function residentSources(projectId: string, plan: JoinPlan): Promise<JoinS
   return out;
 }
 
+/**
+ * A copy's join that reaches a Live dataset (a copy's category from one, or a Live chart's drill-across question on a
+ * copy many side, ./vizFanOut): no one engine holds both, said typed (live_refused, related) as ./liveJoin says the
+ * Live side of it — before any table is read. Null when every table is a copy.
+ */
+async function liveInCopyJoin(projectId: string, datasetId: string, plan: JoinPlan): Promise<{ ok: false; code: 'live_refused'; reason: 'related'; error: string } | null> {
+  for (const id of planReads(plan)) {
+    const meta = await datasets.getDatasetMeta(projectId, id);
+    if (!meta || !isLive(meta)) continue;
+    const own = await datasets.getDatasetMeta(projectId, datasetId);
+    return { ok: false, code: 'live_refused', reason: 'related', error: liveJoinMixed(meta.name, own?.name ?? '') };
+  }
+  return null;
+}
+
 async function hydrate(projectId: string, plan: JoinPlan): Promise<Map<string, TableData> | null> {
   const out = new Map<string, TableData>();
   for (const t of plan.tables) {
@@ -107,7 +124,7 @@ function hasRefs(encoding: VizEncoding): boolean {
  * Same reply shape as `ipc/visuals.vizDataFor`, which calls this first.
  */
 /** The join a chart's question needs (analysis/joinPlan resolveVizJoin), or null when it needs none. */
-async function vizJoin(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) {
+export async function vizJoin(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
   if (list.length === 0 && !hasRefs(encoding) && !(filters || []).some((f) => f && (f.via || f.datasetId))) return null; // a via or a term's other-table filter is refused, not skipped
   const infos = await modelInfos(projectId, datasetId, list);
@@ -140,6 +157,8 @@ export async function joinedVizDataFor(
   const { infos, join } = vj;
   if (!join.ok) return join.error === termNoJoinHere() ? termRefusal(new TermNotExpandedError('unreachable', join.error)) : { ok: false, error: join.error };
   const j = join.value;
+  const live = await liveInCopyJoin(projectId, datasetId, j.plan);
+  if (live) return live;
 
   const sources = await residentSources(projectId, j.plan);
   if (sources) {

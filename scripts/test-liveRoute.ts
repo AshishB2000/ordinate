@@ -327,7 +327,8 @@ function sameChart(label: string, ext: Reply, live: Reply): void {
     await fxStore.setColumnCurrency(P, X, 'amt', null);
   });
 
-  // A filter that only a relationship could answer: joins are L4.
+  // A filter that only a relationship to a COPY could answer: no one engine holds both (a link between Live datasets on
+  // one connection is asked of that warehouse: scripts/test-liveJoins.ts).
   const zones = await H.as(ORG_A, () => H.datasets.saveDataset(P, {
     name: 'Zones', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'zone', type: 'text' }],
     rows: [['North', 'Z1'], ['South', 'Z1'], ['East', 'Z2'], ['West', 'Z2']],

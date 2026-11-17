@@ -1593,3 +1593,90 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
   Schema tab's sample line say the range; the "Use Count" hint is not offered for a ranged unique key.
 - **Not covered:** the Assistant's link card counts a Live key (`answerLink.keyCounts`) over every row. UNVERIFIED on a
   real warehouse: the ranged sample's shape on BigQuery (the pseudo-column on the aliased scan, as the compiler's).
+
+## 2026-11-16 — Live charts across a saved link (L4, joins on one connection)
+
+(00-plan.md L4, "Joins across datasets"; the Assistant's link card, docs/assistant/00-design.md, saves the links this
+follows.)
+
+- **What works.** A Live chart's category, split and filters may come from related datasets through saved
+  relationships (`categoryDatasetId`, `categoryVia`, `seriesDatasetId`, a filter's `via` or a bare column a related
+  table has) when EVERY table in the chain is Live on the primary's connection. The plan is the copy's:
+  `joinPlan.resolveVizJoin` over metadata (`ipc/relationships` `vizJoin`; nothing is hydrated), so hops walk many →
+  one only, and a reverse hop is refused in the copy's own sentence. A chart whose measure sits on a MANY side is
+  drill-across, as on copies: `vizDataForUnlocked` now asks `fanOutVizData` before the Live split, and each per-table
+  question comes back through the door and across its link in the warehouse (lined up by label, nothing summed here);
+  a drill-across the planner refuses is said in its sentence, typed `live_refused` (`related`) when the chart is Live.
+  KPIs keep their order (`fanOutMetricFor` after the Live split): a KPI across a link is still refused, so a dashboard
+  filter on a related column answers on a Live chart and refuses on a Live KPI tile.
+- **Refused, typed `live_refused`, nothing sent:** a related dataset that is a copy (*This chart can't use Customers
+  copy with Orders: Orders is Live, …*), or Live on another connection (*…they are Live on different connections, and
+  no one warehouse holds both tables…*), both reason `related`, so the door's older test for a copy's filter still
+  reads the same code; a measure on a related ("one") table (`relatedMeasure`: joinJs's fan-in mask has no SQL twin
+  here yet); a link whose key is a number on one side and text on the other (`joinKeyTypes`: joinJs matches
+  `String(7)` with `'7'`, which SQL has no portable spelling of); a semantic dataset on either side. The same mix
+  reached from a COPY (a copy's category from a Live dataset, or a Live chart's drill-across question on a copy many
+  side) is said in the same sentence by the copy's join (`ipc/relationships` `liveInCopyJoin`), before any table is
+  read — not the safety net's 409 `live_dataset` it met before.
+- **The statement** (`engine/live/compileJoin.ts`). The join stands where the dataset's FROM item would: ONE derived
+  table aliased `lv_src`, each merged column re-exposed positionally (`lv_c<i>`, read through `Ctx.ref`), so
+  `compileChart`, both probes and `compileMetric` run unchanged over it (joinResident's trick, in the warehouse). Each
+  table's scan is `prepare` + `whereOf` on that dataset's own env, into the statement's one sink: its base filters,
+  calcs and `_PARTITIONTIME` innermost, then its lock and required range. The question's filters on PRIMARY columns go
+  inside the primary's scan (its rows are 1:1 with the join's, and the warehouse prunes its partitions); a filter on a
+  related column stays outside, on the joined cell, as joinJs reads it. A table the statement reads nothing from (nor
+  through) is left out. ClickHouse statements over a join end `SETTINGS join_use_nulls = 1` (an unmatched row reads
+  NULL, not the type's default), as Live SQL's printer does; a statement with no join is byte-identical to before.
+  `compileCaseMatches` and `compileKeyCheck` moved to `compileLookups.ts` (compile.ts's size), unchanged, re-exported.
+- **joinJs's rules, in SQL.** (1) Keys: `profileSql.keyOf` per side, NULL when null, '' or JS whitespace (a number
+  column: no finite number), so an empty key matches nothing on either side; text compared as bytes (`binary`), numbers
+  as doubles (String(n) is one-to-one on finite doubles), −0 folded into 0 in the key itself so the two share one
+  partition and match once. BigQuery's PARTITION BY takes no float (its data-types reference: "PARTITION BY expressions
+  can't include floating point types"), so there a number key partitions by `FORMAT('%.17g', key)`, its round-trip
+  text, one-to-one on finite doubles; the ON still compares the doubles. (2) One row per hop: the "one" side is cut to one
+  row per non-NULL key before the LEFT JOIN (`row_number() … = 1`), so no primary row ever repeats, whatever the
+  warehouse holds. (3) No fan-in mask is needed: related measures are refused (above). A hop after one that found
+  nothing finds nothing; a key with no match reads the blank category, folded with the empty ones, as a copy shows it.
+- **A named divergence: the pick.** joinJs keeps the FIRST row of a repeated key in file order; a warehouse has no file
+  order, so Live keeps the row SMALLEST by the columns the statement reads from that table, in declared order (NULL last,
+  text by its bytes; Redshift/Postgres's `binary` is an md5, still one row), then its onward keys. Rows that tie read the
+  same to every reader, so the pick is deterministic. Where a key's rows agree (an exact duplicate) Live and a copy are
+  `Object.is`; where they disagree on a column read, they may show different rows. Pinned by `test-liveJoins`: Live
+  equals joinJs over that table with the smallest row first, and differs from joinJs in file order (the divergence is
+  real). Two charts reading different columns of a dirty key may pick different rows; a copy would not.
+- **Both sides protected.** The chart door is unchanged: `lockedViz` refuses a locked caller whose question reaches
+  another dataset, and a related dataset closed to the caller (a publish's fan-out build: any with rules), before the
+  body, as for copies; the column gate reads every table the plan reads (`chartReads`). Below it, `ipc/liveJoin` takes
+  `withLockOf` on each related table, nested ('figures', its question the columns read there), and compiles any lock
+  into that table's scan, as `ipc/linkLive` does; each related table takes the range its table requires inside its scan
+  (`lookupRequired`), the primary its own from the question (`withRequiredRange`), and the chart says so.
+- **Cache and budget.** `liveLookup`'s second target is now `alsoOf(t, others)`, shared with `ask`: every other table's
+  epoch and schema in the `orgKey` key, the lowest cache age, every id among the entry's dependencies. One question is
+  one statement on a text axis (bins and an auto grain add their probe, as any Live chart), counted once by the daily
+  limit under the primary, through `warehouse()`.
+- **Tests.** `test-liveJoins` (new, 45 checks): nine charts — a related category, a related split, a labelled link, two
+  hops, a related filter (`!=` keeps unmatched rows), a related number's bins and a related date's auto grain (each with
+  its probe), `in` with nulls plus a primary filter inside the scan, avg and count — and drill-across, each `Object.is`
+  between Live, the copy's door (joinResident) and joinJs over the copies' rows, on rows carrying a repeated identical
+  key, NULL, '' and whitespace keys on both sides, unmatched keys, `C1` beside `c1`, number keys and a NULL one-side key;
+  the pick and its divergence; NEGATIVE CONTROLS: without the one-row cut the repeat doubles its rows; a copy and a second
+  connection refuse and send nothing; a related measure, a reverse hop (the copy's sentence) and mixed key types refuse;
+  a lock on the related side equals joinJs over its locked rows (control: no lock); one statement counted once under the
+  primary, a cache hit, a related Refresh and a related cache age of 0 each asking again (control: back to 300, a hit);
+  a drill-across the planner refuses, typed; a copy's join reaching a Live dataset, both ways, typed with nothing sent
+  or hydrated (control: two copies);
+  a related table's required range inside its scan, said (control: before the fact); no Live dataset hydrated.
+  `test-liveCompile` (+ `liveCompileJoins.ts`): each dialect's joined FROM item as golden, its placeholders in order,
+  SETTINGS on ClickHouse only (control: the same chart unjoined has none), a number key's partition per dialect (the
+  −0 fold; BigQuery by its text), a related bins probe through the join, a
+  statement reading no related column joins nothing, which filter goes inside which scan. `test-liveSafetyNet`: a chart
+  across a link answers live, refuses typed with its connection gone and on a semantic dataset, and answers on the
+  extract (§4). `test-rowPolicyLiveJoins` (new, DATABASE_URL only, 8 checks): a team viewer with rules on the related
+  Live table is refused `related`, as the copy's twin; NEGATIVE CONTROL: with the related gate off, `withLockOf` puts
+  their lock in its scan (joinJs over their rows only) while the editor gets every row; a hidden related column read as
+  the category is refused `hidden`, as the copy's (control: the editor). `test-liveBaseCompile`'s inventory counts `compileLookups.ts` ×2 and `compile.ts` ×5 (the move).
+- **Not verified on a real engine.** No warehouse nightly has run the joined statement: `row_number()` with a binary
+  ORDER BY (Snowflake `TO_BINARY`, BigQuery `BYTES`, Databricks `BINARY`), ClickHouse's multi-hop `LEFT JOIN … ON` over a
+  previous join's column, and whether BigQuery treats the related table's partition filter inside its scan as pruning.
+  Still refused: a KPI across a link (`liveCardMetric` keeps `related`), an AI answer's (the Assistant's chart form,
+  its own change), a related measure.

@@ -1,5 +1,5 @@
 // `vizDataFor`'s body behind the doors (./rowDoors, ./columnDoors): a saved metric measure through the door
-// again, the Live split, many-side measures (./vizFanOut), then the answer cache over `computeVizData` — MAIN PROCESS. Moved out of
+// again, many-side measures (./vizFanOut), the Live split, then the answer cache over `computeVizData` — MAIN PROCESS. Moved out of
 // ./visuals.ts (its size cap) unchanged. The circular import with ./visuals is resolved at call time.
 
 import * as answerKey from '../data/answerKey';
@@ -24,10 +24,14 @@ export async function vizDataForUnlocked(
   // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures); a snapshot pivot and part 5's shapes refuse.
   const planned = await planMetricMeasures(projectId, datasetId, encoding, opts.params);
   if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts), { projectId, datasetId, opts }) : planned;
+  // Many-side measures: one question per table (./vizFanOut), each through this door again — a Live table's to its warehouse,
+  // its category across the link there (L4) — before the Live split and the answer cache.
+  const fanned = await fanOutVizData(projectId, datasetId, encoding, filters, (d, e, f) => vizDataFor(projectId, d, e, f, opts));
+  // A Live chart's refusal is typed, as every Live door's is (the planner's own sentence, reason `related`).
+  if (fanned) return fanned.ok || fanned.code || !(await liveMetaOf(projectId, datasetId)) ? fanned : { ...fanned, code: 'live_refused', reason: 'related' };
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below, which would outlive its cache age.
   const live = await liveMetaOf(projectId, datasetId);
   if (live) return liveChart(projectId, live, encoding, filters);
-  const fanned = await fanOutVizData(projectId, datasetId, encoding, filters, (d, e, f) => vizDataFor(projectId, d, e, f, opts)); if (fanned) return fanned; // many-side measures: one question per table (./vizFanOut), before the answer cache
   await ensureFresh(projectId, [datasetId]); // L3.1 fresh on ask: before the cache key reads the record
   // The answer cache (engine/queryCache): a dashboard re-open, a type switch in
   // the builder or a tab coming back asks the same question over unchanged

@@ -23,7 +23,8 @@
 //   - an "as of" read: the warehouse answers now, and a Live dataset keeps no
 //     snapshots to read the past from;
 //   - currency conversion (./fxQuery): the warehouse would sum unconverted amounts;
-//   - a column or filter reached through a relationship: joins are L4.
+//   - a column or filter reached through a relationship to a copy, or to a Live dataset on another connection, and a
+//     measure on a related table (./liveJoin): a join of Live datasets on ONE connection is asked of that warehouse (L4).
 // LOD and parameter replay cannot arise — both live in prepare steps, and a
 // Live dataset has none — and pivots, cohorts, funnels, drivers, maps, facets
 // and raw points are the adapter's own refusals (engine/live/liveSpec.ts).
@@ -46,6 +47,7 @@ import { fxContext, fxVizContext } from './fxQuery';
 import type { VizDataReply } from './visuals';
 import { isCountLike } from '../data/aggregations';
 import { externalsOf, layerFailure, mirrorsOf, relabelled } from './semanticFigures';
+import { liveJoinOf, liveJoinedChart } from './liveJoin';
 
 /** The dataset's metadata when it is Live, else null — one metadata read, no rows. */
 export async function liveMetaOf(projectId: string, datasetId: string): Promise<DatasetMeta | null> {
@@ -89,9 +91,12 @@ export async function liveChart(projectId: string, meta: DatasetMeta, encoding: 
   const enc = encoding || ({} as VizEncoding);
   // A semantic dataset's mirror measure is read by its id; its `column` is only its name (Explore's label), no field.
   const names = [enc.category, enc.series, ...(enc.values || []).map((v) => v && !(meta.live?.semantic && v.metricId) ? v.column : ''), ...(filters || []).map((f) => f && f.column)];
-  const pre = await preRefusal(projectId, meta, names.filter((n): n is string => typeof n === 'string'),
+  // A field or filter through a relationship (L4, ./liveJoin): the join plans its names, so none of them is "foreign" below.
+  const joined = await liveJoinOf(projectId, meta, enc, filters);
+  const pre = await preRefusal(projectId, meta, joined ? [] : names.filter((n): n is string => typeof n === 'string'),
     async () => !!(await fxVizContext(projectId, meta.id, encoding, filters)));
   if (pre) return meta.live?.semantic && pre.reason === 'related' ? layerFailure(meta, 'related') : pre;
+  if (joined) return joined.ok ? liveJoinedChart(projectId, joined) : joined.reply;
   // A semantic dataset's measures name its mirror metrics (part 7 b2): each asked by its layer name, its series by its own.
   const mirrors = meta.live?.semantic ? await mirrorsOf(projectId, meta.id, (enc.values || []).map((v) => v && v.metricId)) : null;
   const r = await liveVizData(projectId, meta.id, encoding, filters, mirrors ? { mirrors: externalsOf(mirrors) } : {});

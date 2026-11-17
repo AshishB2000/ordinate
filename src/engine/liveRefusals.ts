@@ -175,3 +175,23 @@ export function liveCalcTooLarge(): string {
 export function liveRequiredFilter(column: string): string {
   return t('liveRefusals.this_table_needs_a_filter_on', { column });
 }
+
+/** A Live chart across a link that pairs a number column with a text one (engine/live/compileJoin): a copy matches the two by their text. */
+export function liveJoinKeyTypes(column: string): string {
+  return t('liveRefusals.a_live_chart_can_t_follow', { column });
+}
+
+/** A measure from a related dataset on a Live chart (ipc/liveJoin): each related row would have to be counted once per group. */
+export function liveRelatedMeasure(): string {
+  return t('liveRefusals.a_measure_from_a_related_dataset');
+}
+
+/** A Live chart that reads a copy through a link (ipc/liveJoin): no one engine holds both tables. */
+export function liveJoinMixed(live: string, copy: string): string {
+  return t('liveRefusals.this_chart_can_t_use_with', { copy, live });
+}
+
+/** A Live chart that reads a Live dataset on another connection through a link (ipc/liveJoin): no one warehouse holds both tables. */
+export function liveJoinApart(live: string, other: string): string {
+  return t('liveRefusals.this_chart_can_t_use_with_2', { other, live });
+}

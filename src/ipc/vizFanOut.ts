@@ -2,8 +2,9 @@
 // MAIN PROCESS (semantic layer part 8, D10–D14).
 //
 // analysis/fanOutPlan.ts splits the chart into one question per table its measures live on. Each is
-// asked of `vizDataFor`, so row access rules (each question's own door), Live (a Live many side refuses
-// `related` as any join on Live does), the answer cache and the resident-or-JS decision are whatever the
+// asked of `vizDataFor`, so row access rules (each question's own door), Live (a Live many side's question is asked
+// of its warehouse, its category across the link there when every table is Live on one connection, else refused
+// `related`: ./liveJoin), the answer cache and the resident-or-JS decision are whatever the
 // door already does for a plain chart on that table. The replies are lined up by label (./lineUp), the
 // first reply's auto grain pinned on the rest, as ./vizMetricMeasures does: nothing is summed, averaged or
 // rounded here. The tile's `notes` say which measures count their own rows and which filters reach only
