@@ -465,6 +465,7 @@ function calcLayerShapes(): void {
 
 async function main(): Promise<void> {
   goldenShapes();
+  (require('./liveCompileJoins') as typeof import('./liveCompileJoins')).joinShapes(ok, dialects.DIALECT_IDS, placeholdersInOrder); // a chart across a link (L4)
   unchanged();
   calcLayerShapes();
   await adversarial();

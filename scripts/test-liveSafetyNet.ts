@@ -11,7 +11,8 @@
 //    fake warehouse (scripts/liveFakeConnector.ts). The doors L2.4 routes —
 //    charts, KPI tiles, answers and what funnels into them (ROUTED) — must
 //    ANSWER, with a live-dated figure — and, from phase F (F3), an SQL answer's
-//    Refresh, never hydrating the record. Every other one must answer the typed
+//    Refresh, never hydrating the record (a chart across a link to a Live dataset on the same connection, L4, among
+//    them). Every other one must answer the typed
 //    refusal: HTTP 409 `live_dataset` with the catalog's sentence, or a
 //    handler's own `{ok:false, code:'live_dataset' | 'live_refused'}` (a pivot,
 //    cohort or funnel is the compiler's refusal; a picker with no list of values
@@ -100,7 +101,19 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
       origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', sql: SQL_CANARY },
     });
     if (!extract || !live || !gone || !conn) throw new Error('fixture not saved');
-    return { projectId, extract: extract.id, live: live.id, gone: gone.id, connId: conn.id };
+    // A chart across a link (L4): each dataset's region → a Regions table, Live on the same connection or a copy. The store
+    // directly: relationship:save counts the keys, which a Live dataset beside a copy cannot.
+    const ZONES: ParsedColumn[] = [{ name: 'region', type: 'text' }, { name: 'zone', type: 'text' }];
+    const zoneRows: Cell[][] = Array.from({ length: 5 }, (_, i) => [`r${i}`, i % 2 ? 'Z1' : 'Z2']);
+    await fakeMod.loadWarehouseTable('live_net_regions', ZONES, zoneRows);
+    const regions = await liveRecord.saveLiveRecord(projectId, { name: 'Regions live', columns: ZONES, origin: { kind: 'connection', connId: conn.id, table: 'live_net_regions' } });
+    const regionsCopy = await datasets.saveDataset(projectId, { name: 'Regions copy', sourceKind: 'csv', columns: ZONES, rows: zoneRows });
+    if (!regions || !regionsCopy) throw new Error('fixture not saved');
+    const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+    for (const [from, to] of [[live.id, regions.id], [gone.id, regions.id], [extract.id, regionsCopy.id]]) {
+      await rels.saveRelationship(projectId, { from: { datasetId: from, column: 'region' }, to: { datasetId: to, column: 'region' }, cardinality: 'many_to_one' });
+    }
+    return { projectId, extract: extract.id, live: live.id, gone: gone.id, connId: conn.id, regions: regions.id, regionsCopy: regionsCopy.id };
   });
   const P = seed.projectId;
   duck.forbidSyncOnMainThread();
@@ -164,7 +177,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   const enc = { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] };
   let asked = 0; // each pass verifies a question of its own: a second one by the same words is refused as taken
   /** Every channel that reads a dataset's rows, enumerated from the src/api contracts that take a dataset. */
-  const ROW_READERS = (d: string, other: string, metricId: string): [string, string, unknown][] => [
+  /** `linked`: the dataset `d`'s region links to (Live on its connection, or a copy for a copy). */
+  const ROW_READERS = (d: string, other: string, metricId: string, linked = d === seed.extract ? seed.regionsCopy : seed.regions): [string, string, unknown][] => [
     // the table view, its search and its profile
     ['table view', 'dataset:page', { projectId: P, datasetId: d, offset: 0, limit: 50 }],
     ['table search', 'dataset:page', { projectId: P, datasetId: d, offset: 0, limit: 50, search: 'r1' }],
@@ -195,6 +209,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['chart (visual:data)', 'visual:data', { projectId: P, datasetId: d, encoding: enc }],
     ['chart batch', 'visual:dataBatch', { projectId: P, items: [{ datasetId: d, encoding: enc }] }],
     ['chart preview', 'visual:preview', { projectId: P, datasetId: d, encoding: enc }],
+    ['chart across a link', 'visual:data', { projectId: P, datasetId: d, encoding: { category: 'zone', categoryDatasetId: linked, values: [{ column: 'sales', aggregation: 'sum' }] } }],
     ['pivot', 'visual:data', { projectId: P, datasetId: d, encoding: { ...enc, pivot: { rows: [{ column: 'region' }], columns: [], values: [{ column: 'sales', aggregation: 'sum' }] } } }],
     ['cohort', 'visual:data', { projectId: P, datasetId: d, encoding: { ...enc, cohort: { entity: 'customer', date: 'day', grain: 'month' } } }],
     ['event funnel', 'visual:data', { projectId: P, datasetId: d, encoding: { ...enc, eventFunnel: { entity: 'customer', event: 'region', time: 'day', steps: ['r1', 'r2'] } } }],
@@ -249,7 +264,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
    * batches over them. On the Live dataset each must ANSWER — and a figure must
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
-  const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
+  const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'chart across a link', 'KPI tile (dashboard:metric)', 'dashboard tiles',
     'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: refresh', 'answer: save as visual', 'answer: add to dashboard', 'verified save',
     'alert test: threshold', 'key check (catalog:checkKey)', 'drill down']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
@@ -613,7 +628,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ok('getDatasetMeta reads it — Live, schema only, not resident', meta?.mode === 'live' && meta.resident === false && meta.columns.length === COLUMNS.length);
     ok('residentSource is null for it (so every resident path falls through to the refusal)', (await datasets.residentSource(P, seed.live)) === null);
     const summaries = await datasets.listDatasets(P);
-    ok('listDatasets does not throw and lists all four (the semantic one too)', summaries.length === 4);
+    // the four under test (the semantic one too) and the two Regions a chart across a link reads
+    ok('listDatasets does not throw and lists all six (the semantic one too)', summaries.length === 6);
   });
 
   await app.close();

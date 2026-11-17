@@ -11,6 +11,7 @@
 // ({at: when the warehouse answered, mode: 'live', cached?, stale?}):
 //
 //   liveVizData(projectId, datasetId, encoding, filters)   ← vizDataFor (charts, publish, export)
+//   liveJoinedVizData(projectId, request)                  ← the same, across links (ipc/liveJoin, L4)
 //   liveMetric(projectId, datasetId, spec, filters)        ← metricFor / computeCardMetric (KPI tiles)
 //   liveAnswer(projectId, spec)                            ← computeCard (AI answers)
 //   liveLookup(projectId, datasetId, build)                ← computeCard's case fix (L2.4)
@@ -70,6 +71,8 @@ import type { SemanticQuery } from './semantic/semanticQuery';
 import { alignRows, answerColumns } from './semantic/semanticQuery';
 import { hiddenColumnsFor } from '../../data/rowAccess';
 import * as dateRange from './liveDateRange';
+import type { LiveJoinRequest } from './liveJoin';
+import { joinedEnv } from './liveJoin';
 
 // The one door every Live statement goes through (./liveWarehouse.ts): L2.4's
 // lookups and L2.5's profile send theirs through it too, never runLiveBound.
@@ -162,8 +165,22 @@ function agesOf(t: LiveTarget): Ages {
   };
 }
 
+/**
+ * What an answer reading OTHER Live datasets too depends on (a link's TO, ipc/linkLive; a chart's related tables,
+ * ./liveJoin): each one's epoch and schema in the key, the lowest cache age of them all, and every one's id among the
+ * entry's dependencies. With none: the target's own, today's key.
+ */
+function alsoOf(t: LiveTarget, others: readonly LiveTarget[]): { key: { with?: string[] }; ages: Ages; deps: string[] } {
+  const ages = [t, ...others].map(agesOf);
+  return {
+    key: others.length ? { with: others.flatMap((o) => [o.datasetId, String(o.live.epoch), o.live.schemaSyncedAt]) } : {},
+    ages: { lookupMs: Math.min(...ages.map((a) => a.lookupMs)), keepMs: Math.min(...ages.map((a) => a.keepMs)) },
+    deps: [t.datasetId, ...others.map((o) => o.datasetId)],
+  };
+}
+
 /** Ask the warehouse (the flight's body): every statement, then cache a real answer. */
-async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared: AbortSignal): Promise<{ outcome: LiveOutcome; at: string }> {
+async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared: AbortSignal, deps: string[]): Promise<{ outcome: LiveOutcome; at: string }> {
   let oldest = Infinity;
   const seen = (ms: number): void => {
     if (ms < oldest) oldest = ms;
@@ -188,7 +205,7 @@ async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared
   }
   // A figure is as old as its oldest statement.
   const at = new Date(Number.isFinite(oldest) ? oldest : queryCache.now()).toISOString();
-  if (outcome.ok) queryCache.set(key, { outcome, at } satisfies Answered, [t.datasetId], { maxAgeMs: ages.keepMs });
+  if (outcome.ok) queryCache.set(key, { outcome, at } satisfies Answered, deps, { maxAgeMs: ages.keepMs });
   return { outcome, at };
 }
 
@@ -220,12 +237,13 @@ function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal 
     : fail('live_failed', msg.liveWarehouseFailed());
 }
 
-/** Cache → flight → warehouse → shape, for one adapted question. */
-async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
+/** Cache → flight → warehouse → shape, for one adapted question. `others`: the other Live datasets a join reads (./liveJoin). */
+async function ask(t: LiveTarget, ir: LiveIR, others: readonly LiveTarget[] = []): Promise<Asked> {
   const op = opOf(dialectOf(t));
+  const also = alsoOf(t, others);
   const key = keyOf(t, t.semantic ? { ir, semantic: { backend: t.semantic.backend, model: t.semantic.model, base: t.semantic.env.base } } // D18
-    : { ir, source: t.source, dialect: t.dialect, base: t.env.base }); // no base: undefined, dropped — today's key
-  const ages = agesOf(t);
+    : { ir, source: t.source, dialect: t.dialect, base: t.env.base, join: t.env.join, ...also.key }); // no base, no join: undefined, dropped — today's key
+  const ages = also.ages;
   const fresh = queryCache.get<Answered>('live', key, { maxAgeMs: ages.lookupMs });
   if (fresh) {
     trace.recordLive(op, 'hit');
@@ -234,7 +252,7 @@ async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
   const signal = ctx().signal;
   let asked: { value: { outcome: LiveOutcome; at: string }; owner: boolean };
   try {
-    asked = await fly(key, signal, (shared) => answer(t, ir, key, ages, shared));
+    asked = await fly(key, signal, (shared) => answer(t, ir, key, ages, shared, also.deps));
   } catch (err: unknown) {
     return fallBack(t, key, err, signal);
   }
@@ -302,6 +320,49 @@ export async function liveVizData(projectId: string, datasetId: string, encoding
   };
 }
 
+/**
+ * A chart whose category, split or filters come from related Live datasets on the primary's connection (L4,
+ * ./compileJoin): every table's target, the joined env (./liveJoin), the primary's required range as any question
+ * of it takes one, then ONE question — cached under every table's epoch at the lowest cache age, its statements
+ * counted under the primary (`warehouse()`), as `liveVizData`'s.
+ */
+export async function liveJoinedVizData(projectId: string, req: LiveJoinRequest, opts: AdaptOpts = {}): Promise<LiveVizReply> {
+  const byId = new Map<string, LiveTarget>();
+  const ts: LiveTarget[] = [];
+  for (const tb of req.tables) {
+    if (!byId.has(tb.datasetId)) {
+      const found = await liveTarget(projectId, tb.datasetId);
+      if (!found.ok) return unavailable(found);
+      byId.set(tb.datasetId, found.target);
+    }
+    ts.push(byId.get(tb.datasetId)!);
+  }
+  const t = ts[0];
+  const j = joinedEnv(ts, req);
+  if (!j.ok) return refused(dialectOf(t), j);
+  const a = fromVizEncoding(req.encoding, req.filters, j.env.columns, opts);
+  if (!a.ok) return refused(dialectOf(t), a);
+  // The primary's merged names are its own, so its range reads the question as its own questions are read.
+  const [own, ...rest] = j.env.join.sides;
+  const r = dateRange.withRequiredRange(a.ir, { ...t, env: own.env });
+  if (!r.ok) return refused(dialectOf(t), r);
+  const env = { ...j.env, join: { ...j.env.join, sides: [{ ...own, env: r.env }, ...rest] } };
+  const asked = await ask({ ...t, env }, r.ir, [...byId.values()].filter((o) => o !== t));
+  if (!asked.ok) return asked;
+  const o = asked.outcome;
+  if (o.kind !== 'chart') return refused(dialectOf(t), refuse('badQuery'));
+  const notes = [...new Set([...r.notes, ...j.notes])];
+  return {
+    ok: true,
+    data: o.chart.data,
+    recommendedShape: recommendChartType(env.columns, req.encoding).shape,
+    warnings: a.warnings.concat(o.warnings),
+    category: o.chart.category,
+    asOf: asked.asOf,
+    ...(notes.length ? { notes } : {}),
+  };
+}
+
 /** One KPI number: `metricFor`'s question on a Live dataset. */
 export async function liveMetric(
   projectId: string,
@@ -365,10 +426,9 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   const unsaid = 'semantic' in c ? semanticRunner(t, new AbortController().signal, () => undefined).check?.(c.semantic) : null;
   if (unsaid) return refused(dialectOf(t), unsaid);
   const op = opOf(dialectOf(t));
-  const also = o ? { with: [o.datasetId, String(o.live.epoch), o.live.schemaSyncedAt] } : {};
-  const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params, ...also });
-  const [a, b] = [agesOf(t), o ? agesOf(o) : agesOf(t)];
-  const ages = { lookupMs: Math.min(a.lookupMs, b.lookupMs), keepMs: Math.min(a.keepMs, b.keepMs) };
+  const also = alsoOf(t, o ? [o] : []);
+  const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params, ...also.key });
+  const ages = also.ages;
   const at = (ms: number): string => new Date(ms).toISOString();
   const hit = queryCache.get<{ rows: LiveRows; at: number }>('live', key, { maxAgeMs: ages.lookupMs });
   if (hit) {
@@ -379,7 +439,7 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   try {
     const { value, owner } = await fly(key, signal, async (shared) => {
       const v = { rows: 'semantic' in c ? await layerRows(t, c.semantic, shared) : await warehouse(t, c.query, shared), at: queryCache.now() };
-      queryCache.set(key, v, o ? [t.datasetId, o.datasetId] : [t.datasetId], { maxAgeMs: ages.keepMs });
+      queryCache.set(key, v, also.deps, { maxAgeMs: ages.keepMs });
       return v;
     });
     trace.recordLive(op, owner ? 'warehouse' : 'hit');

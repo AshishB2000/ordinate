@@ -550,8 +550,8 @@ so it needs one engine that holds both:
   keeps it (`verified.range`, ISO days, additive: a relationship saved before has none and reads as before), the save
   reply says it (`notes`, *Last 12 months: this table needs a date range*), and the Relationships page shows it beside
   the figure (the diagram's edge label and the table: *in Nov 2025 – Oct 2026*), as does the New relationship toast. A
-  link saved there is not yet followed by a Live chart (joins across a Live connection, L4): the same answer gets the
-  linked-column refusal, as on copies.
+  link saved there is followed by a dashboard's Live chart (charts across a link on one connection, L4: docs/live-data/log.md,
+  2026-11-16); until the Assistant's chart form takes the link's fields, the same answer gets the linked-column refusal.
 - **Any other mix** (a Live dataset beside a copy, Live datasets on two connections): no engine holds both, so nothing
   is counted. The card shows its checks and, in place of Approve, ONE catalog sentence (`link.blocked`, kept on the turn
   through `sanitizeNeeds`, so a reload shows the same): *This link can't be saved here: Stores is Live, so its rows are

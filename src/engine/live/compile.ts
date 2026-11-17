@@ -11,11 +11,14 @@
 //   compileChart        the chart itself — categories, series, measures
 //   compileMetric       one number
 //
+// Each of the five reads a chart across saved links the same way: its env's `join` (./compileJoin) stands where the
+// dataset's FROM item would.
+//
 // …and two lookups asked on their own:
 //
-//   compileCaseMatches  the stored spellings of the text values a question names
+//   compileCaseMatches  (./compileLookups) the stored spellings of the text values a question names
 //                       (an AI answer asks it before the five above, L2.4)
-//   compileKeyCheck     a declared key's rows, empties and repeats ("Check now", spec D2)
+//   compileKeyCheck     (./compileLookups) a declared key's rows, empties and repeats ("Check now", spec D2)
 //   compileKeyMatch     a link's matched keys across two sources on one connection (./compileKeyMatch)
 //
 // THE RULES (copied from the resident layer so live and extract mean the same):
@@ -54,7 +57,8 @@ import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
 import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicates } from './compileFilter';
-import { keyOf } from './profileSql';
+import type { LiveJoin } from './compileJoin';
+import { joinPrepare } from './compileJoin';
 import type { Total } from './compileDistinct';
 import { distinctKey, foldedDistinct, totalAt, withTotals } from './compileDistinct';
 import type { LiveCalc } from '../../data/liveCalcs';
@@ -74,6 +78,8 @@ export interface CompileEnv {
   base?: LiveFilter[];
   /** The source table's sort, cluster or partition key columns, from its stored facts (./liveDateRange); see compileFilter `RAW_RANGE_DIALECTS`. */
   keys?: string[];
+  /** A chart reaching related Live datasets on the same connection (./compileJoin): `columns` are then the MERGED layout's. */
+  join?: LiveJoin;
 }
 
 /** The category key once its probe has answered: what `compileChart` groups by. */
@@ -113,6 +119,8 @@ export interface Prepared {
   base: LiveFilter[];
   /** The IR's measures, every one a column's (a layer metric was refused). */
   ms: LiveColumnMeasure[];
+  /** A join's filters already applied inside its tables' scans (./compileJoin): `whereOf` leaves them out. */
+  inner?: (f: LiveFilter) => boolean;
 }
 
 function badName(name: unknown): boolean {
@@ -168,6 +176,7 @@ export function prepare(ir: LiveIR, env: CompileEnv, b: ParamSink = new ParamSin
     // THE GATE: a text column is never summed — loud, never a wrong figure.
     if (NUMERIC_AGGS.has(m.aggregation) && columnOf(columns, m.column)!.type !== 'number') return refuse('notNumeric', m.column);
   }
+  if (env.join) return joinPrepare(ir, { ...env, join: env.join }, b, d, ms, names);
   const c: Ctx = { d, b, columns, ...(env.keys?.length ? { keys: env.keys } : {}) };
   const inner = fromItem(d, env.source);
   // A calc the statement reads: one derived table per calc it needs (./calcLayers), the base filters innermost,
@@ -180,7 +189,7 @@ export function prepare(ir: LiveIR, env: CompileEnv, b: ParamSink = new ParamSin
 
 /** The dataset's base filters, then the question's: every statement's WHERE. */
 export function whereOf(p: Prepared, ir: LiveIR): string | LiveRefusal {
-  const preds = predicates(p.c, [...p.base, ...ir.filters]);
+  const preds = predicates(p.c, [...p.base, ...(p.inner ? ir.filters.filter((f) => !p.inner!(f)) : ir.filters)]);
   if (isRefusal(preds)) return preds;
   return preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
 }
@@ -443,69 +452,5 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   return { ok: true, query: c.b.finish(sql, d, cols) };
 }
 
-// ── The answers' case fix (L2.4) ─────────────────────────────────────────────
-
-/**
- * How many stored spellings a case-fix lookup reads back PER ASKED VALUE (plan
- * L2.4's LIMIT 20): one value asked is `LIMIT 20`, and an `in` of 25 values is
- * never cut short at 20 — a value left unfixed would silently drop its category.
- */
-export const CASE_FIX_LIMIT = 20;
-
-/**
- * The stored spellings of asked text values — `answers.canonicaliseTextFilters`
- * as one statement: `SELECT DISTINCT col … WHERE key(col) IN (…)`, where
- * `key` is `trim().toLowerCase()` on both sides (the asked keys arrive keyed,
- * each a bound parameter). Over ALL rows, as the extract reads every row.
- * Ordered by the value so the LIMIT is deterministic: where two spellings share
- * a key ("West" and "WEST") the extract keeps the first SEEN and live the first
- * in the warehouse's order — a named divergence (docs/live-data/log.md, L2.4).
- * Bounded at CASE_FIX_LIMIT rows per distinct key.
- */
-export function compileCaseMatches(column: string, keys: string[], env: CompileEnv, lock: LiveFilter[] = []): Compiled {
-  // `lock`: a row access lock (row-policy D13) — the stored spellings come from the caller's rows only.
-  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: lock, order: 'natural', weekCal: null };
-  const p = prepare(probe, env);
-  if (isRefusal(p)) return p;
-  const col = columnOf(p.c.columns, column)!;
-  if (col.type !== 'text') return refuse('categoryType', col.name);
-  if (!Array.isArray(keys) || keys.length === 0 || keys.some((k) => typeof k !== 'string')) return refuse('badQuery');
-  const c = p.c;
-  // The GROUP key's text (L2.8's fold): an import stores '' as null, so '' is
-  // never a stored spelling of a copy — nor, folded to NULL, of the warehouse.
-  const v = keyText(c, col);
-  const distinct = [...new Set(keys)];
-  const asked = distinct.map((k) => c.b.bind('text', k)).join(', ');
-  const locked = whereOf(p, probe);
-  if (isRefusal(locked)) return locked;
-  const sql = `SELECT DISTINCT ${c.d.label(v)} AS o_v FROM ${p.from} WHERE ${c.d.caseKey(v, c.b)} IN (${asked})${locked ? ` AND ${locked.slice(' WHERE '.length)}` : ''} ORDER BY o_v LIMIT ${CASE_FIX_LIMIT * distinct.length}`;
-  return { ok: true, query: c.b.finish(sql, c.d, ['o_v']) };
-}
-
-// ── The key check (spec D2) ──────────────────────────────────────────────────
-
-/**
- * The key check as one statement: a declared key's rows, empty rows and repeated keys —
- * `analysis/keyCheck.keyCheckJs` on the warehouse. The key is the profile's: NULL when empty
- * (`emptyOf`), else a number's finite value or the cell's text. The key is computed in a
- * derived table and grouped by its alias, because a bound value in the expression would not
- * match its twin in a `GROUP BY` (each marker becomes its own parameter). The three counts
- * are `SUM`s, NULL over no rows; `keyCheckFromRow` reads that as 0. `lock`: a row access lock (the Assistant's checked
- * link counts the caller's rows only, ipc/answerLink).
- */
-export function compileKeyCheck(column: string, env: CompileEnv, lock: LiveFilter[] = []): Compiled {
-  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: lock, order: 'natural', weekCal: null };
-  const p = prepare(probe, env);
-  if (isRefusal(p)) return p;
-  const { c } = p;
-  const col = columnOf(c.columns, column)!;
-  // The dataset's base filters (D13): the key is counted over the rows the dataset holds, never more.
-  const where = whereOf(p, probe);
-  if (isRefusal(where)) return where;
-  const sql =
-    `SELECT ${c.d.toDouble('SUM(lv_n)')} AS k_rows, ` +
-    `${c.d.toDouble('SUM(CASE WHEN lv_k IS NULL THEN lv_n ELSE 0 END)')} AS k_empty, ` +
-    `${c.d.toDouble('SUM(CASE WHEN lv_k IS NOT NULL AND lv_n > 1 THEN 1 ELSE 0 END)')} AS k_repeated ` +
-    `FROM (SELECT lv_k, COUNT(*) AS lv_n FROM (SELECT ${keyOf(c, col)} AS lv_k FROM ${p.from}${where}) lv_s GROUP BY lv_k) lv_g`;
-  return { ok: true, query: c.b.finish(sql, c.d, ['k_rows', 'k_empty', 'k_repeated']) };
-}
+// The case fix and the key check live in ./compileLookups (this file's size); re-exported for their callers.
+export { CASE_FIX_LIMIT, compileCaseMatches, compileKeyCheck } from './compileLookups';

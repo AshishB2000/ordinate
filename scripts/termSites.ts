@@ -134,6 +134,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/answerLink.ts': { count: 1, how: 'throws' },
   // a link's warehouse count over two Live datasets (relationship:save): each side's lock, then liveSpec's adaptFilters, which throws on a term step
   'src/ipc/linkLive.ts': { count: 1, how: 'throws' },
+  // a Live chart across links (engine/live/compileJoin): each related side's lock, then liveSpec's adaptFilters, which throws on a term step
+  'src/engine/live/liveJoin.ts': { count: 1, how: 'throws' },
   // prepare: a Prepare list (or a dataset setting). Must NOT take a term; unchanged, an unknown step is dropped.
   'src/ai/planCheck.ts': { count: 1, how: 'prepare' },
   'src/data/datasets.ts': { count: 3, how: 'prepare' },

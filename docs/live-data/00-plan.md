@@ -455,7 +455,13 @@ Sizes: **S** ≈ one small PR, **M** ≈ a normal PR, **L** ≈ a large PR or tw
 - **Series and top N in the resident layer**, and **AI answers on extracts through the resident
   path**. Today they load every row, which is slow at 1M rows.
 - **Joins across datasets** (Omni's topics): compile a join when both datasets live on the same
-  connection; `analysis/relationships.ts` already holds the relationships.
+  connection; `analysis/relationships.ts` already holds the relationships. **Built for charts (2026-11-16,
+  [log](log.md)):** a Live chart's category, split and filters may come from related Live datasets on the SAME
+  connection, planned as a copy's (`joinPlan.resolveVizJoin`), asked as ONE statement (`engine/live/compileJoin.ts`),
+  each table under its own base filters, lock and required range; a measure on a many side by drill-across, each
+  question across its link. Any other mix refuses, typed. Still to do: a measure on a related (one) table, a KPI or
+  an AI answer across a link (the Assistant's chart form is its own change); a copy beside a Live dataset is
+  refused in a sentence, from either side.
 - **AI notes and synonyms per dataset** ("revenue means `net_amount`, completed orders only"):
   Omni's `ai_context`.
 - **Server requery:** roll up or re-filter a cached live result in our DuckDB without a warehouse

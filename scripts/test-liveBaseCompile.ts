@@ -127,8 +127,10 @@ const found = builders(srcFiles());
 // sql/print.ts ×1: SQL on Live datasets (docs/live-data/01-live-sql.md F1) — each dataset read through its view, whose
 // WHERE holds the base filters (test-liveSqlCompile's golden shapes bind them in every dialect).
 // compileKeyMatch.ts ×1: a link's counts over two Live datasets on one connection, each side through `whereOf`.
-ok('inventory: the builders are exactly compile.ts ×7, compileKeyMatch.ts ×1, formulaSql.ts ×0, profileSql.ts ×2, semantic/snowflake.ts ×1 and sql/print.ts ×1',
-  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/compileKeyMatch.ts', 1], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1], ['src/engine/live/sql/print.ts', 1]]), show(found.finishers));
+// compile.ts ×5 + compileLookups.ts ×2 (2026-11-16): the case fix and the key check moved out of compile.ts for its size,
+// unchanged; a chart across links (compileJoin.ts) finishes nothing of its own: compile.ts's builders end it, each side through `whereOf`.
+ok('inventory: the builders are exactly compile.ts ×5, compileKeyMatch.ts ×1, compileLookups.ts ×2, formulaSql.ts ×0, profileSql.ts ×2, semantic/snowflake.ts ×1 and sql/print.ts ×1',
+  show(found.finishers) === show([['src/engine/live/compile.ts', 5], ['src/engine/live/compileKeyMatch.ts', 1], ['src/engine/live/compileLookups.ts', 2], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1], ['src/engine/live/sql/print.ts', 1]]), show(found.finishers));
 ok('inventory: every builder function ends its statement through whereOf, sampledFrom or viewBody', found.unbased.length === 0, show(found.unbased));
 const planted = new Map([...srcFiles(), ['src/engine/live/keyCheckSql.ts', "const b = new ParamSink();\nexport function compileKeyCheck(): unknown {\n  return b.finish('SELECT 1', d, []);\n}\n"]]);
 const caught = builders(planted);

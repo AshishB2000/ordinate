@@ -133,7 +133,8 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'calculatedUnreadable' | 'calcDialect' | 'calcTooLarge' | 'distinctByWeekCalendar' | 'semanticPending' | 'requiredFilter' | LayerRefusalCode;
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'calculatedUnreadable' | 'calcDialect' | 'calcTooLarge' | 'distinctByWeekCalendar' | 'semanticPending' | 'requiredFilter'
+  | 'joinKeyTypes' | 'relatedMeasure' | LayerRefusalCode;
 
 /** What a semantic layer cannot answer (part 7, D16): sentences in ./semantic/semanticRefusals.ts, naming the layer. */
 export type LayerRefusalCode =
@@ -199,6 +200,8 @@ const MESSAGES: Record<Exclude<LiveRefusalCode, LayerRefusalCode>, Sentence> = {
   distinctByWeekCalendar: { key: 'liveRefusals.a_distinct_count_can_t_be', text: () => msg.liveDistinctByWeekCalendar() },
   semanticPending: { key: 'liveRefusals.this_dataset_asks_another_tool_s', text: () => msg.liveSemanticPending() },
   requiredFilter: { key: 'liveRefusals.this_table_needs_a_filter_on', param: 'column', text: (c) => msg.liveRequiredFilter(c) },
+  joinKeyTypes: { key: 'liveRefusals.a_live_chart_can_t_follow', param: 'column', text: (c) => msg.liveJoinKeyTypes(c) },
+  relatedMeasure: { key: 'liveRefusals.a_measure_from_a_related_dataset', text: () => msg.liveRelatedMeasure() },
 };
 
 export function refuse(code: Exclude<LiveRefusalCode, LayerRefusalCode>, arg = ''): LiveRefusal {

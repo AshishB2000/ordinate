@@ -29,6 +29,8 @@ const MARKER = /\u0000(\d+)\u0000/g;
 
 export class ParamSink implements Binder {
   private readonly values: { type: LiveParam['type']; value: string | number }[] = [];
+  /** Text the finished statement ends with (a ClickHouse join's SETTINGS, ./compileJoin): no marker ever. */
+  suffix = '';
 
   bind(type: LiveParam['type'], value: string | number): string {
     if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('A live parameter must be finite');
@@ -39,7 +41,7 @@ export class ParamSink implements Binder {
 
   finish(sql: string, dialect: SqlDialect, columns: string[]): CompiledQuery {
     const params: LiveParam[] = [];
-    const text = sql.replace(MARKER, (_m, id: string) => {
+    const text = (sql + this.suffix).replace(MARKER, (_m, id: string) => {
       const v = this.values[Number(id)];
       const p: LiveParam = { name: `p${params.length}`, type: v.type, value: v.value };
       params.push(p);
