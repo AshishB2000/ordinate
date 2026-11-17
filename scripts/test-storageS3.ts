@@ -19,7 +19,8 @@
 // 6. WIRING: the real app registers the `storage:gc` job in the jobs table.
 // 7. THE VALUE INDEX ON S3 (src/ipc/valueIndex.ts): a write builds the dataset's sidecar as an object of its table
 //    version, registered under that version once written; an ask finds a value through it with ONE registry query
-//    (names) and ONE lookup, no scan; a sidecar registered but not yet written is not read: its dataset is scanned and
+//    (names) and ONE lookup, no scan; the set row carries the id-like flag as in DATA_DIR, and an id-like column is
+//    scanned only for an id the question names; a sidecar registered but not yet written is not read: its dataset is scanned and
 //    the block is the scan's; a mark made after the build changes the name, so the job builds again from the registry
 //    alone, deletes the old object, and the marked column's values are not in the new one (CONTROL: they were in the
 //    old); GC deletes a superseded version's sidecar with its table, from S3 and the registry, and keeps the current.
@@ -324,6 +325,21 @@ async function valuesOnS3(t: import('./s3TestEnv').S3Test, inOrg: <T>(org: strin
   const one = await ask([a, b], 'sales in west');
   ok('S3 values: an ask finds "West" through the sidecars: ONE registry query (names), ONE lookup, no scan',
     one.text.includes('- Sales.region = "West"') && one.text.includes('- Leads.region = "West"') && one.registry === 1 && one.lookups === 1 && one.scans === 0, JSON.stringify(one));
+
+  // An id-like column past the cap (10,050 ids): the flag in the set row, read from the object; scanned only for an id.
+  const tickets = await inOrg('acme', async () => (await datasets.saveDataset(vp, { name: 'Tickets', sourceKind: 'csv', columns: [cols[0], { name: 'ref', type: 'text' as const }],
+    rows: Array.from({ length: 10_050 }, (_, i) => [['West', 'East'][i % 2], `T-${i}`]) }))!.id);
+  await lifecycle.settleWork();
+  const vt = await versionOf(tickets);
+  const tset = await inOrg('acme', async () => {
+    const at = await valueIndex.sidecarsOf(vp, [{ id: tickets, version: vt }]);
+    return (await vir.lookupValuesResident([...at].map(([datasetId, path]) => ({ datasetId, path, ranges: [] }))))?.get(tickets)?.set;
+  });
+  const noId = await ask([tickets], 'west');
+  const byId = await ask([tickets], 'ticket T-5017');
+  ok('S3 values: the set row carries the id-like flag (Tickets.ref); an ask with no id scans nothing, "ticket T-5017" scans it and finds it',
+    tset?.idLike.join() === '1' && noId.scans === 0 && noId.lookups === 1 && noId.text.includes('- Tickets.region = "West"')
+    && byId.scans === 1 && byId.text.includes('- Tickets.ref = "T-5017"'), JSON.stringify({ tset, noId, byId }));
 
   // Not written yet: Leads' row back to pending, as during its build.
   const [kb] = await sidecars(b);

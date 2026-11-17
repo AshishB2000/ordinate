@@ -18,7 +18,9 @@
 // case class to one string (upper, lower, upper again, a code point at a time: ß and ẞ both "SS", ſ, s and S all "S").
 // What it finds is then tested by `valueMatches`, the rule itself. scripts/test-askValueIndex.ts checks the fold over
 // every code point. `known` (below) is how a row lock confirms the values found: the same statement, `v IN (…)` in
-// place of the pattern.
+// place of the pattern. `ids` is how a column the index knows as id-like is searched: the question's id TOKENS
+// (../ai/valueFacts idTokens: an order number, a UUID, an email), each its words in that order and whole, a second
+// pattern in the same statement.
 
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
@@ -46,6 +48,16 @@ function wordsPattern(words: readonly string[]): string {
   const alts = [...(long.length ? [long.join('|')] : []), ...(short.length ? [`(?:${short.join('|')})(?:${NOT_WORD}|$)`] : [])];
   return `(?:^|${NOT_WORD})(?:${alts.join('|')})`;
 }
+
+/** A token's words (space-joined) in that order, each whole, only non-word characters between: "48213" finds ORD-48213, not ORD-482130. */
+function tokensPattern(tokens: readonly string[]): string {
+  return `(?:^|${NOT_WORD})(?:${tokens.map((t) => t.split(' ').join(`${NOT_WORD}+`)).join('|')})(?:${NOT_WORD}|$)`;
+}
+const isToken = (t: string): boolean => t.split(' ').every(isWord);
+
+/** Id tokens for some columns (a column the index knows as id-like, src/ipc/askValues.ts): searched by them alone. */
+export interface IdSearch { cols: readonly number[]; tokens: readonly string[] }
+const NO_IDS: IdSearch = { cols: [], tokens: [] };
 
 /** Does `value` hold one of `words` by the rule? The reference's test, one value at a time. */
 export function valueMatches(value: string, words: readonly string[]): boolean {
@@ -79,9 +91,10 @@ const columnsIn = (columns: ParsedColumn[], cols: readonly number[]): number[] =
   [...new Set(cols)].filter((i) => Number.isInteger(i) && i >= 0 && i < columns.length).sort((a, b) => a - b);
 
 /**
- * The hits, by the rule, of `words` in columns `cols` and, in each column of `known`, of exactly its listed values (a
- * row lock confirming what the value index found, src/ipc/askValues.ts): one statement either way. With `known` alone
- * the rows are narrowed to those holding a listed value before the unpivot, which is the cost.
+ * The hits, by the rule, of `words` in columns `cols`, of `ids.tokens` in `ids.cols` and, in each column of `known`, of
+ * exactly its listed values (a row lock confirming what the value index found, src/ipc/askValues.ts): one statement
+ * whatever the mix. With `known` alone the rows are narrowed to those holding a listed value before the unpivot, which
+ * is the cost.
  */
 export async function searchValuesResident(
   src: { parquetPath: string; columns: ParsedColumn[] },
@@ -89,11 +102,14 @@ export async function searchValuesResident(
   words: readonly string[],
   filters: FilterStep[],
   known: ReadonlyMap<number, readonly string[]> = new Map(),
+  ids: IdSearch = NO_IDS,
 ): Promise<ValueHit[] | null> {
   const ws = words.filter(isWord);
+  const ts = ids.tokens.filter(isToken);
   const ki = columnsIn(src.columns, [...known.keys()]).filter((i) => known.get(i)!.length);
-  const ri = ws.length ? columnsIn(src.columns, cols).filter((i) => !ki.includes(i)) : [];
-  const ci = [...ri, ...ki].sort((a, b) => a - b);
+  const ii = ts.length ? columnsIn(src.columns, ids.cols).filter((i) => !ki.includes(i)) : [];
+  const ri = ws.length ? columnsIn(src.columns, cols).filter((i) => !ki.includes(i) && !ii.includes(i)) : [];
+  const ci = [...ri, ...ii, ...ki].sort((a, b) => a - b);
   if (!ci.length) return [];
   try {
     const params: DuckValue[] = [];
@@ -102,11 +118,13 @@ export async function searchValuesResident(
       params.push(...known.get(i)!);
       return `${v} IN (${known.get(i)!.map(() => '?').join(', ')})`;
     };
-    if (!ri.length) preds.push(`(${ki.map((i) => listed(i, `CAST(${phys(i)} AS VARCHAR)`)).join(' OR ')})`);
+    if (!ri.length && !ii.length) preds.push(`(${ki.map((i) => listed(i, `CAST(${phys(i)} AS VARCHAR)`)).join(' OR ')})`);
     const tests: string[] = [];
-    if (ri.length) {
-      params.push(`(?i)${wordsPattern(ws)}`);
-      tests.push(ki.length ? `(c IN (${ri.join(', ')}) AND regexp_matches(v, ?))` : 'regexp_matches(v, ?)');
+    // Params in the order the SQL reads them: the patterns, then the listed values.
+    for (const [cs, pattern] of [[ri, ws.length ? wordsPattern(ws) : ''], [ii, ts.length ? tokensPattern(ts) : '']] as const) {
+      if (!cs.length) continue;
+      params.push(`(?i)${pattern}`);
+      tests.push(cs.length < ci.length ? `(c IN (${cs.join(', ')}) AND regexp_matches(v, ?))` : 'regexp_matches(v, ?)');
     }
     for (const i of ki) tests.push(`(c = ${i} AND ${listed(i, 'v')})`);
     params.push(PER_DATASET);
@@ -124,14 +142,18 @@ export async function searchValuesResident(
 }
 
 /** THE REFERENCE: the same hits over hydrated rows. */
-export function searchValuesJs(columns: ParsedColumn[], rows: Cell[][], cols: readonly number[], words: readonly string[], filters: FilterStep[]): ValueHit[] {
-  const ci = columnsIn(columns, cols);
+export function searchValuesJs(columns: ParsedColumn[], rows: Cell[][], cols: readonly number[], words: readonly string[], filters: FilterStep[], ids: IdSearch = NO_IDS): ValueHit[] {
   const ws = words.filter(isWord);
-  if (!ci.length || !ws.length) return [];
+  const ts = ids.tokens.filter(isToken);
+  const ii = ts.length ? columnsIn(columns, ids.cols) : [];
+  const ci = [...(ws.length ? columnsIn(columns, cols).filter((i) => !ii.includes(i)) : []), ...ii].sort((a, b) => a - b);
+  if (!ci.length) return [];
   const kept = filters.length ? applyPipeline({ columns, rows }, filters).rows : rows;
-  const re = new RegExp(wordsPattern(ws), 'iu');
+  const wordRe = ws.length ? new RegExp(wordsPattern(ws), 'iu') : null;
+  const idRe = ts.length ? new RegExp(tokensPattern(ts), 'iu') : null;
   const out: ValueHit[] = [];
   for (const i of ci) {
+    const re = (ii.includes(i) ? idRe : wordRe)!;
     const seen = new Set<string>();
     for (const r of kept) {
       if (seen.size >= PER_COLUMN) break;

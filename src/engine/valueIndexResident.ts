@@ -1,17 +1,19 @@
-// The value index (src/ipc/valueIndex.ts), the engine half — MAIN PROCESS ONLY: its build's two statements over a
+// The value index (src/ipc/valueIndex.ts), the engine half — MAIN PROCESS ONLY: its build's statements over a
 // table's Parquet, the sidecar it writes beside that table, and an ask's ONE lookup over the sidecars of its datasets.
 //
 // THE BUILD. First the exact distinct count of each column's values of up to VALUE_BYTES (`approx_count_distinct` was
-// 25% off on 8,000 values, so it cannot pick which column is under the cap); then, over the columns at or under
-// MAX_DISTINCT alone, each value and its first row (the ordinal the scan orders by), so a column of ids is never grouped.
-// A value over VALUE_BYTES is never listed by the ask (valueSearchResident), so it is neither counted nor kept.
+// 25% off on 8,000 values, so it cannot pick which column is under the cap), and how many values it has; then, over the
+// columns past MAX_DISTINCT whose values are nearly all distinct alone, the shape of their values (one statement), which
+// says whether each is ID-LIKE; then, over the columns at or under MAX_DISTINCT alone, each
+// value and its first row (the ordinal the scan orders by), so a column of ids is never grouped. A value over
+// VALUE_BYTES is never listed by the ask (valueSearchResident), so it is neither counted nor kept.
 //
 // THE SIDECAR (`<id>.values.parquet` beside the table, or on S3 an object of its table version named with `valuesTag`:
 // ../engine/storage), written by
 // parquetStore.writeTableAsync like the table itself (temp then rename; an S3 object appears whole). Four VARCHAR columns
 // (SIDECAR_COLUMNS): one row per (value, word of it) — the word's key (valueSearchResident wordKey), the column, the
 // value, its first row — and first a SET row (key '#', column -1) whose value is the set as JSON: the build version, the
-// stamp of the write it read, the columns it holds whole, the catalog marks then.
+// stamp of the write it read, the columns it holds whole, the columns past the cap that are id-like, the catalog marks then.
 //
 // THE LOOKUP. One statement over the sidecars the caller knows are written (src/ipc/valueIndex sidecarsOf): each set row, and the values whose keys fall in the question
 // words' ranges (valueSearchResident keyRange), at most CANDIDATES a column, first row first, with how many matched.
@@ -33,8 +35,22 @@ import * as duck from './duckdb';
  * whose words an ask rarely names, and it would cost the index more rows than the rest of the dataset together.
  */
 export const MAX_DISTINCT = 10_000;
-/** Bump when what a build writes changes (the keys, the columns held): every sidecar is then stale, and the job builds each again. */
-export const VALUE_INDEX_VERSION = 1;
+/**
+ * A column past MAX_DISTINCT is ID-LIKE (src/ipc/askValues.ts scans it only for an id token the question names) when at
+ * least ID_DISTINCT of its values are distinct (an id is unique; a customer's email on an orders table repeats, and
+ * stays scanned for its words) and at least ID_SHAPED of its values are ONE token carrying a digit or an @ (ORD-48213,
+ * CUST00012345, a UUID, an email). A name with a number in it is several words ("Widget 3000 Pro", "Canon EOS R5"), so a
+ * products table's names stay scanned for "widget". A false id-like loses a name; a false name-like only costs the scan,
+ * so both bars are high, and the shape is read over the whole column, not a sample of its first rows. Measured on
+ * 1,000,000 rows (a laptop): the count beside the distinct count costs nothing (15 to 16 ms for five columns, as
+ * without it); the shape 9 to 13 ms a column, run only over the near-distinct columns past the cap (1 to 2 ms over a
+ * column's first 10,000 rows, but a head sample can call a column of names ids).
+ */
+export const ID_DISTINCT = 0.95;
+export const ID_SHAPED = 0.9;
+const ID_SHAPE = String.raw`\S*[0-9@]\S*`;
+/** Bump when what a build writes changes (the keys, the columns held, the set): every sidecar is then stale, and the job builds each again. 2: `idLike`. */
+export const VALUE_INDEX_VERSION = 2;
 /** Candidates one lookup returns a column at most, first row first, with how many there were. */
 export const CANDIDATES = 100;
 
@@ -45,7 +61,7 @@ export const valuesTag = (marked: readonly string[]): string =>
 /** What a sidecar was built from: the record's updatedAt and rowCount, both written in the table write's own record write. */
 export const stampOf = (m: { updatedAt: string; rowCount: number }): string => `${m.updatedAt}/${m.rowCount}`;
 
-export interface ValueSet { version: number; stamp: string; indexed: number[]; marked: string[] }
+export interface ValueSet { version: number; stamp: string; indexed: number[]; idLike: number[]; marked: string[] }
 export interface ValueRow { col: number; word: string; value: string; ord: number }
 export interface Found {
   set: ValueSet | null;
@@ -57,6 +73,8 @@ export interface ColumnValues {
   col: number;
   /** `[value, first row]` in first-row order, or null: past `cap` distinct values, not indexed. */
   values: Array<[string, number]> | null;
+  /** Past `cap`: an id column (ID_DISTINCT, ID_SHAPED). */
+  idLike: boolean;
 }
 
 const short = (i: number): string => `CASE WHEN strlen(CAST(${phys(i)} AS VARCHAR)) <= ${VALUE_BYTES} THEN CAST(${phys(i)} AS VARCHAR) END`;
@@ -66,9 +84,15 @@ export async function distinctValuesResident(parquetPath: string, columns: Parse
   const ci = [...new Set(cols)].filter((i) => Number.isInteger(i) && i >= 0 && i < columns.length).sort((a, b) => a - b);
   if (!ci.length) return [];
   try {
-    const [counts] = await duck.queryAsync(`SELECT ${ci.map((i) => `CAST(count(DISTINCT ${short(i)}) AS DOUBLE) AS n${i}`).join(', ')} FROM ${relationSql(parquetPath)};`);
+    const [counts] = await duck.queryAsync(`SELECT ${ci.map((i) => `CAST(count(DISTINCT ${short(i)}) AS DOUBLE) AS n${i}, CAST(count(${short(i)}) AS DOUBLE) AS r${i}`).join(', ')} FROM ${relationSql(parquetPath)};`);
     const under = ci.filter((i) => Number(counts[`n${i}`]) <= cap);
-    const out = new Map<number, ColumnValues>(ci.map((i) => [i, { col: i, values: under.includes(i) ? [] : null }]));
+    const unique = ci.filter((i) => !under.includes(i) && Number(counts[`n${i}`]) >= ID_DISTINCT * Number(counts[`r${i}`]));
+    const idLike = new Set<number>();
+    if (unique.length) {
+      const [shape] = await duck.queryAsync(`SELECT ${unique.map((i) => `CAST(count(CASE WHEN regexp_full_match(${short(i)}, '${ID_SHAPE}') THEN 1 END) AS DOUBLE) AS s${i}`).join(', ')} FROM ${relationSql(parquetPath)};`);
+      for (const i of unique) if (Number(shape[`s${i}`]) >= ID_SHAPED * Number(counts[`r${i}`])) idLike.add(i);
+    }
+    const out = new Map<number, ColumnValues>(ci.map((i) => [i, { col: i, values: under.includes(i) ? [] : null, idLike: idLike.has(i) }]));
     if (under.length) {
       const rows = await runOrderedAsync(parquetPath, (from, ord) => {
         const all = `SELECT ${ord} AS o, UNNEST([${under.join(', ')}]) AS c, UNNEST([${under.map(short).join(', ')}]) AS v FROM ${from}`;
@@ -99,7 +123,7 @@ export function sidecarRows(set: ValueSet, rows: readonly ValueRow[]): Cell[][] 
 const setOf = (json: unknown): ValueSet | null => {
   try {
     const s = JSON.parse(String(json));
-    return s && typeof s.version === 'number' && typeof s.stamp === 'string' && Array.isArray(s.indexed) && Array.isArray(s.marked) ? s : null;
+    return s && typeof s.version === 'number' && typeof s.stamp === 'string' && Array.isArray(s.indexed) && Array.isArray(s.idLike) && Array.isArray(s.marked) ? s : null;
   } catch {
     return null;
   }
