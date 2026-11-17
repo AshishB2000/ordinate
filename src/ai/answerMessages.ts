@@ -75,8 +75,14 @@ export function calcSplitFirst(): string {
 
 /**
  * A model's answer that names a linked dataset's column on the dataset it is linked to (../ipc/askLinks) without naming
- * that dataset: rejection, not repair. A category or split may come from it when the answer says so (./answerJoin).
+ * that dataset: rejection, not repair. Its category, split, a measure or a filter may come from it when the answer names
+ * it as that field's dataset (./answerJoin).
  */
 export function linkedColumnRefused(column: string, linked: string, dataset: string): string {
   return t('answerMessages.is_a_column_of_which_is', { column, linked, dataset });
+}
+
+/** A relative period on a related dataset's date column (./answerJoin): its days are that dataset's cells, which an answer does not read. */
+export function relatedPeriodRefused(column: string, linked: string, dataset: string): string {
+  return t('answerMessages.an_answer_on_can_t_filter', { dataset, linked, column });
 }

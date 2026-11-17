@@ -205,9 +205,9 @@ const ANSWER_SPEC =
   ACTION_MARKER + ' {"kind":"answer","intent":"<the question, restated>","spec":{"dataset":"<dataset name>",' +
   '"category":"<column>","measures":[{"column":"<column>","aggregation":"sum|avg|count|countd|min|max"}],' +
   '"filters":[{"column":"<column>","op":"=","value":"<value>"}],"chartType":"<optional>","top":<optional N>}}\n' +
-  'Name columns EXACTLY as the FACTS list them. The category or the split may be a column of a LINKED DATASETS entry: then ' +
-  'also name that dataset, "categoryDataset":"<its name>" or "seriesDataset":"<its name>"; measures and filters are always ' +
-  'columns of "dataset" itself. A filter is {"column","op","value"} with op one of ' +
+  'Name columns EXACTLY as the FACTS list them. The category, the split, a measure or a filter may be a column of a LINKED ' +
+  'DATASETS entry: then also name that dataset, "categoryDataset":"<its name>", "seriesDataset":"<its name>", or "dataset":"<its name>" ' +
+  'inside the measure or filter; anything else is a column of "dataset" itself. A filter is {"column","op","value"} with op one of ' +
   '= != > < >= <= contains in (for "in", give "values":[…]); for a relative date use ' +
   '{"column":"<date column>","period":"<period>"}, <period> one of today, yesterday, this_week, last_week, this_month, last_month, ' +
   'this_quarter, last_quarter, this_year, last_year, ytd, qtd, or last_n_days, last_n_weeks, last_n_months, last_n_quarters, ' +

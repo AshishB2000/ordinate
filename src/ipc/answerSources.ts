@@ -69,10 +69,11 @@ export async function usesOf(projectId: string, spec: AnswerSpec): Promise<strin
   const names = await namesOf(spec.datasetId);
   const by = (n: Record<string, string>) => (c: string): string => (Object.hasOwn(n, c) && n[c]) || c;
   const shown = by(names);
-  // A related category or split (../ai/answerJoin) reads as its own dataset names it.
+  // A related category, split or measure (../ai/answerJoin) reads as its own dataset names it.
   const catShown = spec.categoryDatasetId ? by(await namesOf(spec.categoryDatasetId)) : shown;
   const serShown = spec.seriesDatasetId ? by(await namesOf(spec.seriesDatasetId)) : shown;
-  const all = [...spec.measures.map((m) => measureLabel({ ...m, column: shown(m.column) })), catShown(spec.category), ...(spec.series ? [serShown(spec.series)] : [])];
+  const measures = await Promise.all(spec.measures.map(async (m) => measureLabel({ ...m, column: (m.datasetId ? by(await namesOf(m.datasetId)) : shown)(m.column) }))); // a related measure: its dataset's names
+  const all = [...measures, catShown(spec.category), ...(spec.series ? [serShown(spec.series)] : [])];
   return all.filter((n, i) => n && all.indexOf(n) === i);
 }
 

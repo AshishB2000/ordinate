@@ -495,11 +495,64 @@ was SQL (two calls, Not checked).
   1b: "amount by region", region on Customers, is one call and a chart whose figures are Object.is-equal to the SQL
   lane's join; asked as SQL it still takes two.
 
-**Left out:** a measure, a filter or a glossary term on a related dataset (a spec's measures and filters are the asked
-dataset's own); a split through a labelled relationship (a visual has no `seriesVia` either), and a model naming a
-labelled one for its category (the block lists each dataset by its default path; a stored or explained spec keeps its
-`categoryVia`); a bare linked name repaired to its dataset (rejection, not repair); a Live join beside a copy or across two
-connections (the door's sentence, above). A caller whom
+- **A measure, a filter or a glossary term from a linked dataset** (after #571), through the same door, with a visual's own
+  fields and no new semantics (`src/ai/answerJoin.ts`):
+  - *Measure:* a visual's measure, `datasetId` and `via` beside it (`VizMeasure`, `sanitizeEncoding`'s whitelist). The
+    model writes `{"column":"target","aggregation":"sum","dataset":"Customers"}`; the validator resolves the column on that
+    dataset (no metric of it: a metric is its own dataset's). `specEncoding` hands it to the door as a visual's, so a
+    ONE-side measure is joined under joinJs rule 3, no fan-in (`maskFanIn`: each customer's target once per group, never
+    target × orders), and a MANY-side one is drilled across (`fanOutPlan`); anything else is the planner's sentence.
+  - *Filter:* `datasetId` on the comparison, which becomes the step's `datasetId` (the pinned table a term's step already
+    carries, `sanitizeFilterStep` keeps it, `resolveColumnOwner` reads it): it filters THAT table, never the asked
+    dataset's same-named column (`specFilterSteps` emits it pinned, so no caller drops it). A filter on a dataset the
+    planner cannot reach (the many side) is refused in `findPath`'s sentence before the door (`joinedSides`), since the
+    planner's own refusal for a pinned step is worded for a glossary term; one on a many-side MEASURE's own dataset is the
+    door's, whose drill-across narrows that side by it. A relative period on a related date column is
+    refused (`relatedPeriodRefused`): its days are that dataset's cells, which an answer does not read.
+  - *Term:* another dataset's term is kept as `{term, datasetId}` (a model names the term only, so its dataset need not be
+    in the vocabulary); `expandAnswerTerms` no longer refuses it, and `expandOne` makes its steps pinned there, refusing
+    one it cannot reach, or a Live one, in its typed sentence (`termUnreachable`). The card goes to the door when a
+    term's step is pinned, though the spec's own fields name no other dataset. A stored `{term}` (by id) without its dataset
+    is still refused as another dataset's, by the validator and the card door (`termOtherDataset`) alike, so a verified
+    question's check and its card agree (`test-verifiedNarrowEnv`).
+  - *Value helpers* (the loose match, the case fix, nearest values) leave a related filter as asked; a related filter on
+    a column its dataset marks personal or financial is withheld from the model, as an own one is.
+  - *Every consumer* keys off `relatedIds` / `ownNames` / `relatedRefs`, which now cover them: `factsFrom` (so 0039's
+    count), the verified index's `reads` and env, a dashboard request's anchors, an agent's topic, the snapshot's print
+    (`answerReads` passes the pinned steps to `chartReads`, so a table read only by a filter is in it), the previous
+    answer (*sum(target) from "Customers"*, a filter's *from*), `describeAnswer`, `usesOf`; `sameChart` (`CHART_KEYS`
+    gains `via`), refine (a related measure carried with its dataset; a patch restating a related filter replaces it),
+    "Did you mean" on the related dataset (its option keeps the dataset), verified prompt examples (named by `dataset`,
+    none through a `via`; a value filter's withheld check reads its own dataset's marks), Save as visual and Add to
+    dashboard (the visual's encoding and pinned steps), Explain (`tileSpec` takes a visual's related measure and pinned
+    filter; one with a filter through a relationship is still refused), MCP (`specEncoding`; no `aggregate` hint).
+  - *Alert me* refuses a related measure, filter or term (`alertNoLinked`): an alert's subject is a bare column, which a
+    metric reads at its nearest owner, unpinned. The Assistant has no other single-number answer: a KPI is not a kind.
+  - *Live:* a related measure gets the door's typed sentence (the Live join's `relatedMeasure`, `live_refused`) until the
+    Live join takes one; a related filter on Live tables of one connection is the warehouse's (the Live join applies the
+    pinned step); a related term is refused typed `term` (`expandOne`: no Live term across a link), never `live_dataset`.
+  - *The prompt:* still ONE call. The action line names `"dataset"` inside a measure or filter; the LINKED DATASETS block
+    says a category, split, measure or filter (no period) may come from an entry, and that a measure there counts once per
+    row there. The block still lists many → one only, so a many-side measure reaches the form only from a stored or
+    explained spec (a visual, a verified question), never a model.
+  - `test-answerJoinMeasures` (both modes): each card Object.is `visual:data` for the same encoding and steps AND the
+    joinJs reference over the same rows: a one-side measure, a many-side measure, a related filter, a related term;
+    NEGATIVE CONTROLS: the unmasked sum differs, the same filter on the asked dataset's own column differs, a filter on
+    the many side keeps the planner's sentence, a term reference without its dataset is refused, a term of an unlinked
+    dataset is refused typed; a many-side measure narrowed on its own side; a stubbed `copilot:ask` naming a linked
+    measure, filter and term draws the chart in ONE call, Object.is its visual; the passes above; with
+    real roles, a viewer locked on the asked dataset or under row rules on the measure's dataset refused `related`, the
+    measure's column hidden refused, each with its control. `test-answerJoinsLive` 1b, `test-folderSafetyNet` section 6
+    (a measure read from Finance's dataset hides and uncounts the turn). `test-askBudget`: no query more.
+
+**Left out:** a relative period on a related date column (above); a measure naming a saved metric of a related dataset;
+the loose value match and case fix on a related filter (its value as asked); a related measure or term on Live (the
+door's sentence) and a related measure, filter or term in Alert me; a split through a labelled relationship (a visual has
+no `seriesVia` either), and a model naming a labelled one for its category or measure (the block lists each dataset by its
+default path; a stored or explained spec keeps its `categoryVia` or measure `via`); a filter through a relationship (a
+spec's filter has no `via`); a bare linked name repaired to its dataset (rejection, not repair); a Live join beside a copy
+or across two connections (the door's sentence, above); a related term's intermediate hop tables in the snapshot's print
+(its own table is in it; a two-hop term path adds a table the print does not name). A caller whom
 row rules lock on the asked dataset is still shown its LINKED DATASETS (a linked dataset can be answered on its own),
 though the door refuses them a join (`related`); the block does not say so for them. On Live the door itself is no
 longer what leaves a related measure out: since 2026-11-17 (docs/live-data/log.md) a Live chart counts a related

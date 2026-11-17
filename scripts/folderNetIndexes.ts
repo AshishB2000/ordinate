@@ -14,8 +14,8 @@
 //     So does an answer asked on a dashboard page placed in Finance (no dataset of its own) and an alert's explanation on
 //     Finance's dataset; a rename is told the count shown; an ask into a conversation of only hidden turns starts a new one
 //     and replays the model none of them, and a follow-up chip and a plan's log into one start a new one too.
-//     So does a chart on Plain whose category is read from Finance's dataset (a join: the related dataset in its
-//     `factsFrom`), not listed, not counted and none by id; NEGATIVE CONTROLS: finViewer's is shown and counted, and the
+//     So does a chart on Plain whose category, or whose measure, is read from Finance's dataset (a join: the related
+//     dataset in its `factsFrom`), not listed, not counted and none by id; NEGATIVE CONTROLS: finViewer's is shown and counted, and the
 //     same turn without that record is opsViewer's again.
 //     NEGATIVE CONTROLS: finViewer and padmin do; a chip into a conversation with a turn shown appends there, and with the
 //     folder checks off (no folder besides Everyone) the chip and the log land in the ones named; a stored turn without that record (an older release's) keeps its words;
@@ -196,12 +196,14 @@ async function proseThreads(W: H.World, fin: Fin): Promise<Prose> {
  * (docs/assistant "Joins, as built"), had while it was in Everyone. The link is made for it and deleted after, so no
  * other check of this world follows it; the turn keeps the related dataset in its `factsFrom` whatever the links say.
  */
-async function joinedAnswers(W: H.World, fin: Fin): Promise<Map<H.Person, string>> {
+async function joinedAnswers(W: H.World, fin: Fin, on: 'category' | 'measure' = 'category'): Promise<Map<H.Person, string>> {
   const { P } = W;
   const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
   const link = randomUUID();
   await W.as('boss', () => rels.saveRelationship(P, { id: link, from: { datasetId: W.plain, column: 'dept' }, to: { datasetId: fin.ds, column: 'dept' }, cardinality: 'many_to_one', verified: { matched: 2, unmatchedFrom: 0 } }));
-  const spec = { datasetId: W.plain, category: 'dept', categoryDatasetId: fin.ds, measures: [{ column: 'salary', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'FINCANARY joined' };
+  // `measure`: the category Plain's own, the MEASURE Finance's (a visual's `datasetId`, ../src/ai/answerJoin).
+  const spec = on === 'category' ? { datasetId: W.plain, category: 'dept', categoryDatasetId: fin.ds, measures: [{ column: 'salary', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'FINCANARY joined' }
+    : { datasetId: W.plain, category: 'dept', measures: [{ column: 'salary', aggregation: 'sum', datasetId: fin.ds }], filters: [], chartType: 'column', title: 'FINCANARY joined measure' };
   const out = new Map<H.Person, string>();
   try {
     for (const who of ['opsViewer', 'finViewer'] as H.Person[]) {
@@ -217,7 +219,7 @@ async function joinedAnswers(W: H.World, fin: Fin): Promise<Map<H.Person, string
 }
 
 /** With Finance's dataset in Finance: the joined chart on Plain is hidden by its RELATED dataset, from the list's count and by id. */
-async function joinedChecks(W: H.World, threads: Map<H.Person, string>): Promise<void> {
+async function joinedChecks(W: H.World, threads: Map<H.Person, string>, on: 'category' | 'measure' = 'category'): Promise<void> {
   const { P, pool } = W;
   const read = async (who: H.Person, threadId: string) => {
     const r = (await W.call(who, 'copilot:history', { projectId: P, threadId })).body ?? {};
@@ -225,13 +227,14 @@ async function joinedChecks(W: H.World, threads: Map<H.Person, string>): Promise
     return { threadId: r.threadId as string | null, turns: ((r.turns ?? []) as unknown[]).length, listed: list.find((t) => t.id === threadId)?.turnCount ?? null, raw: JSON.stringify(r) };
   };
   const ops = await read('opsViewer', threads.get('opsViewer')!);
-  ok('history: opsViewer\'s chart on Plain whose category is read from Finance\'s dataset is gone with its question — not listed (so not counted), none by id',
+  ok(`history: opsViewer's chart on Plain whose ${on} is read from Finance's dataset is gone with its question — not listed (so not counted), none by id`,
     ops.listed === null && ops.threadId === null && ops.turns === 0 && !CANARIES.test(ops.raw), JSON.stringify(ops).slice(0, 300));
   const fins = await read('finViewer', threads.get('finViewer')!);
   ok('NEGATIVE CONTROL: finViewer is shown theirs, both turns, and the list counts both', fins.threadId === threads.get('finViewer') && fins.turns === 2 && fins.listed === 2 && FIN.test(fins.raw), JSON.stringify(fins).slice(0, 300));
   // The turn keeps the related dataset in its factsFrom (0039's SQL function reads it): without it, the chart reads as Plain's alone.
   const row = (await pool.query<{ id: string; body: string }>(`SELECT id::text, body FROM assistant_turns WHERE project_id = $1 AND thread_id = $2 AND role = 'assistant'`, [P, threads.get('opsViewer')])).rows[0];
-  ok('setup: that answer records the related dataset in what its facts came from, and nothing else', !!row && JSON.stringify(JSON.parse(row.body).factsFrom) === JSON.stringify([JSON.parse(row.body).answer?.categoryDatasetId]), row?.body.slice(0, 300));
+  const answer = row && JSON.parse(row.body).answer;
+  ok(`setup: that answer records the related dataset (its ${on}'s) in what its facts came from, and nothing else`, !!row && JSON.stringify(JSON.parse(row.body).factsFrom) === JSON.stringify([on === 'category' ? answer?.categoryDatasetId : answer?.measures?.[0]?.datasetId]), row?.body.slice(0, 300));
   await pool.query(`UPDATE assistant_turns SET body = (body::jsonb - 'factsFrom')::text WHERE project_id = $1 AND id = $2`, [P, row.id]);
   let bare: Awaited<ReturnType<typeof read>>;
   try {
@@ -390,6 +393,7 @@ export async function indexSections(W: H.World): Promise<void> {
     if (!((sql.body?.turns ?? []) as Array<{ sql?: unknown }>).some((t) => t.sql)) throw new Error(`setup: an SQL answer for ${who}: ${sql.text.slice(0, 300)}`);
   }
   const joinedThreads = await joinedAnswers(W, fin); // a chart on Plain whose category is read from Finance's dataset
+  const measureThreads = await joinedAnswers(W, fin, 'measure'); // …and one whose measure is
   const prose = await proseThreads(W, fin);
   const place = (kind: string, id: string) => pool.query('INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, $3, $4, $5, $6)', ['acme', P, kind, id, W.folders.fin, 'boss@acme.test']);
   await place('dataset', fin.ds);
@@ -449,6 +453,7 @@ export async function indexSections(W: H.World): Promise<void> {
     ok('NEGATIVE CONTROL: counted without the folders, opsViewer\'s list would say how many turns are hidden', unfiltered.some(([n, shown]) => n > shown), JSON.stringify(unfiltered));
     await proseChecks(W, prose);
     await joinedChecks(W, joinedThreads);
+    await joinedChecks(W, measureThreads, 'measure');
     await landingChecks(W, prose, fin);
 
     // ── NEGATIVE CONTROL: the WHERE removed ──

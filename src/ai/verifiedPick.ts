@@ -28,11 +28,17 @@ export interface Names { dataset: (id: string) => string; term: (id: string) => 
 
 /** A spec as the action line writes it: by name, never by id (./suggestedAction's "answer" shape). */
 export function rawSpec(spec: AnswerSpec, names: Names): Record<string, unknown> {
-  const filter = (f: AnswerFilter): Record<string, unknown> => ('term' in f ? { term: names.term(f.term) } : f);
+  // A related dataset's field is named as the model names it (./answerJoin): `dataset`, never an id.
+  const on = (id: string | undefined): Record<string, unknown> => (id ? { dataset: names.dataset(id) } : {});
+  const filter = (f: AnswerFilter): Record<string, unknown> => {
+    if ('term' in f) return { term: names.term(f.term) };
+    const { datasetId, ...rest } = f as AnswerFilter & { datasetId?: string };
+    return { ...rest, ...on(datasetId) };
+  };
   return {
     dataset: names.dataset(spec.datasetId), category: spec.category, ...(spec.categoryDatasetId ? { categoryDataset: names.dataset(spec.categoryDatasetId) } : {}),
     ...(spec.series ? { series: spec.series } : {}), ...(spec.series && spec.seriesDatasetId ? { seriesDataset: names.dataset(spec.seriesDatasetId) } : {}),
-    measures: spec.measures.map((m) => ({ column: m.column, aggregation: m.aggregation, ...(m.calc ? { calc: m.calc } : {}) })), filters: spec.filters.map(filter),
+    measures: spec.measures.map((m) => ({ column: m.column, aggregation: m.aggregation, ...on(m.datasetId), ...(m.calc ? { calc: m.calc } : {}) })), filters: spec.filters.map(filter),
     chartType: spec.chartType, ...(spec.top ? { top: spec.top } : {}), ...(spec.grain ? { grain: spec.grain } : {}),
   };
 }
@@ -48,9 +54,9 @@ export interface PickOptions {
 /** Whether `s` may be shown to this caller as an example: it runs, they may see it, and no value filter of it is on a column withheld from them. */
 export function eligibleExample(s: VerifiedState, o: Pick<PickOptions, 'exclude' | 'withheld'>): boolean {
   if (!usable(s, o.exclude)) return false;
-  if (s.q.spec.categoryVia) return false; // a model names no relationship (./answerJoin): copied, it would draw the default path's chart
-  const w = o.withheld(s.q.spec.datasetId);
-  return !(hasValueFilter(s.q.spec) && s.q.spec.filters.some((f) => 'column' in f && !('period' in f) && w.has(f.column)));
+  if (s.q.spec.categoryVia || s.q.spec.measures.some((m) => m.via)) return false; // a model names no relationship (./answerJoin): copied, it would draw the default path's chart
+  const w = (f: { datasetId?: string }) => o.withheld(f.datasetId ?? s.q.spec.datasetId); // a related filter's column: its own dataset's marks
+  return !(hasValueFilter(s.q.spec) && s.q.spec.filters.some((f) => 'column' in f && !('period' in f) && w(f).has(f.column)));
 }
 
 /** The examples' order: the context's dataset first, then an agent's topic, then the most words shared with the question, then the newest, then the id. */

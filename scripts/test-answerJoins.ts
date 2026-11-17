@@ -11,8 +11,8 @@
 //               encoding whose figures are the card's (its top-N cut too, bare or through its relationship); Add to
 //               dashboard twice adds once, and the plain twin is not taken for it; a verified joined question marks only the
 //               same join; the snapshot's print covers every table the join reads; the turn's `factsFrom` names the related
-//               dataset; a follow-up's previous answer keeps the join and names it; Explain on a visual with a related
-//               category keeps it, one with a related MEASURE is refused (no spec can say it).
+//               dataset; a follow-up's previous answer keeps the join and names it; Explain keeps a related category or
+//               measure (scripts/test-answerJoinMeasures), and refuses a filter through a relationship (no spec has one).
 //   prompt      the action line and the LINKED DATASETS block name "categoryDataset" / "seriesDataset".
 //   ask         "Did you mean" for a category misspelt on the related dataset offers ITS columns and keeps the join (a
 //               name it cannot teach there); a follow-up through copilot:ask ("now only open orders") keeps it.
@@ -145,10 +145,11 @@ function specCases(): void {
     && pick.eligibleExample(state(joinedSpec), { withheld: () => new Set() }));
 
   // The prompt: one call, the fields named, the block saying what they are for.
-  ok('prompt: the action line names "categoryDataset" and "seriesDataset", and keeps measures and filters on the dataset', suggested.CHAT_SYSTEM_PROMPT.includes('"categoryDataset":"<its name>"')
-    && suggested.CHAT_SYSTEM_PROMPT.includes('"seriesDataset":"<its name>"') && suggested.CHAT_SYSTEM_PROMPT.includes('measures and filters are always'));
+  ok('prompt: the action line names "categoryDataset", "seriesDataset" and a measure\'s or filter\'s own "dataset"', suggested.CHAT_SYSTEM_PROMPT.includes('"categoryDataset":"<its name>"')
+    && suggested.CHAT_SYSTEM_PROMPT.includes('"seriesDataset":"<its name>"') && suggested.CHAT_SYSTEM_PROMPT.includes('"dataset":"<its name>" inside the measure or filter'));
   const block = linkedFacts.linkedBlock([{ schema: { name: 'Countries', columns: C.columns }, base: 'Orders', hops: [{ from: { dataset: 'Orders', column: 'country_id' }, to: { dataset: 'Countries', column: 'country_id' } }] }]);
-  ok('prompt: the LINKED DATASETS block says a category or split may come from one', block.text.includes('"categoryDataset"') && !block.text.includes('An answer reads ONE dataset'), block.text);
+  ok('prompt: the LINKED DATASETS block says a category, split, measure or filter may come from one, and no digit', block.text.includes('"categoryDataset"') && block.text.includes('a measure or a')
+    && !block.text.includes('An answer reads ONE dataset') && !/\d/.test(block.text.split('\n').slice(0, 4).join('\n')), block.text);
 
   // Chips (pure): a related category's own hierarchy, never a same-named level of the asked dataset's.
   const GEO = { id: 'h', name: 'Geography', levels: ['continent', 'country_name'] };
@@ -383,8 +384,11 @@ async function routeCases(b: Bench): Promise<void> {
     const explainedTurn = explained.ok ? await inCtx(async () => (await copilot.loadHistory(P, explained.threadId)).at(-1)) : null;
     ok('explain: a visual with a related category is explained with its join', explained.ok === true && explainedTurn?.answer?.categoryDatasetId === countries, show([explained, explainedTurn?.answer]));
     const measureVisual = (await post('visual:save', { projectId: P, datasetId: countries, name: 'Orders by country', chartType: 'column', encoding: { category: 'country_name', values: [{ column: 'amount', aggregation: 'sum', datasetId: orders }] } })).value;
-    const refused = (await post('answer:explain', { projectId: P, visualId: measureVisual.id ?? measureVisual.visual?.id })).value;
-    ok('explain: one with a related MEASURE is refused (no spec can say it), never the asked dataset\'s same-named column', refused.ok === false && refused.reason === 'This chart cannot be explained.', show(refused));
+    const kept = (await post('answer:explain', { projectId: P, visualId: measureVisual.id ?? measureVisual.visual?.id })).value;
+    const keptTurn = kept.ok ? await inCtx(async () => (await copilot.loadHistory(P, kept.threadId)).at(-1)) : null;
+    ok('explain: one with a related (many-side) MEASURE is explained with it (scripts/test-answerJoinMeasures), never the asked dataset\'s same-named column', kept.ok === true && keptTurn?.answer?.measures[0].datasetId === orders, show([kept, keptTurn?.answer]));
+    const viaFilter = (await post('visual:save', { projectId: P, datasetId: orders, name: 'Via filter', chartType: 'column', encoding: { category: 'status', values: SUM }, filters: [{ type: 'filter', column: 'country_name', op: '=', value: 'France', via: seed.byShip }] })).value, refused = (await post('answer:explain', { projectId: P, visualId: viaFilter.id ?? viaFilter.visual?.id })).value;
+    ok('explain: NEGATIVE CONTROL: one with a filter through a relationship is refused (a spec\'s filter has no via)', refused.ok === false && refused.reason === 'This chart cannot be explained.', show(refused));
   } finally {
     (visualsIpc as { vizDataFor: unknown }).vizDataFor = realDoor;
     await b.close();

@@ -50,7 +50,7 @@ import {
   splitCandidates, validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset } from '../ai/answerSpec';
-import { isJoined, ownNames, relatedIds, specEncoding } from '../ai/answerJoin';
+import { filterOn, isJoined, ownNames, relatedIds, specEncoding } from '../ai/answerJoin';
 import { joinedSides, joinedViz, ranked, relatedOfStored } from './answerJoined';
 import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
 import { sanitizeLearn } from '../ai/answerSuggest';
@@ -190,7 +190,7 @@ async function cardOf(projectId: string, asked: AnswerSpec, loose: boolean): Pro
 
 /** The card as asked: each term back in its spec (and its chips'), its steps holding the reference in place of the expansion, so a save keeps it. */
 function withTermRefs(built: Built, x: AnswerTerms): Built {
-  const refs = x.terms.map((t) => ({ term: t.term }));
+  const refs = x.refs; // as asked: a related term keeps its dataset (../ai/answerJoin)
   const withRefs = (s: AnswerSpec): AnswerSpec => ({ ...s, filters: [...s.filters, ...refs] });
   const card = built.card;
   const chips = (list: AnswerChip[]): AnswerChip[] => list.map((c) => ({ ...c, spec: withRefs(c.spec) }));
@@ -208,8 +208,8 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)) // part 5's shapes first; extract and Live alike
     ?? (await figureRefusal(projectId, asked.datasetId, { ...asMeasures, ...(asked.series ? { series: asked.series } : {}) }, asked.chartType)); // a waterfall, Pareto or 100% stack adds its measure up, as a running total or a share does (D7)
   if (snapshot) return { ok: false, reason: snapshot };
-  // A related dataset's category or split (./answerJoined): its sides read first (a closed or only reached one refused).
-  const joined = isJoined(asked) ? await joinedSides(projectId, asked) : null;
+  // A related dataset's field or term (./answerJoined): its sides read first (a closed or only reached one refused).
+  const joined = isJoined(asked) || terms.steps.some((s) => s.datasetId) ? await joinedSides(projectId, asked) : null;
   if (joined && !joined.ok) return joined;
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
   // Joined, its chart is the chart door's (the Live join's executor on one connection; any other mix, the door's sentence).
@@ -262,7 +262,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   for (const name of joined ? joined.withheld : []) withheld.add(name);
   const saidFilterLabels = spec.filters.some((f) => 'column' in f && withheld.has(f.column))
     ? [...specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels, ...terms.labels] : undefined;
-  const on = { category: joined?.category?.meta.name, series: joined?.series?.meta.name };
+  const on = { category: joined?.category?.meta.name, series: joined?.series?.meta.name, datasets: joined?.names };
   const factsIn = {
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec, on), data,
     categoryIsDate: isDate, additive, filterLabels, saidFilterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
@@ -354,13 +354,14 @@ export async function previousAnswer(projectId: string, turns: copilot.CopilotTu
   const meta = asked ? await inSourceTable(projectId, asked, () => datasets.getDatasetMeta(projectId, asked.datasetId)) : null; // a table's answer: its view
   if (!spec || !meta) return null;
   if ((isJoined(spec) ? ownNames(spec) : answerNames(spec)).some((n) => !meta.columns.some((c) => c.name === n))) return null;
-  const related = isJoined(spec) ? await relatedOfStored(projectId, spec) : { datasets: [], on: {} }; // a related category's or split's (./answerJoined)
+  const related = isJoined(spec) ? await relatedOfStored(projectId, spec) : { datasets: [], on: {} }; // a related field's or term's dataset (./answerJoined)
   if (!related) return null;
   const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
   const terms = (await vocabularyFor(projectId, { specs: [spec], datasetIds: [spec.datasetId] }))?.terms ?? (await specTerms(projectId)); // the terms it names, or every one (the reference)
   if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds, ...related.datasets], { terms }).ok) return null;
   // A Live dataset's set is its facts' own, stricter one (./liveProfile): pending and detected columns too.
   const withheld = isLive(meta) ? await liveWithheld(projectId, meta.id, meta) : await withheldColumns(projectId, meta.id);
+  for (const f of spec.filters) { const on = filterOn(f); if (on && 'column' in f && (await withheldColumns(projectId, on)).has(f.column)) withheld.add(f.column); } // a related filter: its dataset's marks
   const { text, ledger } = previousAnswerBlock(spec, meta.name, withheld, related.on);
   return { spec, block: text, ledger, withheld };
 }
@@ -418,9 +419,9 @@ export async function namedDataset(projectId: string, action: SuggestedAction): 
 export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters: FilterStep[]; chartType: string; name: string }): AnswerSpec | null {
   // A step this pod cannot read (not a filter, not a term) has no place in a spec: none, never a widened chart.
   if ((t.filters || []).some((f) => isKeptStep(f) && !isTermStep(f))) return null;
-  // A spec's only join is its category's or split's (../ai/answerJoin): a measure or a filter on another table, which
-  // sanitizeStoredSpec would drop, would read the primary's same-named column instead.
-  if (hasVia({ ...t.encoding, categoryVia: undefined }, t.filters) || (t.encoding.values || []).some((v) => v && v.datasetId) || (t.filters || []).some((f) => f && f.datasetId && !isTermStep(f))) return null;
+  // A spec's fields join as a visual's do (../ai/answerJoin), but a filter has no `via`: through one it would read
+  // the primary's same-named column instead.
+  if (hasVia({ ...t.encoding, categoryVia: undefined, values: [] }, t.filters)) return null;
   const enc = t.encoding;
   const category = enc.category || (enc.pivot && enc.pivot.rows && enc.pivot.rows[0]) || '';
   const measures = (enc.values || []).map((m) => (m.aggregation === 'none' ? { ...m, aggregation: 'sum' as const } : m));
@@ -434,7 +435,7 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
     // A term step becomes { term } (a door expands it); the rest is a comparison. No step is ignored.
     filters: (t.filters || []).map((f) => {
       const s: unknown = f; // a term rides in FilterStep[] (filterList.ts shortcut), so the type cannot say so
-      return isTermStep(s) ? { term: s.term } : { column: f.column, op: f.op, value: f.value, values: f.values };
+      return isTermStep(s) ? { term: s.term } : { column: f.column, op: f.op, value: f.value, values: f.values, datasetId: f.datasetId }; // a related table's, pinned
     }),
     chartType: ANSWER_CHART_TYPES.has(t.chartType) ? t.chartType : 'column',
     title: t.name,

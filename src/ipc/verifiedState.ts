@@ -6,7 +6,7 @@
 
 import { answerNames } from '../engine/live/liveMissing';
 import { refineSpec } from '../ai/answerRefine';
-import { isJoined, ownNames, relatedIds } from '../ai/answerJoin';
+import { isJoined, ownNames, relatedIds, relatedRefs } from '../ai/answerJoin';
 import { parseAgg, validateAnswerSpec } from '../ai/answerSpec';
 import type { SpecDataset, SpecMetric } from '../ai/answerSpec';
 import type { SpecTerm } from '../ai/termFacts';
@@ -77,14 +77,14 @@ export function verifiedProblem(q: VerifiedQuestion, env: VerifiedEnv): string |
   const named = isJoined(q.spec) ? ownNames(spec) : answerNames(spec);
   const gone = named.find((n) => !ds.columns.some((c) => c.name === n)); // by exact name, as computeCard reads it
   if (gone !== undefined) return msg.verifiedColumnGone(gone, ds.name);
-  // A related category or split (../ai/answerJoin): its dataset still there, with that column.
+  // A related category, split, measure, filter or term (../ai/answerJoin): its dataset still there, with that column.
   const related: SpecDataset[] = [];
-  for (const [id, column] of [[q.spec.categoryDatasetId, q.spec.category], [q.spec.seriesDatasetId, q.spec.series]] as const) {
-    if (!id || !column) continue;
+  for (const [key, id, column] of relatedRefs(q.spec)) {
+    if (!id || id === ds.id || (!column && key !== 'filter')) continue;
     const on = env.datasets.find((d) => d.id === id);
     if (!on) return msg.verifiedDatasetGone();
-    if (!on.columns.some((c) => c.name === column)) return msg.verifiedColumnGone(column, on.name);
-    related.push(on);
+    if (column && !on.columns.some((c) => c.name === column)) return msg.verifiedColumnGone(column, on.name);
+    if (!related.includes(on)) related.push(on);
   }
   if (q.spec.filters.some((f) => 'term' in f && !env.terms.some((t) => t.id === f.term))) return msg.verifiedTermGone();
   // A measure named by a metric is the metric as verified (refineSpec's carried check): redefined, filtered or deleted,

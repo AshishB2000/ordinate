@@ -75,34 +75,36 @@ export async function expandTerms(projectId: string, datasetId: string, steps: r
   return { steps: out, notes };
 }
 
-/** What an answer's terms became: the spec without them, their steps, the references (what the card's steps keep), and their names. */
+/** What an answer's terms became: the spec without them, their steps, the references (what the card's steps keep), the spec's own `{ term }` filters, and their names. */
 export interface AnswerTerms {
   spec: AnswerSpec;
   steps: FilterStep[];
   terms: TermStep[];
+  refs: Array<{ term: string; datasetId?: string }>;
   labels: string[];
 }
 
 /**
- * An answer spec with its `{ term }` filters taken out and expanded. An answer's filters are its own dataset's, so a term must be
- * the spec's own dataset's: any other is refused with a sentence naming both. A filter typed `term` (not the
- * spec's `{ term }`) stays unreadable, as specFilterSteps' rule has it.
+ * An answer spec with its `{ term }` filters taken out and expanded. A term is the spec's own dataset's, or the related
+ * dataset its reference names (../ai/answerJoin): its steps then carry that dataset (`expandOne`, which refuses one this
+ * figure cannot reach, or a Live one, in its sentence). Any other is refused with a sentence naming both. A filter typed
+ * `term` (not the spec's `{ term }`) stays unreadable, as specFilterSteps' rule has it.
  */
 export async function expandAnswerTerms(projectId: string, spec: AnswerSpec): Promise<AnswerTerms> {
   const filters = (spec && spec.filters) || [];
   if (filters.some((f) => hasTermType(f) || ('term' in f && typeof (f as { term: unknown }).term !== 'string'))) throw new TermNotExpandedError('unreadable');
-  const refs = filters.filter((f): f is { term: string } => 'term' in f);
-  if (!refs.length) return { spec, steps: [], terms: [], labels: [] };
+  const refs = filters.filter((f): f is { term: string; datasetId?: string } => 'term' in f);
+  if (!refs.length) return { spec, steps: [], terms: [], refs: [], labels: [] };
   const terms = refs.map((f): TermStep => ({ type: 'term', term: f.term }));
   const labels: string[] = [];
-  for (const t of terms) {
+  for (const [i, t] of terms.entries()) {
     const term = await getTerm(projectId, t.term);
-    if (term && term.datasetId !== spec.datasetId) {
+    if (term && term.datasetId !== spec.datasetId && term.datasetId !== refs[i].datasetId) {
       const name = async (id: string): Promise<string> => (await datasets.getDatasetMeta(projectId, id))?.name ?? '';
       throw new TermNotExpandedError('unreachable', msg.termOtherDataset(term.name, await name(term.datasetId), await name(spec.datasetId)));
     }
     if (term) labels.push(term.name);
   }
   const { steps } = await expandTerms(projectId, spec.datasetId, terms as unknown as FilterStep[]); // deleted or a column gone: refused, typed
-  return { spec: { ...spec, filters: filters.filter((f) => !('term' in f)) }, steps, terms, labels };
+  return { spec: { ...spec, filters: filters.filter((f) => !('term' in f)) }, steps, terms, refs, labels };
 }

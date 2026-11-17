@@ -10,6 +10,9 @@
 //   2. THE MIX: Live Orders with its category from a copy, and a copy with its category from Live Customers, each get
 //      the door's own typed sentence (`live_refused`, the same words `visual:data` says), never `live_dataset`, and
 //      send nothing. NEGATIVE CONTROL: the all-Live card answers (1).
+//   1b. A RELATED MEASURE gets the door's typed sentence (the executor's `relatedMeasure`, live_refused), a related
+//      glossary term its typed `term` sentence, each word for word what visual:data says, never live_dataset, nothing
+//      sent; a related FILTER (pinned to Live Customers) is the door's Live chart and the copy card's figures (Object.is).
 //   3. THE ASK: a model's answer naming the linked Live dataset is the chart form, ONE model call; Save as visual keeps
 //      the join and the visual draws the card's figures; the snapshot's print reads both Live tables; the turn's
 //      `factsFrom` names the related one.
@@ -110,6 +113,31 @@ void (async () => {
   const sent = fake.calls.length;
   const hit = await card(spec(L.orders, L.customers));
   ok('asked again, the executor\'s own cache answers: no statement', hit.ok === true && fake.calls.length === sent, String(fake.calls.length - sent));
+
+  // ── 1b. A measure, a filter or a term from the related Live dataset (scripts/test-answerJoinMeasures on copies) ──
+  // A related measure: the Live join's executor refuses it (`relatedMeasure`, its fan-in mask is a copy's) in the door's
+  // typed sentence, never live_dataset. A pinned filter: the door's Live chart, in the warehouse.
+  {
+    const before = fake.calls.length;
+    const m = await post('answer:card', { projectId: P, spec: spec(L.orders, L.customers, { category: 'status', categoryDatasetId: undefined, measures: [{ column: 'seg', aggregation: 'count', datasetId: L.customers }] }) });
+    const mDoor = await chart(L.orders, { category: 'status', values: [{ column: 'seg', aggregation: 'count', datasetId: L.customers }] });
+    ok('live: a related measure gets the door\'s typed sentence (live_refused), word for word visual:data\'s, never live_dataset, nothing sent',
+      m.value.ok === false && m.value.code === 'live_refused' && mDoor.ok === false && m.value.reason === mDoor.error && !/live_dataset/.test(m.body) && fake.calls.length === before, show([m.value, mDoor]));
+    const fSpec = spec(L.orders, L.customers, { category: 'status', categoryDatasetId: undefined, filters: [{ column: 'region', op: '=', value: 'North', datasetId: L.customers }] });
+    const f = await card(fSpec);
+    const fDoor = await chart(L.orders, { category: 'status', values: SUM }, [{ type: 'filter', column: 'region', op: '=', value: 'North', datasetId: L.customers }]);
+    const fCopy = await card(spec(X.orders, X.customers, { category: 'status', categoryDatasetId: undefined, filters: [{ column: 'region', op: '=', value: 'North', datasetId: X.customers }] }));
+    ok('live: a related filter (pinned to Live Customers) is the door\'s Live chart in the warehouse (Object.is), and the copy path\'s card over the same rows',
+      f.ok === true && f.asOf?.mode === 'live' && sameFigures(f.data, fDoor?.data) && sameFigures(f.data, fCopy?.data), show([f, fDoor, fCopy]));
+    // A glossary term of Live Customers: a term reaches another table only on copies (analysis/termExpand), refused typed.
+    const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+    const north = (await as(() => terms.saveTerm(P, { name: 'North customers', datasetId: L.customers, filters: [{ type: 'filter', column: 'region', op: '=', value: 'North' }] } as never)))!;
+    const tSent = fake.calls.length;
+    const t = await post('answer:card', { projectId: P, spec: { ...fSpec, filters: [{ term: north.id, datasetId: L.customers }] } });
+    const tDoor = await chart(L.orders, { category: 'status', values: SUM }, [{ type: 'term', term: north.id }]);
+    ok('live: a related glossary term is refused in the door\'s typed sentence (term), word for word visual:data\'s, never live_dataset, nothing sent',
+      t.value.ok === false && t.value.code === 'term' && tDoor.ok === false && t.value.reason === tDoor.error && !/live_dataset/.test(t.body) && fake.calls.length === tSent, show([t.value, tDoor]));
+  }
 
   // ── 2. The mix: the door's own typed sentence, never live_dataset, nothing sent ──
   await as(async () => {
