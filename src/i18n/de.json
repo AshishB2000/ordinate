@@ -62,7 +62,7 @@
   "answerMessages.a_moving_window_is_a_whole": null,
   "answerMessages.could_not_add_this_answer_to": "Diese Antwort konnte nicht zu diesem Dashboard hinzugefügt werden.",
   "answerMessages.could_not_save_this_answer_as": null,
-  "answerMessages.is_a_column_of_which_is": null,
+  "answerMessages.is_a_column_of_which_is": "\"{column}\" ist eine Spalte von {linked}, mit dem {dataset} verknüpft ist. Eine Antwort kann {dataset} danach gruppieren oder aufteilen, wenn sie {linked} nennt; ihre Kennzahlen und Filter sind eigene Spalten von {dataset}. Fragen Sie nach {linked} für sich, oder erstellen Sie das Diagramm in Visuals.",
   "answerMessages.is_not_a_calculation_the_chart": null,
   "answerMessages.matched_to_in": null,
   "answerMessages.no_rows_have_in": null,

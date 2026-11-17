@@ -119,10 +119,19 @@ export function refineSpec(
     measures: p.measures ?? (p.measure != null ? [p.measure] : previous.measures.map(carried)),
     filters: [...previous.filters.filter((f) => !('column' in f && gone.has(f.column))), ...added, ...unknownDrops],
   };
-  const sameAxis = p.category == null || real(p.category) === previous.category;
-  const splitIsAxis = !sameAxis && !!previous.series && real(p.category) === previous.series;
+  // A related dataset's category or split (./answerJoin) goes with it: the patch's own when it names a new one, which
+  // `real` (the asked dataset's columns) cannot read, so it is never the same axis or the split moved onto it.
+  const patchCatOn = p.categoryDatasetId ?? p.categoryDataset;
+  const catOn = p.category != null ? patchCatOn : previous.categoryDatasetId;
+  if (catOn != null && catOn !== '') merged.categoryDatasetId = catOn;
+  if (p.category == null && previous.categoryVia) merged.categoryVia = previous.categoryVia;
+  const ownAxis = !previous.categoryDatasetId && (patchCatOn == null || patchCatOn === '');
+  const sameAxis = p.category == null || (ownAxis && real(p.category) === previous.category);
+  const splitIsAxis = !sameAxis && ownAxis && !!previous.series && !previous.seriesDatasetId && real(p.category) === previous.series;
   const series = p.series !== undefined ? p.series : splitIsAxis ? null : previous.series;
   if (series != null) merged.series = series;
+  const serOn = p.series !== undefined ? p.seriesDatasetId ?? p.seriesDataset : previous.seriesDatasetId;
+  if (series != null && serOn != null && serOn !== '') merged.seriesDatasetId = serOn;
   const cut = [p.top, p.limit].find((t) => typeof t === 'number' || t === null);
   const top = cut !== undefined ? cut : previous.top;
   if (top != null) merged.top = top;
@@ -136,7 +145,8 @@ export function refineSpec(
   return merged;
 }
 
-const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'calc', 'kind', 'along', 'dimension', 'restart', 'window', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain'];
+// The join fields last: a spec without them says exactly what it said before they existed.
+const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'calc', 'kind', 'along', 'dimension', 'restart', 'window', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain', 'categoryDatasetId', 'categoryVia', 'seriesDatasetId'];
 
 /**
  * Two specs that draw the same chart: everything but the title, and a measure's

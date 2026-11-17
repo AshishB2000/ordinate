@@ -19,7 +19,11 @@ import * as copilot from '../ai/copilot';
 
 type Turn = Pick<copilot.CopilotTurn, 'role' | 'text' | 'answer' | 'suggest' | 'sql' | 'factsFrom' | 'dashboardsFrom'>;
 
-/** The datasets an assistant turn shows: its chart's, its "Did you mean" options', every one its SQL answer read and its facts' (0039 `ordinate_turn_shows`). */
+/**
+ * The datasets an assistant turn shows: its chart's, its "Did you mean" options', every one its SQL answer read and its
+ * facts' (0039 `ordinate_turn_shows`). A related dataset a chart's category or split is read from (../ai/answerJoin) is
+ * in `factsFrom` (../ai/copilot appendTurn writes it), so the list's SQL count and this agree with no new migration.
+ */
 const shows = (t: Turn): string[] => [
   ...(t.answer ? [t.answer.datasetId] : []), ...(t.suggest?.options ?? []).map((o) => o.spec.datasetId), ...(t.sql?.datasetIds ?? []), ...(t.factsFrom ?? []),
 ];

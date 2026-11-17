@@ -105,7 +105,7 @@ export async function askLinkedFacts(projectId: string, about: readonly DatasetM
 
 /**
  * The linked dataset that has the column a model's answer said on `datasetId`, bare or as "Customers.region", or null:
- * the chart form reads one dataset, so it is refused with that (../ai/answerMessages linkedColumnRefused).
+ * named without its dataset, it is refused with that (../ai/answerMessages linkedColumnRefused): rejection, not repair.
  */
 export async function linkedColumnOf(projectId: string, datasetId: string, said: unknown): Promise<{ dataset: string; column: string } | null> {
   if (typeof said !== 'string' || !said.trim()) return null;

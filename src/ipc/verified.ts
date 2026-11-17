@@ -77,7 +77,7 @@ function rowOf(s: VerifiedState, names: ReadonlyMap<string, string>, termNames: 
   const row: VerifiedRow = {
     id: q.id, question: q.question, phrasings: q.phrasings, ...(q.note ? { note: q.note } : {}),
     datasetId: q.spec.datasetId, datasetName: names.get(q.spec.datasetId) ?? '',
-    describe: describeAnswer(q.spec), filters: q.spec.filters.flatMap((f) => filterWords(f, termNames, hidden)),
+    describe: describeAnswer(q.spec, { category: q.spec.categoryDatasetId && names.get(q.spec.categoryDatasetId), series: q.spec.seriesDatasetId && names.get(q.spec.seriesDatasetId) }), filters: q.spec.filters.flatMap((f) => filterWords(f, termNames, hidden)),
     ...(hidden ? {} : { spec: q.spec }),
     verifiedBy: q.verifiedBy, verifiedAt: q.verifiedAt, runs: s.problem === null, ...(s.problem !== null ? { problem: s.problem } : {}), tag: s.tag,
   };

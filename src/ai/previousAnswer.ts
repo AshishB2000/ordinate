@@ -58,13 +58,15 @@ export function previousAnswerBlock(
   spec: AnswerSpec,
   datasetName: string,
   withheld: ReadonlySet<string>,
+  on: { category?: string; series?: string } = {}, // the related datasets' names a category or split is read from (./answerJoin)
 ): { text: string; ledger: LedgerEntry[] } {
+  const from = (name: string | undefined): string => (name ? ` from ${quoted(name)}` : '');
   const parts = [
     `dataset ${quoted(datasetName)}`,
-    `category ${quoted(spec.category)}` + (spec.grain ? ` by ${spec.grain}` : ''),
+    `category ${quoted(spec.category)}${from(on.category)}` + (spec.grain ? ` by ${spec.grain}` : ''),
     `measures ${spec.measures.map((m) => `${m.aggregation}(${m.column})${m.calc ? ` as ${m.calc.kind}${m.calc.window ? ` over ${m.calc.window}` : ''}` : ''}`).join(', ')}`,
   ];
-  if (spec.series) parts.push(`split by ${quoted(spec.series)}`);
+  if (spec.series) parts.push(`split by ${quoted(spec.series)}${from(on.series)}`);
   // A glossary term is a reference the model is not shown (the card names it); every other filter is.
   const said = spec.filters.flatMap((f) => ('term' in f ? [] : [filterWords(f, withheld)]));
   if (said.length) parts.push(`filters: ${said.join(', ')}`);
@@ -73,7 +75,7 @@ export function previousAnswerBlock(
   const text = `${PREVIOUS_ANSWER} (the chart the user is looking at; names only):\n${parts.join('; ')}.`;
 
   const settings: number[] = [...(spec.top ? [spec.top] : []), ...spec.measures.flatMap((m) => (m.calc?.window ? [m.calc.window] : []))];
-  const words: string[] = [datasetName, spec.category, spec.series ?? '', ...spec.measures.map((m) => m.column)];
+  const words: string[] = [datasetName, spec.category, spec.series ?? '', on.category ?? '', on.series ?? '', ...spec.measures.map((m) => m.column)];
   for (const f of spec.filters) {
     if ('term' in f) continue;
     words.push(f.column);

@@ -32,9 +32,11 @@ function calcWords(calc: TableCalc | undefined): string {
 }
 
 /** The spec in words — "sum of revenue by region, split by tier", "a running total of sum of revenue by month" — for `AnswerFactsInput.describe`. */
-export function describeAnswer(spec: AnswerSpec): string {
+/** `on`: the related datasets' names a category or split is read from (./answerJoin). */
+export function describeAnswer(spec: AnswerSpec, on: { category?: string; series?: string } = {}): string {
   const ms = spec.measures.map((m) => `${calcWords(m.calc)}${aggWord(m.aggregation)} of ${m.column}`).join(', ');
-  return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
+  const from = (name: string | undefined): string => (name ? ` (from ${name})` : '');
+  return `${ms} by ${spec.category}${from(on.category)}${spec.series ? `, split by ${spec.series}${from(on.series)}` : ''}`;
 }
 
 /**

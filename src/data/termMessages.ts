@@ -71,7 +71,7 @@ export function termNotHere(): string {
   return t('termMessages.a_what_if_driver_cannot_be');
 }
 
-/** The Assistant asked for a term on another dataset (it never joins). */
+/** The Assistant asked for a term on another dataset (an answer's filters are its own dataset's). */
 export function termOtherDataset(name: string, termDataset: string, dataset: string): string {
   return t('termMessages.filters_not_ask_about_or_use', { name, termDataset, dataset });
 }

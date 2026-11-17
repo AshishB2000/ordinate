@@ -62,7 +62,7 @@
   "answerMessages.a_moving_window_is_a_whole": null,
   "answerMessages.could_not_add_this_answer_to": "Impossible d’ajouter cette réponse à ce tableau de bord.",
   "answerMessages.could_not_save_this_answer_as": null,
-  "answerMessages.is_a_column_of_which_is": null,
+  "answerMessages.is_a_column_of_which_is": "\"{column}\" est une colonne de {linked}, auquel {dataset} est lié. Une réponse peut grouper ou répartir {dataset} selon elle si elle nomme {linked} ; ses mesures et ses filtres sont des colonnes propres à {dataset}. Posez la question sur {linked} seul, ou créez le graphique dans Visuals.",
   "answerMessages.is_not_a_calculation_the_chart": null,
   "answerMessages.matched_to_in": null,
   "answerMessages.no_rows_have_in": null,

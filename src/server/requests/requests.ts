@@ -34,6 +34,7 @@ import * as drafts from '../../analysis/publishDashboard';
 import { statusOf } from '../../analysis/publishedCopy';
 import * as copilot from '../../ai/copilot';
 import { sanitizeStoredSpec, type AnswerSpec } from '../../ai/answerSpec';
+import { relatedIds } from '../../ai/answerJoin';
 import * as config from '../../app/config';
 import * as datasets from '../../data/datasets';
 import { personName } from '../../app/mentionToken';
@@ -66,8 +67,11 @@ const DAY = 86_400_000;
 export type CreateReply = { ok: true; id?: string; already?: true } | { ok: false; error: string; code?: 'rate_limited' | 'too_many_open' };
 
 const datasetIdsOf = (charts: readonly AnswerSpec[]): string[] => [...new Set(charts.map((c) => c.datasetId.toLowerCase()))];
+/** Every dataset a chart reads: its own, and a related category's or split's (../../ai/answerJoin). */
+const readsOf = (c: AnswerSpec): string[] => [c.datasetId, ...relatedIds(c)].map((id) => id.toLowerCase());
+const readIdsOf = (charts: readonly AnswerSpec[]): string[] => [...new Set(charts.flatMap(readsOf))];
 /** What an approver needs Edit on: every dataset the charts read, and the dashboard they go onto. */
-const anchorsOf = (r: Pick<DashboardRequest, 'charts' | 'targetId'>): Anchor[] => [...datasetsAt(datasetIdsOf(r.charts)), ...(r.targetId ? [{ kind: 'dashboard' as const, id: r.targetId }] : [])];
+const anchorsOf = (r: Pick<DashboardRequest, 'charts' | 'targetId'>): Anchor[] => [...datasetsAt(readIdsOf(r.charts)), ...(r.targetId ? [{ kind: 'dashboard' as const, id: r.targetId }] : [])];
 
 /** Editors and admins with Edit on every anchor, never the requester: `openers` per anchor, intersected. */
 async function approversOf(projectId: string, anchors: readonly Anchor[], requester: string): Promise<string[]> {
@@ -116,7 +120,7 @@ export async function createRequest(projectId: string, input: CreateInput): Prom
     if (typeof chart === 'string') return { ok: false, error: chart };
     charts.push(chart);
   }
-  const ids = datasetIdsOf(charts);
+  const ids = readIdsOf(charts);
   await mustOpen(projectId, datasetsAt(ids)); // a dataset the requester cannot open: `closed`
   for (const id of ids) if (!(await datasets.getDatasetMeta(projectId, id))) return { ok: false, error: say.datasetGone() };
   let title = input.title.trim().slice(0, 120);
@@ -247,7 +251,7 @@ function cardView(b: Built | Failure, fewerRows?: string): CardView {
  * Records only, never a row; an account gone or disabled names none.
  */
 async function fewerRowsOn(r: DashboardRequest): Promise<Set<string>> {
-  const ids = datasetIdsOf(r.charts);
+  const ids = readIdsOf(r.charts);
   const theirs = await asMember(r.requester, () => Promise.all(ids.map((id) => lockPrint(r.projectId, id))));
   const out = new Set<string>();
   for (const [i, id] of ids.entries()) {
@@ -303,7 +307,7 @@ export async function previewRequest(projectId: string, id: string): Promise<Pre
   const suggested = r.folderId ? ((await foldersOpen(projectId)).find((f) => f.id === r.folderId)?.name ?? '') : '';
   const fewer = await fewerRowsOn(r);
   const line = say.seesFewerRows(personName(r.requester));
-  const cards = plan.built.map((b, i) => cardView(b, fewer.has(r.charts[i].datasetId.toLowerCase()) ? line : undefined));
+  const cards = plan.built.map((b, i) => cardView(b, readsOf(r.charts[i]).some((id) => fewer.has(id)) ? line : undefined));
   return { ok: true, request: viewOf(r), cards, creates: plan.creates, choices: plan.choices, suggested, ...(plan.problem ? { problem: plan.problem } : {}) };
 }
 

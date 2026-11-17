@@ -51,6 +51,8 @@ import { inSourceTable, inSqlTables } from './sourceAnswers';
 import { openTurns } from './turnsOpen';
 import { onDashboard } from './answerDashboard';
 import { viewHook } from '../data/sourceView';
+import { isJoined } from '../ai/answerJoin';
+import { answerReads } from './answerJoined';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
 export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot' | 'factsFrom' | 'dashboardsFrom'> & { card?: Record<string, unknown> };
@@ -113,11 +115,20 @@ export async function sqlVerifiedMark(projectId: string, sql: Pick<SqlTurn, 'tex
 export const sqlDelivered = async (projectId: string, card: object, sql: SqlTurn, view: KeptView) =>
   ({ ...card, ...(await sqlVerifiedMark(projectId, sql)), snapshot: view });
 
+/**
+ * What decides a chart answer's figures for the caller: its dataset's `accessPrint`, exactly as before for every spec
+ * that reads only it; for one whose category or split is a related dataset's (../ai/answerJoin), the prints of every
+ * table its join reads (./answerJoined answerReads), as one — a rule or a hidden column on any of them recomputes it.
+ */
+export async function answerAccessPrint(projectId: string, spec: AnswerSpec): Promise<string> {
+  return isJoined(spec) ? sqlAccessPrint(projectId, await answerReads(projectId, spec)) : accessPrint(projectId, spec.datasetId);
+}
+
 /** A snapshot of a card just computed for `spec` (the turn's stored answer), or undefined: none kept, the card computes on open. */
 export async function snapshotFor(projectId: string, card: AnswerCard, spec: AnswerSpec): Promise<AnswerSnapshot | undefined> {
   try {
     const now = new Date().toISOString();
-    const access = await inSourceTable(projectId, spec, () => accessPrint(projectId, spec.datasetId)); // a source table's view, as it is read on open
+    const access = await inSourceTable(projectId, spec, () => answerAccessPrint(projectId, spec)); // a source table's view, as it is read on open
     return makeSnapshot(card, { asOf: now, firstAsked: now }, access, periodsOf(spec)) ?? undefined;
   } catch {
     return undefined;
@@ -183,7 +194,10 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
     // An answer read straight from a source table is checked and delivered inside its view (./sourceAnswers): outside it
     // (a caller no longer an editor, a table gone) its id is no dataset, so its figures stay here.
     out.push(await inSourceTable(projectId, turn.answer, async () => {
-      const card = snapshot && turn.answer && (await accessNow(turn.answer.datasetId)) === snapshot.access ? cardOf(snapshot) : null;
+      const answer = turn.answer;
+      const print = !snapshot || !answer ? null // nothing kept: nothing to check
+        : isJoined(answer) ? await sqlAccessNow(await answerReads(projectId, answer).catch(() => [])) : await accessNow(answer.datasetId); // every table a join reads (`answerAccessPrint`)
+      const card = snapshot && answer && print === snapshot.access ? cardOf(snapshot) : null;
       return card && snapshot && turn.answer
         ? { ...turn, card: await delivered(projectId, card, turn.answer, turn, keptView(snapshot, snapshot.firstAsked, snapshot.periods)) }
         : turn;
@@ -228,7 +242,7 @@ export function registerSnapshots(compute: Compute): void {
 async function refreshCard(projectId: string, threadId: string, turnId: string, turn: copilot.CopilotTurn, spec: AnswerSpec, compute: Compute): Promise<Record<string, unknown>> {
   const built = await compute(projectId, spec);
   if ('ok' in built) return built;
-  const access = await accessPrint(projectId, spec.datasetId);
+  const access = await answerAccessPrint(projectId, spec);
   const firstAsked = turn.snapshot?.firstAsked ?? turn.createdAt;
   const periods = periodsOf(spec);
   const snap = makeSnapshot(built.card, { asOf: new Date().toISOString(), firstAsked }, access, periods);

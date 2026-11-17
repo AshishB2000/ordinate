@@ -5,6 +5,7 @@
 // (the token user's row lock, the Live door) and then the Share policy's EXPORT path, exactly as `aggregate` does.
 
 import { computeCard } from '../ipc/answers';
+import { isJoined, specEncoding } from '../ai/answerJoin';
 import { verifiedStates, type VerifiedState } from '../ipc/verifiedState';
 import { verifiedNamed, verifiedSqlNamed } from '../ipc/verifiedLookup';
 import { verifiedSqlNotOnMcp } from '../ai/answerSqlMessages';
@@ -31,10 +32,13 @@ export interface McpVerifiedAnswer {
   headline?: Headline[]; asOf?: string; verifiedBy: string; verifiedAt: string; note?: string; notes?: string[];
 }
 
-/** `aggregate`'s arguments for a spec, or null: a top-N, a period or a glossary term is not in its FILTERS. */
+/**
+ * `aggregate`'s arguments for a spec, or null: a top-N, a period or a glossary term is not in its FILTERS, and a related
+ * category or split (../ai/answerJoin) is not in its one dataset's encoding: `answer_verified_question` draws those.
+ */
 function aggregateArgs(s: VerifiedState, dataset: string): McpVerified['aggregate'] | null {
   const { spec } = s.q;
-  if (s.hidden || s.problem !== null || spec.top || spec.filters.some((f) => 'term' in f || 'period' in f)) return null;
+  if (s.hidden || s.problem !== null || spec.top || isJoined(spec) || spec.filters.some((f) => 'term' in f || 'period' in f)) return null;
   return {
     dataset,
     encoding: {
@@ -71,7 +75,7 @@ export async function answerVerifiedQuestion(ctx: Ctx, question: string): Promis
   const built = await computeCard(ctx.projectId, q.spec);
   if ('ok' in built) throw new AutomationError('runtime', built.reason);
   const { card } = built;
-  const encoding = { category: q.spec.category, values: q.spec.measures, ...(q.spec.series ? { series: q.spec.series } : {}), ...(q.spec.grain ? { grain: q.spec.grain } : {}) };
+  const encoding = specEncoding(q.spec); // a related category's or split's dataset too, whose Share policy marks then mask it (../ai/answerJoin)
   const shaped = await sharePolicy.applyToChart(ctx.projectId, q.spec.datasetId, encoding, {
     ok: true as const, data: card.data, warnings: [], recommendedShape: 'categorical', category: undefined,
   }, 'export');

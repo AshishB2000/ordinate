@@ -15,6 +15,7 @@ import { sanitizeAliases, squash } from '../app/columnNames';
 import { withinOne } from '../analysis/valueMatch';
 import { MIN_SIMILARITY, similarityOf, trigrams } from '../app/trigram';
 import { readMeasure, sanitizeStoredSpec, validateAnswerSpec } from './answerSpec';
+import { ownNames } from './answerJoin';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric, SpecMiss } from './answerSpec';
 import type { SpecTerm } from './termFacts';
 
@@ -168,7 +169,7 @@ export function sanitizeLearn(raw: unknown, spec: AnswerSpec): AnswerLearn | und
   if (!raw || typeof raw !== 'object') return undefined;
   const { said, column } = raw as Record<string, unknown>;
   if (typeof said !== 'string' || typeof column !== 'string') return undefined;
-  const uses = [spec.category, spec.series, ...spec.measures.map((m) => m.column), ...spec.filters.flatMap((f) => ('column' in f ? [f.column] : []))];
+  const uses = ownNames(spec); // a name is taught on the spec's own dataset: never a related category's or split's (./answerJoin)
   const one = sanitizeAliases(said, column);
   return uses.includes(column) && one.length === 1 && one[0] === said ? { said, column } : undefined;
 }

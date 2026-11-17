@@ -1,7 +1,7 @@
 // Outcome E: an answer that needs a link nobody defined (docs/assistant/00-design.md, "A question needs a link nobody
 // defined") — MAIN PROCESS ONLY.
 //
-// The chart form reads one dataset. When the model's answer names, on one dataset, a column another dataset has (bare or
+// The chart form joins only through a saved link. When the model's answer names, on one dataset, a column another dataset has (bare or
 // as "Countries.region") and no relationship joins the two, Ordinate never guesses a join: it checks one and asks. The
 // check is the Relationships page's own (./relationships `suggest`): key pairs ranked by name and type, the sampled
 // share of FROM keys found in TO, and the full-table key statistics that say whether TO's key is unique, all computed by

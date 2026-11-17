@@ -84,7 +84,7 @@ export interface AnswerTerms {
 }
 
 /**
- * An answer spec with its `{ term }` filters taken out and expanded. An answer never joins, so a term must be
+ * An answer spec with its `{ term }` filters taken out and expanded. An answer's filters are its own dataset's, so a term must be
  * the spec's own dataset's: any other is refused with a sentence naming both. A filter typed `term` (not the
  * spec's `{ term }`) stays unreadable, as specFilterSteps' rule has it.
  */

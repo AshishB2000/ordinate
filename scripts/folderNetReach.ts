@@ -8,7 +8,9 @@
 //   the board's tiles refuse `closed`.
 // - every OPEN channel on Orders refuses finViewer `figures_only` (or `closed`, or answers as for an unknown id), and
 //   dataset:list never names Orders to them; user SQL over Orders (sql:run, the Assistant's SQL answer even inside
-//   Orders' figure scope) refuses `figures_only`. NEGATIVE CONTROL: with `figures_only` off, sql:run hands its rows.
+//   Orders' figure scope) refuses `figures_only`, and so does an answer on Plain whose category is read from Orders (a
+//   join, docs/assistant "Joins, as built"; NEGATIVE CONTROL: padmin's and opsViewer's answer). NEGATIVE CONTROL: with
+//   `figures_only` off, sql:run hands its rows.
 // - HR shares no figures: the Everyone board's HR KPI refuses ed `closed`. NEGATIVE CONTROL: HR's switch on answers it
 //   — and even then ed's grid on HR refuses `figures_only` and carries no canary row; with `figures_only` off, it does.
 // - an older pod's write of the Finance board (its copy's `reads` without Orders: 0035's trigger) narrows reach on the
@@ -90,6 +92,22 @@ export async function reachSection(W: H.World, open: Array<[string, string, unkn
   ok('reach: the Assistant\'s SQL answer over Orders refuses finViewer `figures_only` even inside Orders\' figure scope', !scoped.ok && scoped.reason === FIGURES_ONLY && !ROWS.test(JSON.stringify(scoped)), JSON.stringify(scoped).slice(0, 200));
   const leakedSql = await seam(gate.setFiguresOnlyForTest, () => W.call('finViewer', 'sql:run', { projectId: P, sql: orders }));
   ok('NEGATIVE CONTROL: with `figures_only` off, sql:run hands finViewer Orders\' rows', leakedSql.body?.ok === true && ROWS.test(leakedSql.text), short(leakedSql));
+  // An answer on Plain (Everyone) whose category is read from Orders (docs/assistant "Joins, as built"): an answer card is
+  // OPEN-class (it is kept in history), so a related dataset finViewer only reaches refuses `figures_only`, as Orders' own does.
+  const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+  const link = (await W.as('boss', () => rels.saveRelationship(P, { from: { datasetId: W.plain, column: 'dept' }, to: { datasetId: ops.ds, column: 'dept' }, cardinality: 'many_to_one', verified: { matched: 1, unmatchedFrom: 0 } })))?.id;
+  if (!link) throw new Error('setup: a link from Plain to Orders');
+  try {
+    const joined = { datasetId: W.plain, category: 'person', categoryDatasetId: ops.ds, measures: [{ column: 'salary', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Salary by person' };
+    const card = (who: Person, spec: object) => W.call(who, 'answer:card', { projectId: P, spec });
+    const mine = await card('finViewer', joined);
+    ok('reach: finViewer\'s answer on Plain with its category read from Orders refuses `figures_only`, typed, no value of Orders',
+      mine.status === 200 && mine.body?.ok === false && mine.body.code === 'folder' && mine.text.includes(FIGURES_ONLY) && !ROWS.test(mine.text), short(mine));
+    ok('NEGATIVE CONTROL: …padmin\'s and opsViewer\'s answer it, and finViewer\'s plain answer on Plain does',
+      (await card('padmin', joined)).body?.ok === true && (await card('opsViewer', joined)).body?.ok === true && (await card('finViewer', { ...joined, category: 'dept', categoryDatasetId: undefined })).body?.ok === true);
+  } finally {
+    await W.as('boss', () => rels.deleteRelationship(P, link));
+  }
   const listed = async (who: Person) => (await W.call(who, 'dataset:list', { projectId: P })).text.includes(ops.ds);
   ok('reach: dataset:list never names Orders to finViewer (NEGATIVE CONTROL: opsViewer\'s does)', !(await listed('finViewer')) && (await listed('opsViewer')));
 

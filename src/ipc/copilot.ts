@@ -50,6 +50,7 @@ import { termFactsFor } from './terms';
 import { askGuidance } from './guidance';
 import { askDatasets, askTableFacts } from './askTableFacts';
 import { askLinkedFacts } from './askLinks';
+import { relatedIds } from '../ai/answerJoin';
 import { askValueFacts } from './askValues';
 import { verifiedAsk, verifiedMatch, verifiedScope } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
@@ -556,7 +557,7 @@ export function register() {
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
       const ledger = facts.ledger.concat(linked.ledger, values.ledger, tables.ledger, sources.ledger, guided.ledger, prev ? prev.ledger : []);
       // The datasets those facts came from, kept on the answer: its words, a prose one's too, leave history with them (./turnsOpen).
-      const factsFrom = [...about, ...linked.metas].map((m) => m.id).concat(facts.datasetIds ?? [], prev ? [prev.spec.datasetId] : []);
+      const factsFrom = [...about, ...linked.metas].map((m) => m.id).concat(facts.datasetIds ?? [], prev ? [prev.spec.datasetId, ...relatedIds(prev.spec)] : []);
       // The real model call — a 'model' step, bracketing the one narration this app
       // makes. No agent loop; only an SQL answer (below) makes a second call, which writes SQL.
       emit({ kind: 'model', label: 'Asked the model to narrate' });

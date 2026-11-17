@@ -65,9 +65,14 @@ export function answeredFrom(projectId: string, datasetId: string): Promise<{ an
 
 /** The columns an answer reads, as the card names them: each measure as its chart's series is ("sum of Revenue"), then the category and the split. */
 export async function usesOf(projectId: string, spec: AnswerSpec): Promise<string[]> {
-  const names = await displayNames(projectId, spec.datasetId).catch(() => ({} as Record<string, string>));
-  const shown = (c: string): string => (Object.hasOwn(names, c) && names[c]) || c;
-  const all = [...spec.measures.map((m) => measureLabel({ ...m, column: shown(m.column) })), shown(spec.category), ...(spec.series ? [shown(spec.series)] : [])];
+  const namesOf = (id: string) => displayNames(projectId, id).catch(() => ({} as Record<string, string>));
+  const names = await namesOf(spec.datasetId);
+  const by = (n: Record<string, string>) => (c: string): string => (Object.hasOwn(n, c) && n[c]) || c;
+  const shown = by(names);
+  // A related category or split (../ai/answerJoin) reads as its own dataset names it.
+  const catShown = spec.categoryDatasetId ? by(await namesOf(spec.categoryDatasetId)) : shown;
+  const serShown = spec.seriesDatasetId ? by(await namesOf(spec.seriesDatasetId)) : shown;
+  const all = [...spec.measures.map((m) => measureLabel({ ...m, column: shown(m.column) })), catShown(spec.category), ...(spec.series ? [serShown(spec.series)] : [])];
   return all.filter((n, i) => n && all.indexOf(n) === i);
 }
 

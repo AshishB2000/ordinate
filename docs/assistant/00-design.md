@@ -93,12 +93,15 @@ reach it:
   found to repeat (`warning.repeats`), and never through a cardinality this release does not know
   (Relationships store no many-to-many). `test-askFollowLinks` holds every path equal to the planner's
   `findPath`.
-- **The chart form reads one dataset** (an answer never joins), and the block says so: a linked
-  dataset can be answered from on its own. An answer that names a linked dataset's column on the
-  dataset it is linked to (bare, or as `Regions.region`) gets no "Did you mean"; it is refused with
-  *"region" is a column of Regions, which Orders is linked to. An answer reads one dataset: ask about
-  Regions on its own, or build the chart in Visuals, which follows the link.* Joins in the form are
-  step 4's outcome B, later.
+- **The chart form may group or split by a linked column**, and the block says so: an answer's
+  category or split may be a linked dataset's column, naming that dataset (`"categoryDataset"`,
+  `"seriesDataset"`); its measures and filters stay the asked dataset's own; a linked dataset can also
+  be answered from on its own ([Joins, as built](#joins-in-the-chart-form-as-built)). An answer that
+  names a linked dataset's column on the dataset it is linked to WITHOUT naming that dataset (bare, or
+  as `Regions.region`) gets no "Did you mean" and no repair; it is refused with *"region" is a column of
+  Regions, which Orders is linked to. An answer can group or split Orders by it when it names Regions;
+  its measures and filters are Orders's own columns. Ask about Regions on its own, or build the chart in
+  Visuals.*
 - **Access:** a dataset the caller's row access rules restrict (even to some of its rows) is never
   added, and neither is one where every column is hidden from them. Hidden columns are left out, and a
   link through a hidden column, or through a dataset that is not added, is not followed. An agent
@@ -275,7 +278,7 @@ measure, grouping, filters and period.*
 | | When | Result |
 |---|---|---|
 | A | Same as a verified question | that chart, re-run on today's data; *Matched Maria's verified question: "…"* and **Not what I asked** |
-| B | A dataset has it | a new chart form using the org's metrics, terms and linked columns |
+| B | A dataset has it | a new chart form using the org's metrics, terms and linked columns (a category or split from a linked dataset: [built](#joins-in-the-chart-form-as-built)) |
 | C | Only a source table has it | answered Live from the table, no dataset (live-capable connections only, see below; built, [phase D](#source-tables-keeping-and-the-missing-link-as-built-phase-d)) |
 | D | Nothing has it | editors: **Connect a source** / **Import a file**; viewers: *Ask an editor to add this data.* |
 | E | Needs an undefined link | the checked-link card above; viewers: *These can't be combined yet. [Ask an editor]* (built, phase D) |
@@ -401,6 +404,65 @@ from 4,164 record reads (4,125 `getDatasetMeta` calls: the gate and the facts ea
 to 165, fewer than a chart answer's, at the same 151 queries (`test-askBudget` case g; the names are
 Object.is-equal to the catalog's in `test-answerSql`).
 
+### Joins in the chart form, as built
+
+"Revenue by country name", the names in a linked `Countries`, is a chart form now, not the SQL lane: checked, verifiable,
+addable to a dashboard, in ONE AI call. Before, the form refused it ("an answer never joins") and the model's way out
+was SQL (two calls, Not checked).
+
+- **The spec carries a visual's own fields, no new ones** (`src/ai/answerJoin.ts`): `categoryDatasetId`, `categoryVia`
+  beside it, `seriesDatasetId` beside a split, with `VizEncoding`'s meaning and `sanitizeEncoding`'s whitelist (ids only,
+  each beside what it qualifies). The model names the dataset as the LINKED DATASETS block names it
+  (`"categoryDataset":"Countries"`); the validator resolves it as it resolves `dataset` and the column on THAT dataset
+  (its hidden columns are no word); a name missed there is "Did you mean" among that dataset's columns. Only what the
+  block lists is offered: many → one from the asked dataset (`joinPlan.reachable`), two links at most. A spec without the
+  fields validates, sanitizes, compares and draws exactly as before (the cards byte-identical).
+- **One door for the figures** (`src/ipc/answerJoined.ts`): a joined card's chart is `vizDataFor`, THE chart door, with
+  the spec's encoding and the card's own steps. So the join plan (many → one; the reverse refused in the planner's
+  sentence, *Orders can't be used from Countries: Orders is on the many side… every measure would be inflated.*), the
+  fan-out rules, the folder check and row lock of every table read (a restricted caller is refused `related`, as a
+  visual is), their hidden columns and the `orgKey` answer cache are a visual's. A row access or folder refusal is
+  raised and caught there, so the route types the card's reply and an ask keeps its turn with *(No chart: …)*. The
+  card's own parts (periods, value matching, nearest values, split chips) read the asked dataset's rows as before; the
+  chips' "By <level>" drills the related dataset's hierarchy. A related category marked personal or financial is
+  withheld from the model, and masked for an MCP agent, as an own one is. `test-answerJoins`: the card Object.is-equal to `visual:data`
+  for the same encoding (an own filter, a related split, a `categoryVia`, a metric measure), a plain card never touching
+  the door, the reverse hop's sentence word for word; with real roles (Postgres), a viewer locked on the asked dataset,
+  row rules on the related one or a column of it hidden from them each refused typed, the ask keeping its turn, each
+  with its negative control.
+- **Every pass-through keeps them**: the stored turn (`sanitizeStoredSpec`) and its snapshot, whose access print is over
+  every table the join reads (`answerReads`: a rule or hidden column on any recomputes it; a plain answer's print is
+  as before); follow-up chips and "Did you mean"; a refine (the patch's own dataset when it names a new category);
+  the previous-answer block (*category "country_name" from "Countries"*); Save as visual (the same encoding; a top-N cut
+  through `via`, or bare when the related dataset is the column's nearest owner, else saved uncut and ranked); Add to
+  dashboard, whose `chartKey` is the visual's encoding, so a join and its plain twin are two tiles; Verify, whose
+  comparison (`sameChart`'s keys) tells a join from the same names on the asked dataset, whose index row reads the
+  related dataset for the folders' WHERE, and whose prompt examples name it (`"categoryDataset"`; one through a labelled
+  relationship is no example: a model names no relationship); Explain on a visual with a related category (one with a related measure is
+  refused: no spec says it); a dashboard request, whose approvers need Edit and whose requester must open the related
+  dataset too (it still lands with the asked one); MCP's `answer_verified_question` (its `aggregate` hint, one dataset's,
+  is not offered for a joined question). Alert me reads only the measure and the filters, the asked dataset's, so it is
+  unchanged.
+- **Folders:** the related dataset is in the turn's `factsFrom` (`copilot.appendTurn`, for every writer), which 0039's
+  `ordinate_turn_shows` already reads: a viewer whose folder closes Countries neither sees nor counts the answer, no new
+  migration (`test-folderSafetyNet` section 6). A related dataset the caller only reaches (D9, through a dashboard they
+  open) refuses the card `figures_only`, as the answer door refuses its own dataset (section 4).
+- **Live:** a Live dataset on either side is refused in the chart door's typed sentence (`live_refused`, *A field from a
+  related dataset cannot be combined with a live dataset yet.*), never `live_dataset` (`test-liveSafetyNet`), until Live
+  joins land in `src/engine/live`.
+- **Cost:** `test-askBudget` case (h): Home's ask with one link, 95 queries and 185 record reads; the same ask joined, 95
+  queries and 204 reads (19 more record reads, every one a memo hit; no query more), measured with meaning off (the
+  suite runs the case last, with meaning on: 109 / 185 and 109 / 204). Every other case is unchanged. `test-answerSql`
+  1b: "amount by region", region on Customers, is one call and a chart whose figures are Object.is-equal to the SQL
+  lane's join; asked as SQL it still takes two.
+
+**Left out:** a measure, a filter or a glossary term on a related dataset (a spec's measures and filters are the asked
+dataset's own); a split through a labelled relationship (a visual has no `seriesVia` either), and a model naming a
+labelled one for its category (the block lists each dataset by its default path; a stored or explained spec keeps its
+`categoryVia`); a bare linked name repaired to its dataset (rejection, not repair); Live joins (above). A caller whom
+row rules lock on the asked dataset is still shown its LINKED DATASETS (a linked dataset can be answered on its own),
+though the door refuses them a join (`related`); the block does not say so for them.
+
 **Left as they are:** an SQL answer cannot be refined by a follow-up chip. The Assistant check
 (`verified:check`) compares the model's chart spec with a verified one, so it asks no SQL question, and
 its count on the Verified page leaves them out.
@@ -522,8 +584,8 @@ card (`link` on the turn, `needs: 'link'`): *Link Shipments.country_id → Count
 98% of sampled values found · Unique in Countries* with **Add link and answer**, which saves it through
 `relationship:save` (counted over the full tables again) and asks the question again, and **Cancel**. Only a
 many-to-one or one-to-one pair is proposed. A viewer gets *These can't be combined yet.* with `needs: 'link'` and no
-check run. Once linked, the same answer gets the linked-column refusal (the form reads one dataset); joins in the form
-are outcome B.
+check run. Once linked, the same answer gets the linked-column refusal unless it names the linked dataset for its
+category or split, which the form then joins ([Joins, as built](#joins-in-the-chart-form-as-built)).
 
 **A pair with a Live side** gets the same card. No engine holds both tables, so the pairs are ranked by names and types
 only and there is no sampled share found (`foundPct: null`, the card leaves that check out). Each key column is counted
@@ -551,7 +613,8 @@ so it needs one engine that holds both:
   reply says it (`notes`, *Last 12 months: this table needs a date range*), and the Relationships page shows it beside
   the figure (the diagram's edge label and the table: *in Nov 2025 – Oct 2026*), as does the New relationship toast. A
   link saved there is followed by a dashboard's Live chart (charts across a link on one connection, L4: docs/live-data/log.md,
-  2026-11-16); until the Assistant's chart form takes the link's fields, the same answer gets the linked-column refusal.
+  2026-11-16). The Assistant's chart form takes the link's fields on copies ("Joins in the chart form, as built"); an
+  answer naming a Live dataset for its category still gets the typed Live refusal until it is routed to that executor.
 - **Any other mix** (a Live dataset beside a copy, Live datasets on two connections): no engine holds both, so nothing
   is counted. The card shows its checks and, in place of Approve, ONE catalog sentence (`link.blocked`, kept on the turn
   through `sanitizeNeeds`, so a reload shows the same): *This link can't be saved here: Stores is Live, so its rows are
@@ -1188,7 +1251,8 @@ contracts are classified in `scripts/rowPolicyReaders.ts`, a new row-reading cha
 
 Every phase is checked against one fixed list: typos ("revnue by regon"), "sales" meaning revenue,
 "last quarter" vs "last year", a viewer vs an editor on the same question, a question only a
-source table can answer, a question needing an undefined link, and a question only SQL can answer.
+source table can answer, a question needing an undefined link, a question needing only a lookup join
+("amount by region", region on a linked dataset: the chart form, one call), and a question only SQL can answer.
 
 ## Open questions
 
