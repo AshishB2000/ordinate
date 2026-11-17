@@ -6,7 +6,8 @@
 //
 // STORAGE_URL=s3://bucket/prefix → a table is an IMMUTABLE object
 //
-//   s3://bucket/prefix/orgs/<org>/<project>/<id>.<version>.parquet   (+ .source.parquet)
+//   s3://bucket/prefix/orgs/<org>/<project>/<id>.<version>.parquet   (+ .source.parquet, + the value
+//   index's .values-<tag>.parquet: registered under that version once written, so GC drops it with the table)
 //
 // and the dataset record (a Postgres row since T5.1) carries `storageVersion`.
 //
@@ -35,6 +36,7 @@
 // again once nothing names it (every pointer is a fresh UUID).
 
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import type { Pool } from 'pg';
 import type { S3Env } from '../server/env';
 import { ctx } from '../server/context';
@@ -87,9 +89,62 @@ export function orgUrl(s: S3Env, orgId: string): string {
 }
 
 /** The object of one table version, relative to the org prefix. Every part is a validated id. */
-function relKey(projectId: string, id: string, version: string, source: boolean): string {
+function relKey(projectId: string, id: string, version: string, source: boolean | string): string {
   if (![projectId, id, version].every((x) => UUID_RE.test(x))) throw new Error('storage: invalid id');
-  return `${projectId}/${id}.${version}${source ? '.source' : ''}.parquet`;
+  return `${projectId}/${id}.${version}${source === true ? '.source' : source || ''}.parquet`;
+}
+
+/**
+ * A table version's value-index sidecar (src/ipc/valueIndex.ts): `.values-<tag>`, the tag being the build version and a
+ * hash of the catalog marks it was built under, so a new build version or a mark made since is a new name.
+ */
+const TAG_RE = /^[0-9]{1,6}-[0-9a-f]{8}$/;
+function valuesKey(projectId: string, id: string, version: string, tag: string): string {
+  if (!TAG_RE.test(tag)) throw new Error('storage: invalid tag');
+  return relKey(projectId, id, version, `.values-${tag}`);
+}
+
+/** Where a sidecar is read: always the s3:// URL, never a pod's cache. */
+export function valuesUrl(projectId: string, id: string, version: string, tag: string): string {
+  return orgUrl(need(), org()) + valuesKey(projectId, id, version, tag);
+}
+
+/**
+ * Writes one sidecar with `write(url)`, registered FIRST as pending (under a fresh version no record names, so GC collects
+ * it if the write dies), then as its table version's once written: from then on GC keeps it as long as that table, and
+ * deletes it with it. The version's other sidecars (another build version, other marks) are deleted then.
+ */
+export async function writeValuesObject(projectId: string, id: string, version: string, tag: string, write: (url: string) => Promise<void>): Promise<void> {
+  const s = need();
+  const o = org();
+  const rel = valuesKey(projectId, id, version, tag);
+  await inOrg(o, (c) => c.query(
+    'INSERT INTO storage_objects (org_id, key, version) VALUES ($1, $2, $3) ON CONFLICT (org_id, key) DO UPDATE SET version = EXCLUDED.version, unreferenced_since = NULL',
+    [o, rel, randomUUID()],
+  ));
+  await write(orgUrl(s, o) + rel);
+  const pre = relKey(projectId, id, version, '.values-').slice(0, -'.parquet'.length);
+  const others = await inOrg(o, async (c) => {
+    await c.query('UPDATE storage_objects SET version = $3 WHERE org_id = $1 AND key = $2', [o, rel, version]);
+    return (await c.query('SELECT key FROM storage_objects WHERE org_id = $1 AND key >= $2 AND key < $3 AND key <> $4', [o, pre, pre + '\uffff', rel])).rows as Array<{ key: string }>;
+  });
+  for (const { key } of others) {
+    await s3.remove(s, orgKey(s, o) + key);
+    await inOrg(o, (c) => c.query('DELETE FROM storage_objects WHERE org_id = $1 AND key = $2', [o, key]));
+  }
+}
+
+/** Which of `items` have a sidecar WRITTEN (registered under its table version): ONE indexed query, names only. Their ids. */
+export async function valuesWritten(projectId: string, items: ReadonlyArray<{ id: string; version: string; tag: string }>): Promise<Set<string>> {
+  if (!items.length) return new Set();
+  const o = org();
+  const keyed = items.map((x) => ({ id: x.id, key: valuesKey(projectId, x.id, x.version, x.tag), version: x.version }));
+  const rows = await inOrg(o, (c) => c.query(
+    'SELECT w.key FROM unnest($2::text[], $3::uuid[]) AS w(key, version) JOIN storage_objects s ON s.org_id = $1 AND s.key = w.key AND s.version = w.version',
+    [o, keyed.map((x) => x.key), keyed.map((x) => x.version)],
+  ));
+  const done = new Set((rows.rows as Array<{ key: string }>).map((r) => r.key));
+  return new Set(keyed.filter((x) => done.has(x.key)).map((x) => x.id));
 }
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;

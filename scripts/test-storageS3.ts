@@ -17,6 +17,12 @@
 // 5. CACHE: hits after a fill, LRU eviction at the byte cap, adoption of the
 //    files on disk after a restart.
 // 6. WIRING: the real app registers the `storage:gc` job in the jobs table.
+// 7. THE VALUE INDEX ON S3 (src/ipc/valueIndex.ts): a write builds the dataset's sidecar as an object of its table
+//    version, registered under that version once written; an ask finds a value through it with ONE registry query
+//    (names) and ONE lookup, no scan; a sidecar registered but not yet written is not read: its dataset is scanned and
+//    the block is the scan's; a mark made after the build changes the name, so the job builds again from the registry
+//    alone, deletes the old object, and the marked column's values are not in the new one (CONTROL: they were in the
+//    old); GC deletes a superseded version's sidecar with its table, from S3 and the registry, and keeps the current.
 //
 //   npm run build:ts && STORAGE_URL=s3://ordinate-test S3_ENDPOINT=http://localhost:9000 \
 //     AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin DATABASE_URL=… \
@@ -235,6 +241,8 @@ async function minio(t: import('./s3TestEnv').S3Test): Promise<void> {
       for (let i = 0; i < 10; i++) { await datasets.residentSource(pid, d1.id); await cache.settle(); }
     });
     ok('a hot table: 1 miss then 9 hits', cache.stats().hits === 9 && cache.stats().misses === 1, JSON.stringify(cache.stats()));
+
+    await valuesOnS3(t, inOrg, onS3);
   } finally {
     pool.shutdown();
   }
@@ -252,6 +260,104 @@ async function minio(t: import('./s3TestEnv').S3Test): Promise<void> {
   }
   ok('the server declares the storage:gc job for each org', rows.length === 1);
   await app.close();
+}
+
+// ── 7. the value index on S3 ──────────────────────────────────────────────
+async function valuesOnS3(t: import('./s3TestEnv').S3Test, inOrg: <T>(org: string, fn: () => Promise<T>) => Promise<T>, onS3: (key: string) => Promise<boolean>): Promise<void> {
+  const { Client } = require('pg') as typeof import('pg');
+  const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+  const storage: typeof import('../src/engine/storage') = require('../src/engine/storage');
+  const lifecycle: typeof import('../src/server/lifecycle') = require('../src/server/lifecycle');
+  const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+  const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+  const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+  const valueIndex: typeof import('../src/ipc/valueIndex') = require('../src/ipc/valueIndex');
+  const askValues: typeof import('../src/ipc/askValues') = require('../src/ipc/askValues');
+  const vir: typeof import('../src/engine/valueIndexResident') = require('../src/engine/valueIndexResident');
+  const { randomUUID } = require('crypto') as typeof import('crypto');
+  valueIndex.wireValueIndex();
+
+  const cols = [{ name: 'region', type: 'text' as const }, { name: 'contact', type: 'text' as const }, { name: 'n', type: 'number' as const }];
+  const rows = (k: number): Cell[][] => Array.from({ length: 300 - k }, (_, i) => [['West', 'East', 'North'][i % 3], ['Westley Smith', 'Ann Lee'][i % 2], i]);
+  const { vp, a, b } = await inOrg('acme', async () => {
+    const p = (await projects.createProject('S3 values')).id;
+    const save = async (name: string) => (await datasets.saveDataset(p, { name, sourceKind: 'csv', columns: cols, rows: rows(0) }))!.id;
+    return { vp: p, a: await save('Sales'), b: await save('Leads') };
+  });
+  await lifecycle.settleWork(); // their builds, set off by the saves
+  const versionOf = async (id: string): Promise<string> => (await inOrg('acme', () => datasets.getDatasetMeta(vp, id)))!.storageVersion!;
+  const sidecars = async (id: string): Promise<Array<{ key: string; version: string }>> =>
+    (await t.pool.query('SELECT key, version::text AS version FROM storage_objects WHERE key LIKE $1 ORDER BY created_at', [`${vp}/${id}.%.values-%`])).rows;
+  const keyOf = (id: string, v: string, marks: string[]): string => `${vp}/${id}.${v}.values-${vir.valuesTag(marks)}.parquet`;
+  const va = await versionOf(a);
+  const ka = await sidecars(a);
+  ok('S3 values: a write builds the sidecar as an object of its table version, registered under it once written',
+    ka.length === 1 && ka[0].key === keyOf(a, va, []) && ka[0].version === va && (await onS3(ka[0].key)), JSON.stringify(ka));
+
+  const metas = async (ids: string[]) => inOrg('acme', async () => (await Promise.all(ids.map((id) => datasets.getDatasetMeta(vp, id)))).filter((m): m is NonNullable<typeof m> => !!m));
+  const ask = async (ids: string[], q: string) => {
+    const ms = await metas(ids);
+    const real = duck.queryAsync;
+    const proto = Client.prototype as unknown as { query: (...x: unknown[]) => unknown };
+    const query = proto.query;
+    let lookups = 0, scans = 0, registry = 0;
+    (duck as { queryAsync: unknown }).queryAsync = (sql: string, ...rest: unknown[]) => {
+      if (sql.startsWith(vir.LOOKUP_MARK)) lookups++;
+      if (sql.includes('AND regexp_matches(v, ?)')) scans++;
+      return (real as (...x: unknown[]) => unknown)(sql, ...rest);
+    };
+    proto.query = function (this: unknown, ...x: unknown[]) {
+      if (String((x[0] as { text?: string })?.text ?? x[0]).includes('AS w(key, version) JOIN storage_objects')) registry++;
+      return query.apply(this, x);
+    };
+    try {
+      return { text: (await inOrg('acme', () => askValues.askValueFacts(vp, ms, [], q))).text, lookups, scans, registry };
+    } finally {
+      (duck as { queryAsync: unknown }).queryAsync = real;
+      proto.query = query;
+    }
+  };
+  const scanned = async (ids: string[], q: string) => {
+    askValues._setValueIndex(false);
+    try { return (await ask(ids, q)).text; } finally { askValues._setValueIndex(true); }
+  };
+  const one = await ask([a, b], 'sales in west');
+  ok('S3 values: an ask finds "West" through the sidecars: ONE registry query (names), ONE lookup, no scan',
+    one.text.includes('- Sales.region = "West"') && one.text.includes('- Leads.region = "West"') && one.registry === 1 && one.lookups === 1 && one.scans === 0, JSON.stringify(one));
+
+  // Not written yet: Leads' row back to pending, as during its build.
+  const [kb] = await sidecars(b);
+  await t.pool.query('UPDATE storage_objects SET version = $2 WHERE key = $1', [kb.key, randomUUID()]);
+  const pending = await ask([a, b], 'west');
+  ok('S3 values: a sidecar registered but not yet written is not read: its dataset is scanned, the block is the scan\'s',
+    pending.lookups === 1 && pending.scans === 1 && pending.text === (await scanned([a, b], 'west')) && pending.text.includes('- Leads.region = "West"'), JSON.stringify(pending));
+  await inOrg('acme', () => valueIndex.indexOrgValues());
+  const kb2 = await sidecars(b);
+  ok('S3 values: …the job builds it, from the registry alone', kb2.length === 1 && kb2[0].key === kb.key && kb2[0].version === (await versionOf(b)), JSON.stringify(kb2));
+
+  // A mark after the build: a new name, so the job builds again and the old object goes.
+  const url = (key: string): string => storage.orgUrl(t.s3, 'acme') + key;
+  const westley = (key: string) => inOrg('acme', async () => Number((await duck.queryAsync(`SELECT CAST(count(*) AS DOUBLE) AS n FROM read_parquet('${url(key)}') WHERE c2 = 'Westley Smith'`))[0].n));
+  ok('S3 values: CONTROL: the sidecar built before the mark holds the column\'s values', (await westley(ka[0].key)) > 0);
+  await inOrg('acme', () => catalog.setColumn(vp, a, 'contact', { sensitivity: 'personal' }));
+  ok('S3 values: …a mark made after the build: the name it calls for is not registered (stale by name)', !(await inOrg('acme', () => valueIndex.sidecarsOf(vp, [{ id: a, version: va }]))).has(a));
+  await inOrg('acme', () => valueIndex.indexOrgValues());
+  const kMarked = await sidecars(a);
+  ok('S3 values: the job builds it again under the new marks; the old object is deleted, from S3 and the registry',
+    kMarked.length === 1 && kMarked[0].key === keyOf(a, va, ['contact']) && kMarked[0].version === va && !(await onS3(ka[0].key)), JSON.stringify(kMarked));
+  ok('S3 values: …and the marked column\'s values are not in the new object', (await westley(kMarked[0].key)) === 0);
+
+  // GC: a new version of Sales; the superseded table and its sidecar go together.
+  await inOrg('acme', () => datasets.updateDatasetData(vp, a, { columns: cols, rows: rows(1) }));
+  await lifecycle.settleWork();
+  const va2 = await versionOf(a);
+  await inOrg('acme', () => storage.collectGarbage(3_600_000));
+  await t.pool.query("UPDATE storage_objects SET unreferenced_since = now() - interval '2 hours' WHERE version = $1", [va]);
+  const gone = await inOrg('acme', () => storage.collectGarbage(3_600_000));
+  const now = await sidecars(a);
+  ok('S3 values: GC deletes the superseded version\'s sidecar with its table, from S3 and the registry; the current one stays',
+    gone.includes(kMarked[0].key) && gone.includes(`${vp}/${a}.${va}.parquet`) && !(await onS3(kMarked[0].key))
+    && now.length === 1 && now[0].key === keyOf(a, va2, ['contact']) && now[0].version === va2 && (await onS3(now[0].key)), JSON.stringify({ gone, now }));
 }
 
 (async () => {

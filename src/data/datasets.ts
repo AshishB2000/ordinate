@@ -42,7 +42,7 @@ import type { InputBlock } from './inputTable/columns';
 // 800-line cap; the writers are re-exported so `datasets.markRefresh` etc. keep
 // working for every caller.
 import {
-  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeRecordKeepingPolicy, sanitizeAutoRefresh, tablePath, hasTable,
+  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeRecordKeepingPolicy, sanitizeAutoRefresh, tablePath, hasTable, afterDataWrite, valuesPath,
 } from './datasetRecord';
 import * as storage from '../engine/storage';
 import * as appPaths from '../app/paths';
@@ -202,7 +202,7 @@ function sanitizeCapture(raw: any): { entryId: string | null; cropPath: string |
 // on DuckDB's async bridge so a 1M-row save never parks the main thread), and
 // two interleaved persists of the same dataset could otherwise publish one
 // write's .parquet beside the other's JSON — a rowCount describing the wrong
-// table. Chained per id; a failed write does not poison the next one.
+// table. Chained per id, with what a write sets off (afterDataWrite); a failed write does not poison the next one.
 const writeChains = new Map<string, Promise<void>>();
 
 // Exported for the input-table store (inputTable/store.ts): an edit replaces the
@@ -212,7 +212,7 @@ export async function persist(projectId: string, dataset: Dataset, progress: par
   const prev = writeChains.get(dataset.id) || Promise.resolve();
   const run = prev.catch(() => { /* the previous write's failure was its caller's */ })
     .then(() => persistNow(projectId, dataset, progress));
-  const tail = run.catch(() => { /* reported to this caller below */ });
+  const tail = run.then(() => afterDataWrite(projectId, dataset.id)).catch(() => { /* reported to this caller below */ });
   writeChains.set(dataset.id, tail);
   void tail.then(() => { if (writeChains.get(dataset.id) === tail) writeChains.delete(dataset.id); });
   return run;
@@ -789,7 +789,7 @@ export async function deleteDataset(projectId: string, id: string): Promise<bool
     // reclaimed. Both paths are built from ids already validated above.
     await recordFs.rm(datasetFilePath(projectId, id), { force: true });
     await recordFs.rm(parquetPath(projectId, id), { force: true });
-    await recordFs.rm(sourceParquetPath(projectId, id), { force: true });
+    for (const f of [sourceParquetPath(projectId, id), valuesPath(projectId, id)]) await recordFs.rm(f, { force: true });
     await removeSnapshots(projectId, id);
     await removeIndex(parquetPath(projectId, id));
     return true;

@@ -16,7 +16,8 @@
 //      a new one each time outside it — NEGATIVE CONTROL.
 //   2. A catalog.json past 4 MiB is logged once per org and project, by its size only; one under it is not.
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on); without it, a skip line:
-//   3. THE BUDGET: each case's counts ≤ its ceilings (printed).
+//   3. THE BUDGET: each case's counts ≤ its ceilings (printed). The value index (src/ipc/valueIndex.ts) answers each case's
+//      values: one DuckDB lookup over the datasets' sidecars, no scan (none on the dashboard), no Postgres statement.
 //   4. NEGATIVE CONTROL: case (c) with the question's read memo off (../src/ipc/askMemo `_setAskMemo`) is over them, and
 //      cases (a) and (d) with step 3's index off (../src/ipc/assistantSearch `_setIndexed`, the reference paths) are too.
 //      The open dataset of case (b) loads no table: datasets.getDataset is called no more often than from Home, where
@@ -77,6 +78,8 @@ const analysis: typeof import('../src/analysis/analysis') = require('../src/anal
 const askMemo: typeof import('../src/ipc/askMemo') = require('../src/ipc/askMemo');
 const sqlDatasets: typeof import('../src/engine/sqlDatasets') = require('../src/engine/sqlDatasets');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const valueIndex: typeof import('../src/ipc/valueIndex') = require('../src/ipc/valueIndex');
+const valueResident: typeof import('../src/engine/valueIndexResident') = require('../src/engine/valueIndexResident');
 const rowDoors: Record<string, unknown> = require('../src/ipc/rowDoors');
 const liveAnswers: Record<string, unknown> = require('../src/ipc/liveAnswers');
 const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
@@ -114,7 +117,8 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // where a metric's figure read it first (a dataset), a transaction of 3 queries where nothing had (Home). An agent follows none.
   // The value search (src/ipc/askValues.ts): no statement, and two record reads a copy it searches, both memo hits (the
   // dataset's record, for its marked columns and its Parquet): +2 where Orders alone is searched, +6 for the agent's three.
-  // Its DuckDB statements are counted apart (VALUE_SEARCHES): 1 a case here, 3 for the agent, none for the dashboard.
+  // Its DuckDB statements are counted apart (VALUE_SEARCHES): with the value index (sidecars built for the three datasets
+  // with rows), ONE lookup statement an ask and no scan, where the scan sent 1 a case, 3 for the agent; none for the dashboard.
   home: at(92, 169), // was at(92, 167), at(89, 166), at(89, 154), at(345, 7_134) before that
   dataset: at(88, 127), // was at(88, 125), at(88, 124), at(88, 123), at(345, 7_121) before that
   agent: at(75, 152), // was at(75, 146), at(75, 136), at(339, 7_113) before that
@@ -152,7 +156,7 @@ const VALUE_SEARCHES = homeFacts.HOME_DATASETS + askLinks.LINKED_MAX;
 /** (g)'s getDatasetMeta calls beyond a chart answer's from Home: the pick's and the statement's (pick, gate, card); never one per dataset. */
 const SQL_METAS = 12;
 
-interface World { P: string; orders: string; agent: string; board: string }
+interface World { P: string; orders: string; agent: string; board: string; withRows: string[] }
 
 async function world(pool: Pool): Promise<World> {
   return as('admin', async () => {
@@ -205,7 +209,7 @@ async function world(pool: Pool): Promise<World> {
     const count = async (kind: string) => Number((await pool.query(`SELECT count(*) AS n FROM records WHERE org_id = 'acme' AND path >= $1 AND path < $2`, [base + kind + '/', base + kind + '0'])).rows[0].n);
     const seeded = { datasets: await count('datasets'), metrics: await count('metrics'), terms: await count('terms'), verified: await count('verified') };
     ok('the project is seeded at scale', JSON.stringify(seeded) === JSON.stringify(SCALE), JSON.stringify(seeded));
-    return { P, orders, agent: agent.id, board: board.id };
+    return { P, orders, agent: agent.id, board: board.id, withRows: [orders, stores, visits] };
   });
 }
 
@@ -213,12 +217,13 @@ async function world(pool: Pool): Promise<World> {
  * What one ask costs: Postgres statements, record reads, tables loaded (datasets.getDataset) and the value search's DuckDB
  * statements (src/ipc/askValues.ts) while `fn` runs. `slowBatches`: ms each batched record read (readMany) waits before it is sent.
  */
-async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out: T; queries: number; reads: number; tables: number; values: number; ms: number; sqls: string[] }> {
+async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out: T; queries: number; reads: number; tables: number; values: number; lookups: number; ms: number; sqls: string[] }> {
   const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown }; // the pool's clients are pg Clients
   const [query, readFile, readMany, readdir, getDataset, queryAsync] = [proto.query, recordFs.readFile, recordFs.readMany, recordFs.readdir, datasets.getDataset, duck.queryAsync];
-  let queries = 0, reads = 0, tables = 0, values = 0;
+  let queries = 0, reads = 0, tables = 0, values = 0, lookups = 0;
   (duck as { queryAsync: unknown }).queryAsync = (sql: string, ...a: unknown[]) => {
     if (sql.includes('AND regexp_matches(v, ?)')) values++;
+    if (sql.startsWith(valueResident.LOOKUP_MARK)) lookups++;
     return (queryAsync as (...x: unknown[]) => unknown)(sql, ...a);
   };
   const sqls: string[] = [];
@@ -237,7 +242,7 @@ async function counted<T>(fn: () => Promise<T>, slowBatches = 0): Promise<{ out:
   spy.readdir = (...a: unknown[]) => { reads++; return (readdir as (...x: unknown[]) => unknown)(...a); };
   const t0 = Date.now();
   try {
-    return { out: await fn(), queries, reads, tables, values, ms: Date.now() - t0, sqls };
+    return { out: await fn(), queries, reads, tables, values, lookups, ms: Date.now() - t0, sqls };
   } finally {
     proto.query = query;
     (duck as { queryAsync: unknown }).queryAsync = queryAsync;
@@ -302,6 +307,9 @@ async function dbLeg(pool: Pool): Promise<void> {
   const t0 = Date.now();
   const w = await world(pool);
   console.log(`  seeded in ${Date.now() - t0} ms`);
+  // The value index of the three datasets with rows (the clones have none), as their writes build it where the app wires it.
+  valueIndex.wireValueIndex();
+  for (const id of w.withRows) if (!(await as('admin', () => valueIndex.buildValueIndex(w.P, id)))) throw new Error('fixture: the value index');
   copilotIpc.register();
   require('../src/ipc/assistantSearch').register(); // what src/server/app.ts registers at startup: the two indexes' describers
   require('../src/ipc/search').register();
@@ -345,6 +353,7 @@ async function dbLeg(pool: Pool): Promise<void> {
     if (on.queries * 1.1 > CEILING[name].queries || process.env.ORDINATE_BUDGET_SQL) histogram(name, on.sqls); // over, or into its 10%
     tablesOf.set(name, on.tables);
     ok(`${name}: ${on.values} value-search DuckDB statements ≤ one a dataset the ask is about (${VALUE_SEARCHES})`, on.values <= VALUE_SEARCHES);
+    ok(`${name}: the value index answers it: ${on.lookups} DuckDB lookup (at most one an ask), ${on.values} scans`, on.lookups <= 1 && on.values === 0 && (name === 'dashboard' || on.lookups === 1));
     // Before PR 4 the dashboard resolved all 5,000 metrics, a table loaded for each clone's (they have no Parquet). Since
     // PR 6b it also resolves the few metrics step 3 finds for the question elsewhere (Q12): "Revenue" on five clones.
     if (name === 'dashboard') {

@@ -28,6 +28,7 @@ import { cadenceAllowed, needsIncremental, sanitizeRunMs } from './refreshCadenc
 import * as recordFs from '../app/recordFs';
 import { entryPath } from '../app/trashStore';
 import { placeFirst } from '../server/authz/folderWrites';
+import { trackWork } from '../server/lifecycle';
 
 
 function getProjectsBase(): string {
@@ -64,6 +65,33 @@ export function tablePath(projectId: string, id: string, version: unknown, sourc
 /** Has the record a table to read (S3 version, or the sibling Parquet)? */
 export function hasTable(projectId: string, id: string, version: unknown): boolean {
   return (storage.isS3() && typeof version === 'string' && isValidId(version)) || fs.existsSync(parquetPath(projectId, id));
+}
+
+/** The value index's sidecar (src/ipc/valueIndex.ts) beside the table in DATA_DIR: `<id>.values.parquet` (on S3: ../engine/storage). */
+export function valuesPath(projectId: string, id: string): string {
+  return path.join(datasetsDir(projectId), id + '.values.parquet');
+}
+
+type DataWritten = (projectId: string, id: string) => Promise<void>;
+const dataWritten: DataWritten[] = [];
+
+/** Told of each data write once it is saved (src/ipc/valueIndex.ts builds the dataset's value index here). */
+export function onDataWritten(fn: DataWritten): void {
+  if (!dataWritten.includes(fn)) dataWritten.push(fn);
+}
+
+/**
+ * Runs the listeners after a data write (datasets.persist chains it onto that dataset's write chain: the next write of
+ * the dataset waits for it, its own caller does not). Never rejects. Tracked work: a shutdown, and a test's
+ * `lifecycle.settleWork()`, wait for it.
+ */
+export function afterDataWrite(projectId: string, id: string): Promise<void> {
+  if (!dataWritten.length) return Promise.resolve(); // nothing wired (no database): nothing to track
+  const p = (async () => {
+    for (const fn of dataWritten) await fn(projectId, id).catch(() => { /* a listener's failure is its own */ });
+  })();
+  trackWork(p);
+  return p;
 }
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs), so a crash
