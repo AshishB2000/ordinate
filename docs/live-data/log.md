@@ -1771,10 +1771,11 @@ follows.)
   cache age, its statement counted once, under the primary. A plan that fails is thrown typed `related` (the copy shows
   no figure); a locked caller is refused `related` at the KPI door, as for a copy. A KPI filter on a column only a
   reverse hop reaches is no join on either side: the copy skips it with its warning, and so does Live.
-- **A copy divergence, found and pinned, not followed.** When a related measure IS the category (count of region by
-  region), joinJs's `maskFanIn` nulls the group key's own cells, so later rows of a related row move to the blank
-  category with every other measure of the chart. joinResident masks a copy and keeps the key; Live agrees with it
-  (`test-liveJoinMeasures`). joinJs's to fix.
+- **A copy divergence, found and fixed.** When a related measure IS the category (count of region by region),
+  joinJs's `maskFanIn` nulled the group key's own cells, so later rows of a related row moved to the blank category
+  with every other measure of the chart. joinResident masks a copy and keeps the key; Live agrees with it. joinJs now
+  groups on a hidden copy of the key (`keyCopies` in `joinedVizDataJs`), so all three agree (`test-joins`,
+  `test-liveJoinMeasures`).
 - **Tests.** `test-liveJoinMeasures`: every aggregation of a related measure by a primary and a related category,
   under a related split and filters, a 60-category fold, KPIs with a related filter, a related measure (each
   aggregation) and both, a KPI under a lock, the KPI's one statement, cache hit and related Refresh, the drill-across
