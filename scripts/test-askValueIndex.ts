@@ -16,7 +16,8 @@
 //    nobody with Plain's region hidden) × scopes (each dataset alone, all at once); and through `copilot:ask`, the prompt
 //    byte for byte. Cost: where the index holds every column, an admin's ask sends ONE DuckDB statement (the lookup over
 //    every sidecar of the ask) and no other; east one confirmation a locked dataset with candidates; a confirmed value
-//    keeps its leading BOM.
+//    keeps its leading BOM. Compared with VALUES_BUDGET_MS lifted on both sides (`_setValuesBudget`) and ⌘K's index
+//    timers held, so a loaded machine cannot cut one side short (CONTROL after: the budget is back, a slow scan stops).
 // 4. LOCK: NEGATIVE CONTROL: the index holds West's customer values (its lookup returns them: it knows no lock) and the
 //    admin is told one; east never is, anywhere in the prompt. A value planted in the sidecar that the table does not
 //    have (a stale index): east is never told it (no row confirms it); the admin is (without a lock the index is used as
@@ -42,7 +43,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import * as RP from './rowPolicyHarness';
-import { bench, counted, idLike, metasOf, rowsIn, setsOf, sidecarOf } from './valueIndexHarness';
+import { bench, counted, idLike, metasOf, rowsIn, setsOf, sidecarOf, withoutSearchIndex } from './valueIndexHarness';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -219,6 +220,30 @@ async function afterWrite(W: RP.World, s: Seeded): Promise<void> {
 // ── 3. The differential ──────────────────────────────────────────────────────
 
 async function differential(W: RP.World, s: Seeded): Promise<void> {
+  // Complete results on both sides: under load the reference's scans ran past VALUES_BUDGET_MS and skipped datasets the
+  // index answered (seen at a load average of 24). The budget itself: the control at the end.
+  askValues._setValuesBudget(Infinity);
+  try {
+    await compared(W, s);
+  } finally {
+    askValues._setValuesBudget();
+  }
+  const real = vs.searchValuesResident;
+  (vs as { searchValuesResident: unknown }).searchValuesResident = async (...a: Parameters<typeof real>) => {
+    const r = await real(...a);
+    await new Promise((done) => setTimeout(done, askValues.VALUES_BUDGET_MS + 50));
+    return r;
+  };
+  try {
+    const slow = await both(() => block(W, 'boss', [W.plain, s.mixed], 'west'));
+    ok('DIFFERENTIAL: CONTROL: the budget is back after it: a first statement past VALUES_BUDGET_MS, the dataset after it skipped',
+      slow.off.includes('- Plain.region = "West"') && !slow.off.includes('Mixed.') && slow.on.includes('- Mixed.a = "West"'), JSON.stringify(slow));
+  } finally {
+    (vs as { searchValuesResident: unknown }).searchValuesResident = real;
+  }
+}
+
+async function compared(W: RP.World, s: Seeded): Promise<void> {
   await hide(W, true);
   try {
     const scopes = [...s.all.map((id) => [id]), s.all];
@@ -382,9 +407,14 @@ async function job(W: RP.World, s: Seeded): Promise<void> {
   const W = await RP.world('value index');
   if (!W) return;
   try {
-    const s = await seed(W);
-    await afterWrite(W, s);
-    await differential(W, s);
+    // ⌘K's index timers, set off by these saves, would otherwise land in the differential's asks.
+    const s = await withoutSearchIndex(async (held) => {
+      const seeded = await seed(W);
+      await afterWrite(W, seeded);
+      await differential(W, seeded);
+      ok('DIFFERENTIAL: CONTROL: the saves did schedule ⌘K\'s index builds (Mixed, Wide, Brief twice at least), held until it is done', held() >= 4, String(held()));
+      return seeded;
+    });
     await lock(W);
     await fallbacks(W, s);
     await idLike(W);

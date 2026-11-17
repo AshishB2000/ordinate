@@ -15,6 +15,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const dsr: typeof import('../src/engine/dataSearchResident') = require('../src/engine/dataSearchResident');
 
 type Cell = import('../src/data/transforms').Cell;
 type Meta = import('../src/data/datasets').DatasetMeta;
@@ -165,8 +166,27 @@ export async function bench(W: RP.World): Promise<void> {
 const letters = (i: number, n: number): string => Array.from({ length: n }, (_, k) => String.fromCharCode(97 + (Math.floor(i / 26 ** k) % 26))).join('');
 const lettersSql = (n: number): string => Array.from({ length: n }, (_, k) => `chr(CAST(97 + (i // ${26 ** k}) % 26 AS INTEGER))`).join(' || ');
 
+/**
+ * `fn` with ⌘K's own index (../src/engine/dataSearchResident scheduleIndex) held: it is built 1.5 s after each save on a
+ * timer no `settleWork` waits for, one `GROUP BY` statement a text column over the table, so on CI's slower runner it
+ * landed inside asks this suite counts (section 8: touched 2, 1 and 3 for 1, 0 and 1) or times. `held()`: the builds the
+ * saves asked for (a CONTROL that the hold is in the path).
+ */
+export async function withoutSearchIndex<T>(fn: (held: () => number) => Promise<T>): Promise<T> {
+  const real = dsr.scheduleIndex;
+  let held = 0;
+  (dsr as { scheduleIndex: unknown }).scheduleIndex = () => { held++; };
+  try {
+    return await fn(() => held);
+  } finally {
+    (dsr as { scheduleIndex: unknown }).scheduleIndex = real;
+  }
+}
+
 /** Section 8 of scripts/test-askValueIndex.ts: which columns past the cap are id-like, and what an ask then scans. */
-export async function idLike(W: RP.World): Promise<void> {
+export const idLike = (W: RP.World): Promise<void> => withoutSearchIndex((held) => idLikeChecks(W, held));
+
+async function idLikeChecks(W: RP.World, held: () => number): Promise<void> {
   const { accounts, ship } = await W.as('boss', async () => {
     const save = async (name: string, columns: Array<{ name: string; type: 'text' }>, rows: Cell[][]) => (await datasets.saveDataset(W.P, { name, sourceKind: 'csv', columns, rows }))!.id;
     // 50,000 rows: a customer name a row (every one distinct, as ids are, but names), a model name with a number a row,
@@ -177,6 +197,7 @@ export async function idLike(W: RP.World): Promise<void> {
     return { accounts: a, ship: s };
   });
   await lifecycle.settleWork(); // their builds, set off by the saves
+  ok('id-like: CONTROL: the saves did schedule ⌘K\'s index build, held for this section (so nothing but an ask reads the table below)', held() === 2, String(held()));
   const table = await W.as('boss', async () => rec.parquetPath(W.P, ship));
   // 1,000,000 rows: an order id and an email (letters, one domain) a row, a region, a ZIP code of 5,000 values.
   await W.as('boss', () => duck.execAsync(`COPY (SELECT 'ORD-' || i AS c0, ${lettersSql(5)} || '@acme.com' AS c1, (['East','West','North','South'])[1 + (i % 4)] AS c2,

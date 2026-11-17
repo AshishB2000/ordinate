@@ -104,6 +104,11 @@ async function valuesOf(projectId: string, meta: DatasetMeta, words: string[], i
  * same table, a few ms to 20 ms. The index's own lookup is one DuckDB statement for every dataset (docs, "Values, as built").
  */
 export const VALUES_BUDGET_MS = 400;
+let budgetMs = VALUES_BUDGET_MS;
+/** Test seam (scripts/test-askValueIndex.ts): the budget lifted, so a differential compares complete results; no argument restores it. */
+export function _setValuesBudget(ms = VALUES_BUDGET_MS): void {
+  budgetMs = ms;
+}
 
 /** The VALUES block for one `copilot:ask` (../ai/valueFacts): '' when nothing matched, so the prompt is as without it. */
 export async function askValueFacts(projectId: string, about: readonly DatasetMeta[], linked: readonly DatasetMeta[], question: string): Promise<{ text: string; ledger: LedgerEntry[] }> {
@@ -130,7 +135,7 @@ export async function askValueFacts(projectId: string, about: readonly DatasetMe
         if (lines.length >= VALUE_LINES) break; // the block is full: what follows would not be shown
         const f = found?.get(a.meta.id) ?? null;
         if (!a.words.length && !freshSet(f, a.meta)?.idLike.length) continue; // id tokens alone: only an id-like column is searched for them
-        lines.push(...(await valuesOf(projectId, a.meta, a.words, a.ids, f, () => Date.now() - t0 <= VALUES_BUDGET_MS)));
+        lines.push(...(await valuesOf(projectId, a.meta, a.words, a.ids, f, () => Date.now() - t0 <= budgetMs)));
       }
       return valuesBlock(lines);
     });
