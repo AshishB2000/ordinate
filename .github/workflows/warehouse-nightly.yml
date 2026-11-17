@@ -36,6 +36,13 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube, dbt)
 # the DBT_SL_* secrets; until an account exists it prints that it skipped.
 # Postgres, standing in for Redshift, runs it on every PR (ci.yml's `check`).
 #
+# With BIGQUERY_SCRATCH_DATASET set, the `live` job's BigQuery half also runs the
+# partition-time case (scripts/warehouseLivePartitionTime.ts). It rewrites one
+# small ingestion-time table there that requires a filter on `_PARTITIONTIME`,
+# then asks it a chart, a KPI, an answer's case fix and latest-day probe, and
+# SQL on Live through the real executor. Each must answer, and its bytes billed
+# are bounded. Without that secret it prints one skip line.
+#
 # The `live` job also measures date-filter pruning (scripts/warehousePruning.ts):
 # one date-filtered count in the cast form Live sends today and in the raw-range
 # form, by a BigQuery dry run and a Snowflake EXPLAIN (neither runs the query).
@@ -85,7 +92,7 @@ jobs:
       - run: npm ci
       - name: Type-check + compile TypeScript
         run: npm run build:ts
-      - name: Real-account checks (connectors, live parity, Live SQL, pruning)
+      - name: Real-account checks (connectors, live parity, Live SQL, partition time, pruning)
         run: node scripts/test-warehouseLive.js
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}

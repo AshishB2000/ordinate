@@ -1483,3 +1483,58 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
 - **Not covered:** the key check (`tableDocs.runKeyCheck`) and the schema sync's profile and probes still read every
   row; their results are stored without a sentence, so a range would read as the whole table. BigQuery refuses them on a
   table that requires a partition filter, as a typed failure.
+
+## 2026-11-16 — `_PARTITIONTIME` against BigQuery's rules, and a real table in the nightly
+
+(Follows the entry above: the range #559 gives an ingestion-time table had never met a real BigQuery.)
+
+- **What BigQuery documents.** [Query partitioned tables](https://cloud.google.com/bigquery/docs/querying-partitioned-tables):
+  `_PARTITIONTIME` is a TIMESTAMP pseudo-column at the partition boundary, in UTC; `SELECT *` leaves it out, and selecting it
+  needs an alias. A filter prunes when the pseudo-column stands alone on one side of a comparison against a constant
+  expression, not a subquery and not mixed with another column. With *require partition filter* on, at least one predicate
+  must reference only the partition column; OR-ed with another column it does not count. The rule holds through views. The
+  refusal reads "Cannot query over table '…' without a filter that can be used for partition elimination". Rows still in
+  write-optimized storage have NULL there, so no range holds them; that matches *Last 12 months*, which ends before this
+  month starts. [Manage partitioned tables](https://cloud.google.com/bigquery/docs/managing-partitioned-tables) says the
+  same of the requirement. [Data types](https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types) takes
+  `2024-03-01T00:00:00.000Z` as a TIMESTAMP (a `T` and a `Z` both allowed). The documentation never shows the
+  pseudo-column qualified by a table alias (`lv_src._PARTITIONTIME`), never a bound parameter in a partition filter, and
+  never a CTE.
+- **Every shape, printed** (`test-livePartitionFilter`, by hand, not re-recorded). The range is
+  `(lv_src._PARTITIONTIME >= CAST(@a AS TIMESTAMP) AND lv_src._PARTITIONTIME < CAST(@b AS TIMESTAMP))`, both TIMESTAMP
+  parameters at UTC midnight. It sits in the WHERE of the SELECT whose FROM is `` `p`.`d`.`t` AS lv_src `` in each of
+  these shapes:
+  - a chart's `lv_base` CTE, and its grain and bin probes;
+  - the innermost layer of a calc chart, under both calc layers;
+  - a KPI;
+  - the case fix, after its key match;
+  - the latest-day probe, before the row lock;
+  - SQL on Live's view CTE, which a self-join reads twice, and a calc view, where it is innermost with the lock outside.
+  A new check (`onScan`) walks back from each range to its SELECT's FROM. NEGATIVE CONTROL: the range one SELECT out, over
+  a derived table or a CTE, fails it. Every shape follows the documented rules: the pseudo-column is bare on the scan,
+  compared to constants, AND-ed. **No compiler change**: nothing would be rejected by a documented rule. The alias
+  qualifier and the bound parameter remain undocumented, and the nightly now runs both.
+- **The nightly's partition-time case** (`scripts/warehouseLivePartitionTime.ts`, in `test-warehouseLive`). It needs
+  `BIGQUERY_SCRATCH_DATASET`, because the fixture is a write and `BIGQUERY_DATASET` is the read-only default. The steps:
+  - It rewrites `<scratch>.ordinate_partitiontime` each run: `CREATE OR REPLACE`, `PARTITION BY _PARTITIONDATE`,
+    `require_partition_filter`, expiring three days on. Rows sit on the range's first and last days, on the day after
+    (this month, with a "WEST" spelling seen only there), and 1,000 on the day before. The write uses a
+    `bigquery`-scope token the harness mints for that script; the connector stays read-only.
+  - It reads the facts with `readFacts`, which must say `_PARTITIONTIME`, DAY, required.
+  - It asks five doors through the real executor and connector: `liveVizData`, `liveMetric`, a card whose case fix
+    must find "West" and not "WEST", a `this_month` card whose latest-day probe must find the range's last day, and
+    `runLiveSql`. Each must answer with the in-range figures folded in the script, and say the range.
+  - Every statement must range on the pseudo-column, and none may be refused for a missing filter. Each must bill at
+    most 2 × 10 MiB and read fewer bytes than the table's `numBytes`.
+  - CONTROL: BigQuery's dry run refuses the same KPI without the range.
+  - Spike, recorded only: the KPI's dry run with the pseudo-column unqualified, so one run answers which spelling
+    BigQuery takes if the qualified one fails.
+- **Its own check on every `npm test`** (`scripts/test-warehousePartitionTime.ts`). The case runs against a stand-in
+  BigQuery under the real connector, executor and doors. The stand-in keeps the rows the script wrote, refuses a statement
+  with no `_PARTITIONTIME`, and answers from the rows inside the bound range. All 10 checks pass. The script goes with the
+  `bigquery`-scope token and every Live statement with the read-only one. All 20 bounds on the pseudo-column go as
+  TIMESTAMP parameters. NEGATIVE CONTROLS: an executor that drops the range fails the chart, the KPI and the statement
+  check; a table that answers unfiltered fails only the case's CONTROL. With no scratch dataset, nothing is asked.
+- **Not run yet:** no nightly has had `BIGQUERY_SCRATCH_DATASET`. The answer to the open question (does BigQuery take
+  `lv_src._PARTITIONTIME`, and a bound TIMESTAMP, as a partition filter?) is the first such run's `partition time` lines
+  and its two `spike:` lines.

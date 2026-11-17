@@ -180,7 +180,10 @@ chart's rule: the second call is told the table needs one, and where neither the
 filters nor a WHERE of the statement names the column, the view gets *Last 12 months* and the card
 says so in the chart's sentence (follow-ups as built, below). An ingestion-time BigQuery table that
 requires a filter gets the same range on `_PARTITIONTIME`, a TIMESTAMP base filter of its view (the
-statement cannot name the pseudo-column). A required integer-range partition that no lock, base filter
+statement cannot name the pseudo-column). It sits in the view CTE's own WHERE, on the table's FROM, the
+only place the pseudo-column exists: a statement that reads the view twice reads the range twice, and a
+calc view keeps it innermost (`test-livePartitionFilter`; the nightly's partition-time case runs it on a
+real table, `docs/live-data/log.md`, 2026-11-16). A required integer-range partition that no lock, base filter
 or WHERE names refuses the statement, naming the column (`requiredFilter`), as a chart is refused.
 
 ## Cost limits
