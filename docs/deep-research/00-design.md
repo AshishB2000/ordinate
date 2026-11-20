@@ -28,15 +28,18 @@ Lightdash's version (docs.lightdash.com/agents/deep-research):
    starter can open it. "Add to project" turns it into an ordinary Story with saved charts.
 4. **Limits: 8 steps, 12 engine queries, 10 minutes.** An org admin can change them in Admin → AI,
    within hard ceilings. Stop works at any time.
-5. **OPEN: what happens to the written findings on "Add to project".** The charts recompute for each
-   viewer, under that viewer's access. The prose does not: it holds figures (and statements) computed
-   under the *starter's* row rules, hidden columns and folders, and it goes stale beside live charts.
-   This is the same problem as Slack's case A/B. Proposed (pick): keep the prose as written only when no
-   cited step's dataset is restricted, using `restricted()` in `src/server/slack/check.ts` (row rules,
-   column rules, a folder not open to everyone). Otherwise the Story gets the headings and the charts,
-   and each section's prose is a fixed line saying the full text is in the starter's report. Either
-   way, every section carries "Written on <date> from the data then". **Do not build before the owner
-   answers.**
+5. **The written findings on "Add to project" are kept only when the data is open to everyone**
+   (decided 2026-11-20). The charts recompute for each viewer, under that viewer's access. The prose
+   does not: it holds figures and statements computed under the *starter's* row rules, hidden columns
+   and folders, and it goes stale beside live charts. This is the same problem as Slack's case A/B.
+   - When no cited step's dataset is restricted, the prose is kept as written. The test is `restricted()`
+     in `src/server/slack/check.ts`: row rules, column rules, or a folder not open to everyone.
+   - Otherwise, the Story gets the headings and the charts. Each section's prose becomes a fixed line
+     (a `t()` sentence, no model text and no digits) saying the full text is in the starter's private
+     report.
+   - The summary and conclusion follow the same rule over all cited steps.
+   - Either way, every section carries "Written on <date> from the data then", the date formatted by
+     the app.
 
 ## Calls made in the design (shown to the owner as settled unless he objects)
 
