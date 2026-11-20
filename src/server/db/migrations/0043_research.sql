@@ -39,6 +39,8 @@ CREATE TABLE research_runs (
   error_code      text,
   -- "Add to project": a short lease on the work (the charts, then the Story) done OUTSIDE any row lock, the visual saved for each step so
   -- a retry saves none twice, and story_id set once, by the holder of the token.
+  -- Set (never cleared) the moment a computed step read restricted data, or the run used a team-only agent's document: "Add to project" then keeps no prose.
+  restricted      boolean     NOT NULL DEFAULT false,
   add_token       text,
   add_until       timestamptz,
   add_visuals     jsonb       NOT NULL DEFAULT '{}'::jsonb,

@@ -68,14 +68,22 @@ export function register(): void {
       if (!named) await copilot.deleteThread(p.projectId, threadId);
       return fail(say.alreadyRunning());
     }
-    await copilot.appendTurn(p.projectId, { role: 'user', text: p.question }, threadId);
-    const turns = await copilot.appendTurn(p.projectId, { role: 'assistant', text: say.turnText(), research: { runId: id } }, threadId);
-    const turn = turns?.[turns.length - 1];
-    if (!turn) {
-      await store.requestStop(org.id, id);
+    // The run exists and holds the person's slot but is claimed only once its turn does: if the turn cannot be written the run is
+    // stopped (so the slot is free) and the start is refused, never left queued for ever.
+    let turns: Awaited<ReturnType<typeof copilot.appendTurn>> = null;
+    try {
+      await copilot.appendTurn(p.projectId, { role: 'user', text: p.question }, threadId);
+      turns = await copilot.appendTurn(p.projectId, { role: 'assistant', text: say.turnText(), research: { runId: id } }, threadId);
+      const turn = turns?.[turns.length - 1];
+      if (turn) await store.setTurn(org.id, id, turn.id);
+      else turns = null;
+    } catch {
+      turns = null;
+    }
+    if (!turns) {
+      await store.requestStop(org.id, id).catch(() => undefined);
       return fail(say.couldNotAdd());
     }
-    await store.setTurn(org.id, id, turn.id);
     push({ orgId: org.id, startedBy: user.email, id, projectId: p.projectId }, 'queued');
     return { ok: true as const, runId: id, threadId, turns: await turnsForBrowser(p.projectId, turns) };
   });

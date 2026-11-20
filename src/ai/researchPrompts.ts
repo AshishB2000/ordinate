@@ -8,11 +8,10 @@
 
 import { ANSWER_SPEC, ACTION_MARKER } from './suggestedAction';
 import { actionSqlPrompt } from './answerSql';
-import { FIGURE_RE } from '../app/instructions';
 import type { StepRec } from './researchLoop';
 import type { LedgerEntry } from './numberAudit';
 import { harvestAppNumbers } from './numberAudit';
-import { tidy } from './researchWrite';
+import { hasDigit, tidy } from './researchWrite';
 
 const HEAD =
   'You are the Ordinate Assistant doing DEEP RESEARCH on one question about the user\'s data: you break it into small questions, ' +
@@ -77,7 +76,7 @@ export function parsePlan(raw: string | null | undefined): string[] | null {
   if (open < 0 || close <= open) return null;
   try {
     const o = JSON.parse(s.slice(open, close + 1)) as { plan?: unknown };
-    const items = (Array.isArray(o.plan) ? o.plan : []).map((p) => tidy(p, 200).replace(/\n+/g, ' ')).filter((p) => p && !FIGURE_RE.test(p));
+    const items = (Array.isArray(o.plan) ? o.plan : []).map((p) => tidy(p, 200).replace(/\n+/g, ' ')).filter((p) => p && !hasDigit(p)); // the plan text feeds the write prompt: no digit at all (a bare 4500 is as much a figure as 12.5%)
     return items.length ? items.slice(0, 6) : null;
   } catch {
     return null;

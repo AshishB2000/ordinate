@@ -11,6 +11,7 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { researchWorld, sleep, until, answerStep, PLAN } from './researchHarness';
 import * as H from './rowPolicyHarness';
+import * as crypto from 'crypto';
 
 const store: typeof import('../src/server/research/db') = require('../src/server/research/db');
 const worker: typeof import('../src/server/research/worker') = require('../src/server/research/worker');
@@ -20,6 +21,8 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const slackDb: typeof import('../src/server/slack/db') = require('../src/server/slack/db');
 const { shows }: typeof import('../src/ipc/turnsOpen') = require('../src/ipc/turnsOpen');
 const budget = { clear: (): void => require("../src/server/slack/ask")._clearBudgetForTest() };
+const answersMod: any = require('../src/ipc/answers'); // any: patched by a test
+const knowledge: typeof import('../src/knowledge/store') = require('../src/knowledge/store');
 const say: typeof import('../src/server/researchMessages') = require('../src/server/researchMessages');
 
 const DONE = '{"kind":"done"}';
@@ -43,7 +46,7 @@ const WRITE = JSON.stringify({
   if (!S) return;
   const { W, stub } = S;
   const get = async (who: string, id: string) => (await W.call(who, 'research:get', { projectId: W.P, runId: id }));
-  const go = async (who: string, q: string, o: { threadId?: string } = {}) => {
+  const go = async (who: string, q: string, o: { threadId?: string; agentId?: string } = {}) => {
     const r = await S.start(who, q, o);
     if (r.status !== 200 || !r.body?.ok) throw new Error('start failed: ' + r.text);
     return r.body.runId as string;
@@ -350,6 +353,120 @@ const WRITE = JSON.stringify({
     ok('deadline: past it the run ends partial (deadline) with a charts-only report and no model call', rd?.state === 'partial' && rd.errorCode === 'deadline' && rd.report?.chartsOnly === true && stub.calls.step === 0 && stub.calls.write === 0 && stub.calls.plan === 0, `${rd?.state} ${rd?.errorCode} ${JSON.stringify(stub.calls)}`);
     ok('deadline: the stored step was kept and resume gives a fresh allowance', !!rd && rd.steps.length === 1 && (await W.call('ed', 'research:resume', { projectId: W.P, runId: dl })).body?.ok === true && (await store.getRun('acme', dl))?.deadlineAt === null);
     void PLAN;
+
+    // ── Review round 3 ───────────────────────────────────────────────────────────────────────────────────────────────────────
+    await W.pool.query(`UPDATE research_runs SET state = 'stopped' WHERE state IN ('queued', 'running', 'writing')`);
+    const prose = (name: string, extra = '') => JSON.stringify({ title: 'Report', summary: `${name}_SUMMARY.`, sections: [{ heading: 'By region', text: `${name}_SECTION.`, steps: [1] }], caveats: [], conclusion: `${name}_END.`, ...(extra ? {} : {}) });
+    const storyText = async (storyId: string) => JSON.stringify(await W.as('boss', async () => (await stories.readStory(W.P, storyId))?.rec?.blocks));
+
+    // 1. A restricted dataset deleted after the run must not let prose through: the flag was recorded when the step ran.
+    stub.reset();
+    stub.steps = [answerStep({ datasetId: W.east, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }] }), DONE];
+    stub.write = prose('GONE');
+    const del = await go('boss', 'restricted then deleted');
+    const rdel = await S.drive(del);
+    ok('deleted dataset: a step on row-ruled data records `restricted` on the run when it is computed', rdel?.state === 'done' && rdel.restricted === true, `${rdel?.state} ${rdel?.restricted}`);
+    stub.reset();
+    stub.steps = [byRegion('Plain'), DONE];
+    stub.write = prose('OPEN');
+    const rOpen = await S.drive(await go('boss', 'open and kept'));
+    ok('deleted dataset (control): a run over open data is not flagged', rOpen?.restricted === false);
+    ok('fixture: the restricted dataset is deleted after the run', (await W.call('boss', 'dataset:delete', { projectId: W.P, id: W.east })).body?.ok !== false);
+    const addDel = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: del });
+    const textDel = addDel.body?.ok ? await storyText(addDel.body.storyId) : '';
+    ok('deleted dataset: Add keeps NO prose (a deleted dataset reads as open to restricted(); the stored flag and the missing record close it)', addDel.body?.ok === true && !textDel.includes('GONE_SUMMARY') && !textDel.includes('GONE_SECTION') && !textDel.includes('GONE_END') && textDel.includes('Written on'), textDel.slice(0, 300));
+    const addOpen = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: rOpen!.id });
+    const textOpen = await storyText(addOpen.body.storyId);
+    ok('deleted dataset (negative control): an all-open run with every dataset present keeps its prose', textOpen.includes('OPEN_SUMMARY') && textOpen.includes('OPEN_SECTION') && textOpen.includes('OPEN_END'));
+
+    // 2. The add lease: lapsing or a Resume mid-Add leaves one story and one set of charts, never an orphan.
+    const mkDone = async (q: string, write = true) => {
+      stub.reset();
+      stub.steps = [byRegion('Plain'), DRIVERS, DONE];
+      stub.write = JSON.stringify({ title: 'Lease', summary: 'S.', sections: [{ heading: 'By region', text: 'West led.', steps: [1] }, { heading: 'Why', text: 'It rose.', steps: [2] }], caveats: [], conclusion: 'C.' });
+      if (!write) stub.fail.write = 1;
+      const id = await go('ed', q);
+      await S.drive(id);
+      return id;
+    };
+    const slow = (): { gate: Promise<void>; open(): void; seen(): number; restore(): void } => {
+      const real = answersMod.computeCard;
+      let n = 0;
+      let open!: () => void;
+      const gate = new Promise<void>((r) => { open = r; });
+      answersMod.computeCard = async (...a: unknown[]) => { n += 1; if (n === 1) await gate; return real(...a); };
+      return { gate, open, seen: () => n, restore: () => { answersMod.computeCard = real; } };
+    };
+    const lapse = await mkDone('lease lapses');
+    const vL = await countVisuals();
+    const sL = await countStories();
+    const hold = slow();
+    const pressA = W.call('ed', 'research:addToProject', { projectId: W.P, runId: lapse });
+    await until(async () => hold.seen() >= 1);
+    await W.pool.query(`UPDATE research_runs SET add_until = now() - interval '1 second' WHERE id = $1`, [lapse]); // press A\'s 60 s lease runs out while it computes
+    const pressC = await W.call('ed', 'research:addToProject', { projectId: W.P, runId: lapse });
+    hold.open();
+    const aDone = await pressA;
+    hold.restore();
+    ok('add lease lapses mid-Add: the second press finishes; the first, which lost its lease, is refused', pressC.body?.ok === true && pressC.body.created === true && aDone.body?.ok === false, JSON.stringify([pressC.body, aDone.body]));
+    ok('add lease lapses mid-Add: exactly ONE story and ONE set of charts (the chart the lapsed press saved is deleted)', (await countStories()) === sL + 1 && (await countVisuals()) === vL + 2 && (await store.getRun('acme', lapse))?.storyId === pressC.body.storyId, `${await countStories()} ${await countVisuals()} (${sL} ${vL})`);
+
+    const resumable = await mkDone('resume mid add', false);
+    const vR = await countVisuals();
+    const sR = await countStories();
+    const hold2 = slow();
+    const pressR = W.call('ed', 'research:addToProject', { projectId: W.P, runId: resumable });
+    await until(async () => hold2.seen() >= 1);
+    const resumed = await W.call('ed', 'research:resume', { projectId: W.P, runId: resumable });
+    hold2.open();
+    const rDone = await pressR;
+    hold2.restore();
+    ok('Resume mid-Add: the Add is refused and leaves no orphan story or chart', resumed.body?.ok === true && rDone.body?.ok === false && (await countStories()) === sR && (await countVisuals()) === vR, `${JSON.stringify(rDone.body)} ${await countStories()} ${await countVisuals()} (${sR} ${vR})`);
+    await W.pool.query(`UPDATE research_runs SET state = 'stopped' WHERE state IN ('queued', 'running', 'writing')`);
+
+    const lateLoss = await mkDone('lease lost before the story');
+    const vS = await countVisuals();
+    const sS = await countStories();
+    const realSave2 = stories.saveStory;
+    stories.saveStory = (async (...a: Parameters<typeof realSave2>) => {
+      await W.pool.query(`UPDATE research_runs SET add_token = NULL, add_visuals = '{}'::jsonb WHERE id = $1`, [lateLoss]); // a Resume cleared it
+      return realSave2(...a);
+    }) as typeof stories.saveStory;
+    const lost = await W.call('ed', 'research:addToProject', { projectId: W.P, runId: lateLoss });
+    stories.saveStory = realSave2;
+    ok('lease lost at the story: the press deletes its own story and charts (finalize found nobody\'s story id)', lost.body?.ok === false && (await countStories()) === sS && (await countVisuals()) === vS, `${JSON.stringify(lost.body)} ${await countStories()} ${await countVisuals()} (${sS} ${vS})`);
+
+    // 3. An agent's own documents reach the run; a team-only agent's makes it restricted, an everyone agent\'s does not.
+    const agentRun = async (name: string, teamIds: string[]) => {
+      const agentId: string = (await W.call('boss', 'agent:save', { projectId: W.P, agent: { name, topicId: null, model: null, build: true, teamIds } })).body?.agent?.id;
+      await W.as('boss', () => knowledge.createDoc(W.P, agentId, { title: `${name} handbook`, text: `# ${name}\n\nzebrawords policy: always compare by region first.` }, crypto.randomUUID(), 'boss@acme.test'));
+      stub.reset();
+      stub.steps = [byRegion('Plain'), DONE];
+      stub.write = prose(name.toUpperCase());
+      const id = await go('boss', 'zebrawords policy please', { agentId });
+      const r = await S.drive(id);
+      return { id, r, plan: stub.seen.plan };
+    };
+    const team = await agentRun('Team', [W.team]);
+    ok('agent documents: the agent\'s own passages reach the plan call (the agent id is passed to askGuidance)', /always compare by region first/.test(team.plan), team.plan.slice(0, 200));
+    ok('agent documents: a team-only agent\'s document used → the run is restricted', team.r?.state === 'done' && team.r.restricted === true);
+    const addTeam = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: team.id });
+    const textTeam = await storyText(addTeam.body.storyId);
+    ok('agent documents: so Add keeps no prose', !textTeam.includes('TEAM_SUMMARY') && !textTeam.includes('TEAM_SECTION'));
+    const everyone = await agentRun('Everyone', []);
+    const addEvery = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: everyone.id });
+    const textEvery = await storyText(addEvery.body.storyId);
+    ok('agent documents (negative control): an agent with no team gate → not restricted, prose kept', everyone.r?.restricted === false && textEvery.includes('EVERYONE_SUMMARY') && textEvery.includes('EVERYONE_SECTION') && /always compare/.test(everyone.plan));
+
+    // 5. A start whose turn cannot be written does not hold the person\'s slot.
+    const realAppend = copilot.appendTurn;
+    let appended = 0;
+    copilot.appendTurn = (async (...a: Parameters<typeof realAppend>) => { appended += 1; if (appended === 2) throw new Error('disk full'); return realAppend(...a); }) as typeof copilot.appendTurn;
+    const broken = await S.start('ed', 'turn fails');
+    copilot.appendTurn = realAppend;
+    ok('start: a turn that cannot be written refuses the start and stops the run (it does not hold the slot)', broken.body?.ok === false && (await W.pool.query(`SELECT 1 FROM research_runs WHERE started_by = 'ed@acme.test' AND state IN ('queued', 'running', 'writing')`)).rowCount === 0, broken.text.slice(0, 200));
+    ok('start (control): the person can start another at once', (await S.start('ed', 'try again')).body?.ok === true);
+    await W.pool.query(`UPDATE research_runs SET state = 'stopped' WHERE state IN ('queued', 'running', 'writing')`);
   } finally {
     await S.close();
   }

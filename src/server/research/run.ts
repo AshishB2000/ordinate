@@ -32,6 +32,9 @@ import { runLoop, type Decision, type End, type LoopState, type StepRec } from '
 import { PLAN_SYSTEM, WRITE_SYSTEM, parsePlan, planUser, stepSystem, stepUser, writeUser } from '../../ai/researchPrompts';
 import { buildReport, chartsOnly, parseWriteReply, type Report } from '../../ai/researchWrite';
 import { underBudget } from '../slack/ask';
+import { restricted } from '../slack/check';
+import { readAgent } from '../../ai/agents';
+import { titlesOf } from '../../knowledge/store';
 import * as store from './db';
 import { computeStep, type StepScope } from './steps';
 import * as say from '../researchMessages';
@@ -107,12 +110,23 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
       const scope = await askScope(run.projectId, run.agentId);
       const asked = await scopedContext(run.projectId, scope, { kind: '' });
       const facts = await buildFacts(run.projectId, asked, () => undefined, run.question);
-      const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
+      const agent = scope.agent ? { id: scope.agent.id, name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
       const guided = await askGuidance(run.projectId, asked, facts.provenance.kind, run.question, agent ? { agent } : {});
-      return { scope, facts, guided };
+      // A document of a TEAM-ONLY agent (a person outside its teams may not read it) makes the run restricted: Add to project keeps no prose.
+      let teamOnly = false;
+      const docs = guided.used.documents ?? [];
+      if (docs.length) {
+        const found = await titlesOf(run.projectId, docs).catch(() => new Map<string, { title: string; agentId: string | null }>());
+        for (const agentId of new Set([...found.values()].flatMap((d) => (d.agentId ? [d.agentId] : [])))) {
+          const a = await readAgent(run.projectId, agentId);
+          if (!a || a.rec.teamIds.length > 0) teamOnly = true; // gone or team-gated: unknown or restricted
+        }
+      }
+      return { scope, facts, guided, teamOnly };
     });
     if (!prep) { await store.finish(org, run.id, owner, 'failed', 'access', null); return push(run, 'failed'); }
     const { scope, facts, guided } = prep;
+    if (prep.teamOnly) await store.markRestricted(org, run.id, owner);
     const model = scope.agent?.model ?? null;
     const ready = async (): Promise<boolean> => execConfig.assistantOn() && (await execConfig.executionReady());
 
@@ -165,8 +179,15 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
         },
         async compute(action) {
           if (action.kind === 'sql' && !underBudget(org, run.startedBy)) return { status: 'failed', reason: say.tooBusy() }; // the SQL answer makes its own model call
-          const out = await asStarter(() => untilAborted(computeStep(action, sc), ac.signal)).catch((): null => null);
+          let touched = false;
+          const out = await asStarter(async () => {
+            const r = await untilAborted(computeStep(action, sc), ac.signal);
+            // Recorded NOW, while the dataset exists and under the starter's rules: Add to project may come after it is deleted.
+            if (r.status === 'done') touched = await restricted({ projectId: run.projectId, datasetIds: r.datasetIds, dashboardIds: [] });
+            return r;
+          }).catch((): null => null);
           alive();
+          if (touched) await store.markRestricted(org, run.id, owner);
           return out ?? { status: 'failed', reason: say.timeUp() };
         },
         async save(s) {

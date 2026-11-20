@@ -47,6 +47,7 @@ export async function work(run: store.Run, owner: string, log: Log, leases: Set<
     await execute(pool, run, owner, lease.signal);
   } catch (err) {
     if (err instanceof LeaseLost || lease.signal.aborted) {
+      clearInterval(beat); // before the release: a late heartbeat tick must not extend the lease it just lapsed
       if (lease.signal.reason instanceof Stopping) await store.release(run.orgId, run.id, owner).catch(() => undefined); // handed back: another pod takes it at once
       else log.warn({ run: run.id }, 'research run stopped: its lease was lost');
       return;

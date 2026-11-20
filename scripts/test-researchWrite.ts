@@ -81,4 +81,6 @@ const sqlSteps: Step[] = [{ n: 1, kind: 'sql', title: 't', status: 'done', facts
 const sqlRep = W.buildReport({ title: 'R', summary: '', sections: [{ heading: 'H', text: 'Churn reached 4500, up 47; 7731 too; West had 12.', steps: [1] }], caveats: [], conclusion: '' }, sqlSteps, [], guardAnswer, 'now')!;
 ok('SQL ledger: a section stating the title\'s 4500 and 47 and the column\'s 7731 gets the note; the row\'s 12 is fine', /Contains a figure the app did not compute: 4500, 47, 7731/.test(sqlRep.sections[0].text), sqlRep.sections[0].text);
 ok('SQL ledger (negative control): the row figures still vouch for themselves', !W.buildReport({ title: 'R', summary: '', sections: [{ heading: 'H', text: 'West had 12.', steps: [1] }], caveats: [], conclusion: '' }, sqlSteps, [], guardAnswer, 'now')!.sections[0].text.includes('Contains a figure'));
+ok('plan: an item with a bare integer ("Why did 4500 customers leave?") is dropped, not just a figure-shaped one', JSON.stringify(P.parsePlan('{"plan":["Which region leads?","Why did 4500 customers leave?","Is it 12.5% or less?","Trend by month"]}')) === '["Which region leads?","Trend by month"]');
+ok('plan (negative control): digit-free items all stay; none left is no plan', P.parsePlan('{"plan":["a","b","c"]}')?.length === 3 && P.parsePlan('{"plan":["4500","7"]}') === null);
 finish();

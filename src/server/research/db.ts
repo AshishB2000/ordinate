@@ -49,11 +49,11 @@ export const ACTIVE: readonly RunState[] = ['queued', 'running', 'writing'];
 export interface Run {
   orgId: string; projectId: string; id: string; startedBy: string; agentId: string | null; threadId: string; turnId: string | null; question: string;
   state: RunState; plan: string[]; steps: StepRec[]; report: Report | null; storyId: string | null; stopRequested: boolean;
-  stepsUsed: number; queriesUsed: number; attempts: number; startedAt: string; deadlineAt: string | null; finishedAt: string | null; errorCode: string | null;
+  stepsUsed: number; queriesUsed: number; attempts: number; restricted: boolean; startedAt: string; deadlineAt: string | null; finishedAt: string | null; errorCode: string | null;
 }
 const COLS = `org_id AS "orgId", project_id::text AS "projectId", id::text AS id, started_by AS "startedBy", agent_id::text AS "agentId", thread_id::text AS "threadId",
   turn_id AS "turnId", question, state, plan, steps, report, story_id::text AS "storyId", stop_requested AS "stopRequested", steps_used AS "stepsUsed",
-  queries_used AS "queriesUsed", attempts, started_at::text AS "startedAt", deadline_at::text AS "deadlineAt", finished_at::text AS "finishedAt", error_code AS "errorCode"`;
+  queries_used AS "queriesUsed", attempts, restricted, started_at::text AS "startedAt", deadline_at::text AS "deadlineAt", finished_at::text AS "finishedAt", error_code AS "errorCode"`;
 
 /** The lease a claim holds, and how long it may go unrenewed. */
 export const LEASE_MS = 60_000;
@@ -180,8 +180,21 @@ export async function claimAdd(org: string, id: string, token: string): Promise<
   return !now ? null : now.story ? { story: now.story } : { busy: true };
 }
 /** The visual saved for a step, kept on the run as it is saved (a retry reuses it). False: the lease is no longer this token's. */
+/** The run touched restricted data (a computed step's dataset, or a team-only agent's document): sticky, fenced by the owner. */
+export async function markRestricted(org: string, id: string, owner: string): Promise<void> {
+  await q('system', 'UPDATE research_runs SET restricted = true WHERE org_id = $1 AND id = $2 AND lease_owner = $3', [org, id, owner]);
+}
+/** The visuals the run now records for its add (a retaken or resumed add may have none of an earlier press's). */
+export async function addVisualsOf(org: string, id: string): Promise<string[]> {
+  const r = await q<{ v: Record<string, string> }>({ org }, 'SELECT add_visuals AS v FROM research_runs WHERE org_id = $1 AND id = $2', [org, id]);
+  return Object.values(r.rows[0]?.v ?? {});
+}
+/** Keeps the add lease alive (the work between two renewals is a chart's computation). False: it is no longer this token's. */
+export async function renewAdd(org: string, id: string, token: string): Promise<boolean> {
+  return !!(await q({ org }, `UPDATE research_runs SET add_until = now() + ($4 || ' seconds')::interval WHERE org_id = $1 AND id = $2 AND add_token = $3 AND story_id IS NULL`, [org, id, token, String(ADD_LEASE_S)])).rowCount;
+}
 export async function recordVisual(org: string, id: string, token: string, step: number, visualId: string): Promise<boolean> {
-  return !!(await q({ org }, `UPDATE research_runs SET add_visuals = add_visuals || jsonb_build_object($4::text, $5::text) WHERE org_id = $1 AND id = $2 AND add_token = $3`, [org, id, token, String(step), visualId])).rowCount;
+  return !!(await q({ org }, `UPDATE research_runs SET add_visuals = add_visuals || jsonb_build_object($4::text, $5::text), add_until = now() + interval '60 seconds' WHERE org_id = $1 AND id = $2 AND add_token = $3`, [org, id, token, String(step), visualId])).rowCount;
 }
 /** Records the story, once: only the holder of the lease, and only while there is none. The story id the run has afterwards. */
 export async function finalizeStory(org: string, id: string, token: string, storyId: string): Promise<string | null> {
