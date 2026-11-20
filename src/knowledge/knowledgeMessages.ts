@@ -37,3 +37,47 @@ export function unreadable(): string {
 export function fileTooBig(): string {
   return t('knowledgeMessages.this_file_is_larger_than_10');
 }
+
+export function needsDatabase(): string {
+  return t('knowledgeMessages.documents_need_a_database_set_database');
+}
+
+export function titleMissing(): string {
+  return t('knowledgeMessages.give_the_document_a_title');
+}
+
+export function textMissing(): string {
+  return t('knowledgeMessages.the_document_has_no_text');
+}
+
+export function titleTooLong(max: number): string {
+  return t('knowledgeMessages.a_title_can_have_at_most', { max });
+}
+
+export function projectFull(max: number): string {
+  return t('knowledgeMessages.a_project_can_have_at_most', { max });
+}
+
+export function docGone(): string {
+  return t('knowledgeMessages.that_document_is_no_longer_there');
+}
+
+export function docChanged(): string {
+  return t('knowledgeMessages.this_document_was_changed_in_another');
+}
+
+export function docsNotRead(): string {
+  return t('knowledgeMessages.the_documents_could_not_be_read');
+}
+
+export function docNotSaved(): string {
+  return t('knowledgeMessages.the_document_could_not_be_saved');
+}
+
+export function agentGone(): string {
+  return t('knowledgeMessages.that_assistant_is_no_longer_there');
+}
+
+export function uploadExpired(): string {
+  return t('knowledgeMessages.that_upload_has_expired_choose_the');
+}

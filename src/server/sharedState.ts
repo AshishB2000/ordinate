@@ -1,7 +1,7 @@
 // What every pod shares through Postgres so that any pod can serve any request
 // (docs/any-pod/00-design.md): the abuse counters, the file tokens, the staged
 // imports, the plan-run clock, and the job that sweeps what has expired (Assistant
-// conversations past the org's retention among it). Wired once the schema is current (./app.ts); without
+// conversations past the org's retention among it, and knowledge documents whose project or agent is gone). Wired once the schema is current (./app.ts); without
 // DATABASE_URL nothing here runs and each store keeps its in-process copy.
 
 import type { Pool } from 'pg';
@@ -14,6 +14,7 @@ import { useLeaseDb } from '../app/runLease';
 import { pruneAudit } from './authz/audit';
 import { pruneUnused } from '../ai/copilotRows';
 import { defineJob } from './jobs/runner';
+import * as knowledgeLifecycle from '../knowledge/lifecycle';
 
 /** How often each org's expired tokens, stages, counter windows, plan runs, audit rows and unused conversations are swept. */
 export const SHARED_SWEEP_EVERY_MS = 5 * 60_000;
@@ -32,6 +33,7 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => planStore.prune(),
     () => pruneAudit(p, org, auditDays),
     () => pruneUnused(org),
+    () => knowledgeLifecycle.sweep(knowledgeLifecycle.realExists(), org), // knowledge documents of a project or agent that is gone (0042)
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));

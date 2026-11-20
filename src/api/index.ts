@@ -58,6 +58,7 @@ import { agents } from './agents';
 import { folders } from './folders';
 import { teamTables } from './teamTables';
 import { requests } from './requests';
+import { knowledge } from './knowledge';
 
 export const contracts = {
   ...projects,
@@ -117,6 +118,7 @@ export const contracts = {
   ...folders,
   ...teamTables,
   ...requests,
+  ...knowledge,
 } as const;
 
 export type Channel = keyof typeof contracts;

@@ -679,4 +679,6 @@ export function registerHandlers(): void {
   (require('../ipc/folders') as typeof import('../ipc/folders')).register();
   // Dashboard requests (docs/team-folders, E9): a viewer asks, an editor approves.
   (require('./requests/rpc') as typeof import('./requests/rpc')).register();
+  // Knowledge documents (docs/knowledge-docs): reference text the Assistant reads, for a project or one agent.
+  (require('../ipc/knowledge') as typeof import('../ipc/knowledge')).register();
 }

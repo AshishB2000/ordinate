@@ -13,6 +13,7 @@ import { sanitizeColorMap } from '../analysis/colorMap';
 import type { ColorMap } from '../analysis/colorMap';
 import * as recordFs from './recordFs';
 import { removeBlobsUnder } from './blobStore';
+import { forgetProject } from '../knowledge/lifecycle';
 import { logger } from './logger';
 
 export interface Project {
@@ -297,6 +298,7 @@ export async function deleteProject(id: string): Promise<boolean> {
     if (st && st.isSymbolicLink()) await recordFs.unlink(projectDir(id));
     else await recordFs.rm(projectDir(id), { recursive: true, force: true });
     await removeBlobsUnder(projectDir(id)); // its Image-card pictures (./blobStore.ts)
+    await forgetProject(id); // its knowledge documents (docs/knowledge-docs)
     return true;
   } catch (_) {
     return false;

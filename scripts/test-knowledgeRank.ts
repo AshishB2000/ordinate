@@ -1,13 +1,16 @@
 // Knowledge documents: which passages answer a question (docs/knowledge-docs/00-design.md, "Passages and matching").
 //   § 1 the pure ranking (src/knowledge/rank.ts): the scores, the cut-off, the tie order, the budget
 //   § 2 Postgres-narrowed = pure: with DATABASE_URL, the passages `words && $1` returns, ranked, equal the pure ranking
-//       over every passage (Object.is)  [added with the store, phase 2]
-// NEGATIVE CONTROLS: a score of 0 is never shown; without the cut-off weak passages come along; a wrong tie order is caught.
+//       over EVERY passage (Object.is, field by field), for the project's documents and an agent's
+// NEGATIVE CONTROLS: a score of 0 is never shown; without the cut-off weak passages come along; a wrong tie order is caught;
+// the narrowing really does drop passages (so the equality is not vacuous); a narrowing that dropped a scoring one would differ.
 //
 //   npm run build:ts && node scripts/test-knowledgeRank.js
 
 export {};
+import { randomUUID } from 'crypto';
 import { ok, finish } from './selfcheck';
+import { BOSS, withServer } from './notifyHarness';
 const R = require('../src/knowledge/rank') as typeof import('../src/knowledge/rank');
 type P = import('../src/knowledge/rank').RankPassage;
 
@@ -61,4 +64,46 @@ ok('NEGATIVE CONTROL: without the budget all ten would show', R.rankPassages('re
 const input = [weak, mid, top];
 const a = JSON.stringify(R.rankPassages('refund revenue counted', input));
 ok('deterministic, input untouched', a === JSON.stringify(R.rankPassages('refund revenue counted', [...input].reverse())) && input[0] === weak);
-finish();
+
+// § 2 Postgres-narrowed = pure.
+const fs: typeof import('fs') = require('fs');
+const path: typeof import('path') = require('path');
+const store: typeof import('../src/knowledge/store') = require('../src/knowledge/store');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+
+const same = (a: readonly import('../src/knowledge/rank').Ranked[], b: readonly import('../src/knowledge/rank').Ranked[]): boolean =>
+  a.length === b.length && a.every((x, i) => (Object.keys(x) as (keyof typeof x)[]).every((k) => (Array.isArray(x[k]) ? JSON.stringify(x[k]) === JSON.stringify(b[i][k]) : Object.is(x[k], b[i][k]))) && Object.keys(x).length === Object.keys(b[i]).length);
+const QUESTIONS = [
+  'How do we count refunds?', 'Who counts as an active customer?', 'When does the fiscal year start?', 'revenue', 'policy', 'the', 'What is customer churn and how is it measured by region?',
+  'Where do visitors park?', 'What is the airspeed velocity of a swallow?', 'discount rate currency exchange rate revenue refunds churn', 'subscription revenue recognised monthly',
+];
+
+withServer('knowledge-rank', {}, async (b) => {
+  const fx = (f: string): string => fs.readFileSync(path.join(__dirname, 'fixtures', 'knowledge', f), 'utf8');
+  const P: string = await b.run(BOSS, async () => (await projects.createProject('Rank')).id);
+  const agent = randomUUID();
+  const mk = (title: string, text: string, a: string | null) => b.run(BOSS, () => store.createDoc(P, a, { title, text }, randomUUID(), 'boss@acme.test'));
+  await mk('Metrics policy', fx('metrics-policy.md'), null);
+  await mk('Office handbook', fx('office-handbook.md'), null);
+  await mk('Metrics policy (finance copy)', fx('metrics-policy.md'), agent); // the same passages under the agent: ties go to its own
+  let dropped = 0;
+  let totalKept = 0;
+  for (const question of QUESTIONS) {
+    const narrowed = await b.run(BOSS, () => store.candidates(P, agent, question));
+    const everything = await b.run(BOSS, () => store.allPassages(P, agent));
+    dropped += everything.length - narrowed.length;
+    const viaPg = R.rankPassages(question, narrowed);
+    const pure = R.rankPassages(question, everything);
+    totalKept += pure.length;
+    ok(`"${question}": the Postgres-narrowed ranking equals the pure ranking over every passage (Object.is)`, same(viaPg, pure), JSON.stringify([viaPg.map((r) => [r.docId, r.ord, r.score]), pure.map((r) => [r.docId, r.ord, r.score])]));
+  }
+  ok('the narrowing really drops passages (the equality is not vacuous)', dropped > 0 && totalKept > 0, `${dropped} dropped, ${totalKept} kept`);
+  const own = R.rankPassages('How do we count refunds?', await b.run(BOSS, () => store.allPassages(P, agent)));
+  ok('the agent\'s copy of a passage comes before the project\'s identical one', own.length > 1 && own[0].own === true && own.some((r) => !r.own && r.text === own[0].text && own.indexOf(r) > 0) && own.every((r, i) => !r.own || own.slice(0, i).every((q) => q.score > r.score || q.own || q.score === r.score)));
+  const others = R.rankPassages('How do we count refunds?', await b.run(BOSS, () => store.allPassages(P, randomUUID())));
+  ok('another agent never sees that agent\'s passages', others.length > 0 && others.every((r) => !r.own));
+  // NEGATIVE CONTROL: a narrowing that dropped a scoring passage would differ from the pure ranking.
+  const everything = await b.run(BOSS, () => store.allPassages(P, agent));
+  const crippled = everything.filter((p) => !(p.heading.endsWith('How a refund is counted') && p.own));
+  ok('NEGATIVE CONTROL: a narrowing that lost a scoring passage is caught by the comparison', !same(R.rankPassages('How do we count refunds?', crippled), R.rankPassages('How do we count refunds?', everything)));
+}).catch((err) => { console.error(err); process.exitCode = 1; }).finally(finish);
