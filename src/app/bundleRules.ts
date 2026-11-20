@@ -9,6 +9,7 @@
 
 import { bundleNotImported, bundleNameCase } from './bundleMessages';
 import type { ZipPolicy } from './zipReader';
+import { KNOWLEDGE_ENTRY_MAX_BYTES } from '../knowledge/limits';
 
 export const BUNDLE_FORMAT = 'ordinate-project';
 export const BUNDLE_VERSION = 1;
@@ -117,6 +118,7 @@ export const ASSET_MAX_BYTES = 5 * MIB;
 /** What a JSON entry of a bundle — or a project's record at that path — may weigh. */
 export function jsonCapOf(rel: string): number {
   if (/^history\/dataset\//i.test(rel)) return RECORD_MAX_BYTES;
+  if (/^knowledge\//i.test(rel)) return KNOWLEDGE_ENTRY_MAX_BYTES; // a document's 300,000 characters at 6 bytes the most: not the 8 MiB default
   return PARSED_MAX_BYTES[rel] ?? OTHER_RECORD_MAX_BYTES;
 }
 

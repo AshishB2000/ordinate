@@ -10,6 +10,9 @@
 
 import { randomUUID } from 'crypto';
 import { logger } from '../app/logger';
+import { osUser } from '../app/catalog';
+import { JsonTooComplex, parseBounded } from '../app/jsonBudget';
+import { untitledDocument } from './knowledgeMessages';
 import { isValidId } from '../app/ids';
 import { MAX_TITLE } from './limits';
 import { allDocs, createDoc, knowledgeOn } from './store';
@@ -36,16 +39,21 @@ export async function importEntry(projectId: string, body: Buffer, agentIds: Rea
   if (!knowledgeOn()) return false;
   let d: Record<string, unknown>;
   try {
-    d = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
-  } catch {
-    logger.warn('[knowledge] a document in the bundle is not readable: skipped');
+    // Bounded like every other file the import parses whole (a parse's heap is its values): past the budget, skipped.
+    const parsed = await parseBounded(body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    d = parsed as Record<string, unknown>;
+  } catch (err) {
+    logger.warn(err instanceof JsonTooComplex ? '[knowledge] a document in the bundle holds too many values: skipped' : '[knowledge] a document in the bundle is not readable: skipped');
     return false;
   }
+  // The agent must be null (a project document) or a string naming an agent the bundle carries: anything else is no project-wide document.
+  if (d.agentId !== null && typeof d.agentId !== 'string') return false;
   const agentId = typeof d.agentId === 'string' ? d.agentId.toLowerCase() : null;
   if (!isValidId(d.id) || typeof d.title !== 'string' || typeof d.text !== 'string' || (agentId !== null && !agentIds.has(agentId))) return false;
   const source = typeof d.source === 'string' && SOURCES.has(d.source) ? (d.source as DocSource) : 'typed';
-  const title = Array.from(d.title.replace(/\s+/g, ' ').trim()).slice(0, MAX_TITLE).join('') || 'Untitled';
+  const title = Array.from(d.title.replace(/\s+/g, ' ').trim()).slice(0, MAX_TITLE).join('') || untitledDocument();
   const by = (typeof d.updatedBy === 'string' ? d.updatedBy : typeof d.createdBy === 'string' ? d.createdBy : '').slice(0, 200);
-  await createDoc(projectId, agentId, { title, text: d.text, source, fileName: typeof d.fileName === 'string' ? d.fileName.slice(0, 255) : null }, randomUUID(), by || 'import');
+  await createDoc(projectId, agentId, { title, text: d.text, source, fileName: typeof d.fileName === 'string' ? d.fileName.slice(0, 255) : null }, randomUUID(), by || osUser()); // a document written by nobody the bundle names is the importer's
   return true;
 }

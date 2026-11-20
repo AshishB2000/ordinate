@@ -89,3 +89,7 @@ export function tooComplex(): string {
 export function untitledDocument(): string {
   return t('knowledgeMessages.untitled_document');
 }
+
+export function busy(): string {
+  return t('knowledgeMessages.the_server_is_busy_reading_other');
+}

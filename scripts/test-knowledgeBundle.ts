@@ -81,6 +81,24 @@ withServer('knowledge-bundle', {}, async (b) => {
   const hdocs = hand.ok && hand.project ? await run(() => store.allDocs((hand.project as { id: string }).id)) : [];
   ok('a document that is unreadable, or names an agent the bundle lacks, is skipped; the fine one lands; the import still succeeds', hand.ok === true && hdocs.length === 1 && hdocs[0].title === 'Fine one', show(hand.ok ? hdocs.map((d) => d.title) : hand));
 
+  // (f) hostile entries: oversized (past the 2 MiB knowledge cap), too many values, a non-string agent id
+  const base = entries.filter((e) => !e.name.startsWith('knowledge/') && e.name !== 'manifest.json');
+  const manifestWith = (n: number) => ({ name: 'manifest.json', data: Buffer.from(JSON.stringify({ ...JSON.parse(entries.find((e) => e.name === 'manifest.json')!.data.toString()), counts: { ...out.manifest.counts, knowledge: n } })) });
+  const entryOf = (data: Buffer) => ({ name: `knowledge/${randomUUID()}.json`, data });
+  const fine = entryOf(Buffer.from(JSON.stringify({ id: randomUUID(), agentId: null, title: 'Fine', text: 'kept' })));
+  const big = await run(() => bundle.importBundle(bundle.writeZip([...base, entryOf(Buffer.from(JSON.stringify({ id: randomUUID(), agentId: null, title: 'Big', text: 'a'.repeat(2.2 * 1024 * 1024) }))), manifestWith(1)]), { name: 'Oversized' }));
+  ok('an entry over the 2 MiB knowledge cap is refused by the reader: the import fails cleanly, nothing is left', big.ok === false && !(await run(() => projects.listProjects())).some((p) => p.name === 'Oversized'), show(big));
+  const nested = '['.repeat(1_000_001) + ']'.repeat(1_000_001); // 2,000,002 bytes: inside the cap, past the value budget
+  const deep = await run(() => bundle.importBundle(bundle.writeZip([...base, entryOf(Buffer.from(nested)), fine, manifestWith(2)]), { name: 'Deep' }));
+  const deepDocs = deep.ok && deep.project ? await run(() => store.allDocs((deep.project as { id: string }).id)) : [];
+  ok('an entry holding more values than the budget is skipped, never parsed; the fine one lands', deep.ok === true && deepDocs.length === 1 && deepDocs[0].title === 'Fine', show(deep.ok ? deepDocs.map((d) => d.title) : deep));
+  const odd = await run(() => bundle.importBundle(bundle.writeZip([...base, entryOf(Buffer.from(JSON.stringify({ id: randomUUID(), agentId: 123, title: 'Numeric agent', text: 'x' }))), entryOf(Buffer.from(JSON.stringify({ id: randomUUID(), agentId: { a: 1 }, title: 'Object agent', text: 'x' }))), fine, manifestWith(3)]), { name: 'Odd agent' }));
+  const oddDocs = odd.ok && odd.project ? await run(() => store.allDocs((odd.project as { id: string }).id)) : [];
+  ok('a non-string agentId (123, an object) drops the entry: it never becomes a project-wide document', odd.ok === true && oddDocs.length === 1 && oddDocs[0].title === 'Fine', show(odd.ok ? oddDocs.map((d) => d.title) : odd));
+  const untitled = await run(() => bundle.importBundle(bundle.writeZip([...base, entryOf(Buffer.from(JSON.stringify({ id: randomUUID(), agentId: null, title: '   ', text: 'x' }))), manifestWith(1)]), { name: 'Untitled' }));
+  const udocs = untitled.ok && untitled.project ? await run(() => store.allDocs((untitled.project as { id: string }).id)) : [];
+  ok('NEGATIVE CONTROL: a blank title is "Untitled document" and the importer is the author when the bundle names none', untitled.ok === true && udocs[0]?.title === 'Untitled document' && udocs[0]?.updatedBy === 'boss@acme.test', show(udocs.map((d) => [d.title, d.updatedBy])));
+
   // (e) no database
   inOrgMod.useOrgDb(null);
   const noDb = await run(() => bundle.exportProject(Other));

@@ -11,6 +11,7 @@ import { agentForAsk, EDITOR_RANK } from '../ai/agentAccess';
 import { rankOn } from '../server/authz/caller';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { osUser } from '../app/catalog';
+import { ctx } from '../server/context';
 import { logger } from '../app/logger';
 import { MAX_DOCS_PER_PROJECT, MAX_FILE_BYTES, MAX_TITLE } from '../knowledge/limits';
 import { KnowledgeReadError, readDocument } from '../knowledge/readDocument';
@@ -83,8 +84,12 @@ export function register(): void {
     try {
       if (!(await mayReach(projectId, agentId ?? null))) return { ok: false, error: msg.agentGone() }; // before the single-use token is spent
       upload = await resolveUpload(fileToken);
-      if ((await fs.promises.stat(upload.path)).size > MAX_FILE_BYTES) return { ok: false, error: msg.fileTooBig() };
-      const read = await readDocument(await fs.promises.readFile(upload.path), upload.name);
+      const staged = upload.path;
+      // The file is read only once a parse slot is held (./readDocument.ts), never while the upload waits; a client that hangs up leaves the queue.
+      const read = await readDocument(async () => {
+        if ((await fs.promises.stat(staged)).size > MAX_FILE_BYTES) throw new KnowledgeReadError('type', msg.fileTooBig());
+        return fs.promises.readFile(staged);
+      }, upload.name, { org: ctx().org.id, signal: ctx().signal });
       const name = upload.name.slice(0, 255);
       const doc = await createDoc(projectId, agentId ?? null, { title: title && clipTitle(title) ? clipTitle(title) : titleOfFile(name) || msg.untitledDocument(), text: read.text, source: read.source, fileName: name }, randomUUID(), osUser());
       return { ok: true, doc };

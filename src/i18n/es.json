@@ -456,6 +456,7 @@
   "knowledgeMessages.the_document_could_not_be_saved": "No se pudo guardar el documento.",
   "knowledgeMessages.the_document_has_no_text": "El documento no tiene texto.",
   "knowledgeMessages.the_documents_could_not_be_read": null,
+  "knowledgeMessages.the_server_is_busy_reading_other": null,
   "knowledgeMessages.this_document_is_longer_than_300": null,
   "knowledgeMessages.this_document_was_changed_in_another": null,
   "knowledgeMessages.this_file_could_not_be_read": null,

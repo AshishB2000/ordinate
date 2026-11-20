@@ -3,7 +3,7 @@
 //       memory budget, so the parent's RSS stays flat and the upload is refused with the "too large or complex" sentence.
 //       pdf.js's decoded buffers sit outside any worker's V8 heap limit, which is why a worker alone is not enough.
 //   § 2 a .docx whose header DECLARES 1,000 bytes and inflates past the cap: the output is capped as it is inflated
-//   § 3 at most 2 parses run at once per pod; a third waits (and is not refused)
+//   § 3 at most 2 parses run at once per pod (five orgs here); the rest wait (and are not refused). The per-org rule and the queue cap are test-knowledgeQueue's
 // NEGATIVE CONTROLS: an honest PDF and docx read in the same child; the declared-size check still refuses an honest bomb.
 //
 //   npm run build:ts && node scripts/test-knowledgeBombs.js
@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   setChildForTest(child);
   const marks: number[] = [];
   const t1 = Date.now();
-  const outs = await Promise.all(Array.from({ length: 5 }, () => readDocument(Buffer.from('x'), 'a.txt').then((r) => { marks.push(Date.now() - t1); return r.text; }, (e: Error) => `refused: ${e.message}`)));
+  const outs = await Promise.all(Array.from({ length: 5 }, (_, i) => readDocument(Buffer.from('x'), 'a.txt', { org: `org${i}` }).then((r) => { marks.push(Date.now() - t1); return r.text; }, (e: Error) => `refused: ${e.message}`)));
   setChildForTest(null);
   let live = 0;
   let most = 0;

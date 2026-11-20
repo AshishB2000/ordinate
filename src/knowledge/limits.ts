@@ -17,3 +17,7 @@ export const PARSE_MEMORY_MB = 256;
 export const PARSE_CONCURRENCY = 2;
 /** The exit code of a child that went past its memory budget. */
 export const EXIT_MEMORY = 87;
+/** Uploads that may wait for a parse slot; the next is refused at once. */
+export const PARSE_MAX_WAITING = 8;
+/** A knowledge entry of a bundle: 300,000 characters at 6 bytes the most, plus its fields. */
+export const KNOWLEDGE_ENTRY_MAX_BYTES = 2 * 1024 * 1024;

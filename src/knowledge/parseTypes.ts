@@ -1,7 +1,7 @@
 // What a parse says, shared by the worker thread and the main thread. PURE.
 
 /** Why a file was not read. The main thread words each one (./knowledgeMessages). */
-export type ReadFailure = 'type' | 'utf8' | 'encrypted' | 'noText' | 'zipBomb' | 'tooLong' | 'unreadable' | 'timeout' | 'memory';
+export type ReadFailure = 'type' | 'utf8' | 'encrypted' | 'noText' | 'zipBomb' | 'tooLong' | 'unreadable' | 'timeout' | 'memory' | 'busy';
 
 export class ParseError extends Error {
   constructor(readonly code: ReadFailure) {

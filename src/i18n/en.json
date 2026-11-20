@@ -453,6 +453,7 @@
   "knowledgeMessages.the_document_could_not_be_saved": "The document could not be saved.",
   "knowledgeMessages.the_document_has_no_text": "The document has no text.",
   "knowledgeMessages.the_documents_could_not_be_read": "The documents could not be read.",
+  "knowledgeMessages.the_server_is_busy_reading_other": "The server is busy reading other files. Try again in a moment.",
   "knowledgeMessages.this_document_is_longer_than_300": "This document is longer than 300,000 characters. Split it into smaller documents.",
   "knowledgeMessages.this_document_was_changed_in_another": "This document was changed in another tab or by someone else. Reload it and make your change again.",
   "knowledgeMessages.this_file_could_not_be_read": "This file could not be read. It may be damaged.",
