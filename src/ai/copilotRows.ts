@@ -293,6 +293,26 @@ async function changeTurn(projectId: string, threadId: string, turnId: string, s
   });
 }
 
+/**
+ * A research turn's `factsFrom`, written once when its run finishes (src/server/research): the datasets of every computed step, so
+ * `shows()` hides the turn from a caller who cannot open one. Only on a turn that carries a research run id; nothing else changes.
+ */
+export async function setResearchFacts(projectId: string, threadId: string, turnId: string, ids: readonly string[]): Promise<boolean> {
+  if (!copilot.isValidId(threadId) || !copilot.isValidId(turnId)) return false;
+  await moveFile(projectId);
+  return tx(true, async (c, org) => {
+    const r = await c.query<TurnRow>(
+      `SELECT u.thread_id::text, u.id::text, u.role, u.text, u.created_at, u.body FROM assistant_turns u
+        WHERE u.org_id = $1 AND u.project_id = $2 AND u.thread_id = $3 AND u.id = $4 FOR UPDATE`, [org, projectId, threadId, turnId]);
+    const turn = r.rows[0] && turnOf(r.rows[0]);
+    if (!turn || turn.role !== 'assistant' || !turn.research) return false;
+    turn.factsFrom = [...new Set(ids.filter(copilot.isValidId))];
+    if (!turn.factsFrom.length) delete turn.factsFrom;
+    await c.query('UPDATE assistant_turns SET body = $5 WHERE org_id = $1 AND project_id = $2 AND thread_id = $3 AND id = $4', [org, projectId, threadId, turnId, bodyOf(turn)]);
+    return true;
+  });
+}
+
 /** ./copilot `setSnapshot`: `snap` undefined removes it. */
 export async function setSnapshot(projectId: string, threadId: string, turnId: string, spec: copilot.TurnAnswer, snap: AnswerSnapshot | undefined): Promise<boolean> {
   return changeTurn(projectId, threadId, turnId, spec, (turn) => {

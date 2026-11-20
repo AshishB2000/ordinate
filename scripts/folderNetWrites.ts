@@ -56,11 +56,13 @@ export const IN_STORES: Readonly<Record<string, string>> = {
   'plan:start': 'the stores each step writes through', 'plan:next': 'the stores each step writes through', 'plan:fix': 'the stores each step writes through',
   'plan:skip': 'the stores each step writes through', 'plan:stop': 'the stores each step writes through', 'plan:undo': 'trash.trashRecord and the stores',
   'captureDataset:draft': 'a draft names no dataset yet: dataset:composeSave lands what it becomes',
+  'research:addToProject': 'visuals.saveVisual (answer:saveVisual\'s and drivers:addTile\'s paths) and stories.saveStory',
 };
 /** E5's (another PR): Publish and the publish channels. analysis.patchStored already holds Edit on analysis:publish. */
 export const OUT_OF_SCOPE: Readonly<Record<string, string>> = { 'analysis:publish': 'E5 (D16)', 'publish:access': 'E5', 'publish:run': 'E5', 'publish:unpublish': 'E5' };
 /** No effective payload here: why. Edit only to remove a line (the net reports one that lands now). */
 const UNEXERCISED: Readonly<Record<string, string>> = {
+  'research:addToProject': 'needs a finished research run with a report (a scripted model provider: test-researchRun); its stores are the gate, as story:create\'s',
   'captureDataset:delete': 'needs a screenshot capture',
   'captureDataset:draft': 'needs a screenshot upload',
   'catalog:dismissSuggestion': "needs a connection's source table suggestion",

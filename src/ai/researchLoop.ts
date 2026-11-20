@@ -54,7 +54,7 @@ export interface LoopDeps {
   save(state: LoopState): Promise<void>;
 }
 
-export async function runLoop(limits: Limits, from: LoopState, deps: LoopDeps): Promise<{ end: End; state: LoopState }> {
+export async function runLoop(limits: Limits, from: LoopState, deps: LoopDeps): Promise<{ end: End; state: LoopState; /** Why a `model` end: the provider failed, or the person's AI budget was used. */ fatal?: 'model' | 'limited' }> {
   const state: LoopState = { steps: [...from.steps], stepsUsed: from.stepsUsed, queriesUsed: from.queriesUsed };
   const gate = async (): Promise<End | null> => {
     if (deps.lost()) return 'lost';
@@ -72,7 +72,7 @@ export async function runLoop(limits: Limits, from: LoopState, deps: LoopDeps): 
     state.stepsUsed += 1;
     const n = state.steps.length + 1;
     if (!d.ok) {
-      if ('fatal' in d) { await deps.save(state); return { end: 'model', state }; }
+      if ('fatal' in d) { await deps.save(state); return { end: 'model', state, fatal: d.fatal }; }
       state.steps.push({ n, kind: 'none', title: '', status: 'refused', reason: d.refused });
       await deps.save(state);
       continue;

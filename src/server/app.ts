@@ -225,6 +225,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     let bus: { stop(): Promise<void> } | null = null;
     let sweep: { stop(): void } | null = null;
     let slackWorker: { stop(): Promise<void> } | null = null;
+    let researchWorker: { stop(): Promise<void> } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -263,6 +264,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useEmbedDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
       // Ordinate in Slack: its rows, and its four keys in the encrypted store (none without a master key: nothing can be saved).
       (require('./slack/db') as typeof import('./slack/db')).useSlackDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, { timeoutMs: cfg.limits.rpcTimeoutMs, perMinute: cfg.limits.rpcUserPerMinute });
+      // Deep research: its runs are rows (0043), the worker below claims them; a job per org sweeps the runs of people who left and old unadded ones.
+      (require('./research/db') as typeof import('./research/db')).useResearchDb(pool);
+      (require('./research/sweep') as typeof import('./research/sweep')).wireResearchSweep();
       // The org's settings document is a row every pod reads, not a file on this pod's disk (0014).
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
@@ -287,13 +291,16 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
       slackWorker = (require('./slack/worker') as typeof import('./slack/worker')).startSlackWorker(app.log);
+      researchWorker = (require('./research/worker') as typeof import('./research/worker')).startResearchWorker(app.log);
       const slack = slackWorker;
-      bg = { runner: { stop: async () => { await jobs?.stop(); await slack?.stop(); } }, bus, sweep }; // the shutdown stops the Slack worker with the runner
+      const research = researchWorker;
+      bg = { runner: { stop: async () => { await research?.stop(); await jobs?.stop(); await slack?.stop(); } }, bus, sweep }; // the shutdown stops the Slack and research workers with the runner
     });
     // An app closed on its own (the tests) stops its runner and bus here. A
     // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
       if (isDraining()) return;
+      await researchWorker?.stop();
       await slackWorker?.stop();
       await jobs?.stop();
       await bus?.stop();
@@ -315,6 +322,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useSecretStore(null);
       useEmbedDb(null, null);
       (require('./slack/db') as typeof import('./slack/db')).useSlackDb(null, null);
+      (require('./research/db') as typeof import('./research/db')).useResearchDb(null);
       useAiKeys(null, null);
       (require('./subscriptions/job') as typeof import('./subscriptions/job')).unwireSubscriptions();
       orgConfig.useOrgConfig(null);
@@ -700,4 +708,6 @@ export function registerHandlers(): void {
   (require('./requests/rpc') as typeof import('./requests/rpc')).register();
   // Ordinate in Slack (docs/slack): the admin's setup, each member's own link, an agent's channels.
   (require('./slack/rpc') as typeof import('./slack/rpc')).register();
+  // Deep research (docs/deep-research): start, watch, stop, resume and add a run to the project; the org's limits.
+  (require('./research/rpc') as typeof import('./research/rpc')).register();
 }

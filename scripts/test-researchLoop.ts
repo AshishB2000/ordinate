@@ -94,6 +94,11 @@ const lim = (o: Partial<import('../src/ai/researchLoop').Limits> = {}) => ({ ...
   r = await L.runLoop(lim(), empty, deps);
   ok('model error: ends the loop with "model", the steps so far kept', r.end === 'model' && r.state.steps.length === 1);
 
+  ({ w, deps } = world(['act']));
+  deps.decide = async () => ({ ok: false, fatal: 'limited' });
+  r = await L.runLoop(lim(), empty, deps);
+  ok('budget: an exhausted AI budget ends with "model" and says it was the budget', r.end === 'model' && r.fatal === 'limited');
+
   // Resume: continues from the stored steps; none is run again; the counts stay.
   ({ w, deps } = world(['act', 'done']));
   const stored = { steps: [{ n: 1, kind: 'answer' as const, title: 'T', status: 'done' as const, spec: { a: 1 } }, { n: 2, kind: 'answer' as const, title: 'T', status: 'failed' as const, reason: 'x' }], stepsUsed: 2, queriesUsed: 2 };

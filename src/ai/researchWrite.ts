@@ -89,7 +89,8 @@ export function chartsOnly(steps: readonly StepRec[], title: string, writtenAt: 
 /** What a browser may read of a step: never its facts or its ledger. */
 export function publicStep(s: StepRec): Omit<StepRec, 'facts' | 'ledger' | 'datasetIds'> {
   const { facts: _f, ledger: _l, datasetIds: _d, ...rest } = s;
-  return rest;
+  // An SQL step's statement stays here (the page draws its table from the step's number): a browser gets its title only.
+  return rest.kind === 'sql' && rest.spec ? { ...rest, spec: { title: rest.spec.title } } : rest;
 }
 
 // ── "Add to project": the question-5 rule ───────────────────────────────────────────────────────────────────────────

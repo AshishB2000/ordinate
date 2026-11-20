@@ -38,6 +38,7 @@ ok('parse: a fenced JSON reply is read', W.parseWriteReply('```json\n{"title":"a
 
 const co = W.chartsOnly(steps, 'My question', 'now');
 ok('failed write: a charts-only report of the done steps, with none of the model\'s words', co.chartsOnly === true && co.sections.length === 2 && co.sections.every((s) => s.text === '') && co.summary === '' && co.conclusion === '');
+ok('public step: an SQL step keeps its title only, never its statement', JSON.stringify(W.publicStep({ n: 1, kind: 'sql', title: 'T', status: 'done', spec: { sql: 'SELECT secret FROM x', datasetIds: ['d'], title: 'T' } })) === '{"n":1,"kind":"sql","title":"T","status":"done","spec":{"title":"T"}}');
 ok('public step: never its facts, ledger or dataset ids', !/"facts"|"ledger"|datasetIds/.test(JSON.stringify(W.publicStep({ ...steps[0], datasetIds: ['d'] }))));
 
 // The question-5 rule.

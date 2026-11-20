@@ -446,7 +446,7 @@ export async function runDrivers(projectId: string, spec: DriversSpec, rawParams
 }
 
 /** A request from the renderer → a sanitized spec (filters with params resolved). */
-function specFrom(raw: any): { spec: DriversSpec; params: unknown } | null {
+export function specFrom(raw: any): { spec: DriversSpec; params: unknown } | null {
   if (!raw || typeof raw !== 'object') return null;
   const params = paramValues(raw.params);
   const filters = resolveFilterParams(sanitizeDashboardFilters(raw.filters), params).steps;
@@ -513,7 +513,7 @@ export async function driversVizData(
   return { ok: true, data: { labels, series: [{ name: r.metric.name, values }], labelColumn: r.selected.column }, recommendedShape: 'categorical', warnings: [] };
 }
 
-async function addTile(projectId: string, spec: DriversSpec, name: string): Promise<{ ok: true; visual: any } | { ok: false; error: string }> {
+export async function addTile(projectId: string, spec: DriversSpec, name: string): Promise<{ ok: true; visual: any } | { ok: false; error: string }> {
   if (!spec.dimension) return { ok: false, error: 'Pick a dimension first.' };
   const m = spec.metric;
   const measure: Record<string, unknown> = { column: m.column || '', aggregation: m.aggregation || 'sum' };
