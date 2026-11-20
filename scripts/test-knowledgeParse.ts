@@ -113,6 +113,8 @@ async function main(): Promise<void> {
   // § 3 PDF, through the worker thread
   const hello = await readDocument(fx('hello.pdf'), 'hello.pdf');
   ok('pdf: text read through the worker', hello.source === 'pdf' && hello.text === 'Refunds are deducted from net revenue.\nThe fiscal year starts on 1 February.', JSON.stringify(hello));
+  ok('pdf: a CJK PDF that only NAMES its predefined CMap reads (pdf.js\'s own cmaps, from disk)', (await readDocument(fx('cjk.pdf'), 'cjk.pdf')).text === 'あい');
+  ok('pdf.js reads its cmaps and fonts from paths in its own package, never a URL', !/^https?:/.test(PDF_OPTIONS.cMapUrl) && PDF_OPTIONS.cMapPacked === true && fs.existsSync(PDF_OPTIONS.cMapUrl) && fs.existsSync(PDF_OPTIONS.standardFontDataUrl));
   const locked = await codeOf(readDocument(fx('locked.pdf'), 'locked.pdf'));
   ok('pdf: encrypted is refused, with its own sentence', locked === 'encrypted');
   const scan = await codeOf(readDocument(fx('scan.pdf'), 'scan.pdf'));
@@ -152,6 +154,7 @@ async function main(): Promise<void> {
   let fetches = 0;
   globalThis.fetch = ((...a: unknown[]) => { fetches++; return (realFetch as any)(...a); }) as typeof fetch;
   await parseBytes(fx('hello.pdf'), 'hello.pdf');
+  await parseBytes(fx('cjk.pdf'), 'cjk.pdf');
   await parseBytes(await docx(para('x')), 'a.docx');
   ok('nothing in the parse opens a socket or fetches', sockets === 0 && fetches === 0, `${sockets} ${fetches}`);
   const s = net.connect(1, '127.0.0.1');

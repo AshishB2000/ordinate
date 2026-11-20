@@ -465,6 +465,7 @@
   "knowledgeMessages.this_pdf_is_password_protected_remove": null,
   "knowledgeMessages.this_text_file_is_not_utf": null,
   "knowledgeMessages.this_word_file_expands_to_more": null,
+  "knowledgeMessages.untitled_document": null,
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate を再起動しています。1 分後にもう一度お試しください。",
   "lifecycleMessages.ordinate_restarted_while_this_was": "実行中に Ordinate が再起動しました。もう一度実行してください。",
   "liveMessages.a_copy_can_t_be_made": "コピーを作成できません。ソースの行数がコピーで読み込める上限の {count} 行を超えており、このデータセットの常時適用フィルターでは、回答の対象となる行の一部しか残らなくなります。コピーするには、ソース側で行を絞り込むクエリをインポートしてください。",

@@ -66,7 +66,8 @@ if (!dbUrl) {
     await page.goto(`/model/${pid}?tab=assistant`);
     const docs = page.getByRole('region', { name: 'Documents' });
     await docs.getByText('No documents yet').waitFor();
-    assert.match((await docs.textContent()) ?? '', /belong in Instructions instead/);
+    assert.match((await docs.textContent()) ?? '', /Short rules, one line each, belong in Instructions\./);
+    await docs.getByRole('button', { name: 'Instructions' }).click(); // a link to the Instructions section above
     await settled(page);
     await docs.scrollIntoViewIfNeeded();
     await screensInPlace(page, 'knowledge-empty');

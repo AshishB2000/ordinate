@@ -72,10 +72,22 @@ describe('Documents on the Assistant tab', () => {
     const s = await section();
     expect(await within(s).findByText('No documents yet')).toBeTruthy();
     expect(s.textContent).toContain('how you count revenue');
-    expect(s.textContent).toContain('belong in Instructions instead');
+    expect(s.textContent).toContain('Short rules, one line each, belong in Instructions.');
     expect(within(s).getAllByRole('button', { name: 'Add document' }).length).toBeGreaterThan(0);
     expect(within(s).getAllByRole('button', { name: 'Upload PDF or Word' }).length).toBeGreaterThan(0);
   });
+
+  it('"Instructions" in the section is a link that scrolls to the Instructions section, in the list state too', async () => {
+    serve('editor');
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    renderApp(`/model/${P}?tab=assistant`);
+    const s = await section();
+    await within(s).findAllByTestId('document-row');
+    fireEvent.click(within(s).getByRole('button', { name: 'Instructions' }));
+    expect(scrolled).toHaveBeenCalledTimes(1);
+    expect((scrolled.mock.instances[0] as HTMLElement).id).toBe('instructions-h');
+  }, 30_000);
 
   it('a viewer reads the list and a document read-only, with no way to add, upload or remove', async () => {
     serve('viewer', { 'knowledge:get': { body: { ok: true, doc: full(TWO[0], '# Revenue\n\nNet of refunds.') } } });

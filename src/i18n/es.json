@@ -465,6 +465,7 @@
   "knowledgeMessages.this_pdf_is_password_protected_remove": null,
   "knowledgeMessages.this_text_file_is_not_utf": null,
   "knowledgeMessages.this_word_file_expands_to_more": null,
+  "knowledgeMessages.untitled_document": null,
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate se está reiniciando. Vuelve a intentarlo en un minuto.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate se reinició mientras esto se ejecutaba. Vuelve a ejecutarlo.",
   "liveMessages.a_copy_can_t_be_made": "No se puede hacer una copia: la fuente tiene más de {count} filas, el máximo que lee una copia, y los filtros siempre aplicados de este conjunto de datos conservarían entonces solo una parte de las filas sobre las que responde. Para copiarlo, importe una consulta que filtre las filas en la fuente.",

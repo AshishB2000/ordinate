@@ -465,6 +465,7 @@
   "knowledgeMessages.this_pdf_is_password_protected_remove": null,
   "knowledgeMessages.this_text_file_is_not_utf": null,
   "knowledgeMessages.this_word_file_expands_to_more": null,
+  "knowledgeMessages.untitled_document": null,
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate wird neu gestartet. Versuche es in einer Minute erneut.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate wurde neu gestartet, während dies lief. Führe es erneut aus.",
   "liveMessages.a_copy_can_t_be_made": "Es kann keine Kopie erstellt werden: Die Quelle hat mehr als {count} Zeilen, das Maximum, das eine Kopie liest, und die immer angewendeten Filter dieses Datensatzes würden dann nur einen Teil der Zeilen behalten, über die er antwortet. Um ihn zu kopieren, importieren Sie eine Abfrage, die die Zeilen schon an der Quelle filtert.",

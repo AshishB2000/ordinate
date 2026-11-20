@@ -113,4 +113,45 @@ withServer('knowledge-rank', {}, async (b) => {
   const everything = await b.run(BOSS, () => store.allPassages(P, agent));
   const crippled = everything.filter((p) => !(p.heading.endsWith('How a refund is counted') && p.own));
   ok('NEGATIVE CONTROL: a narrowing that lost a scoring passage is caught by the comparison', !same(R.rankPassages('How do we count refunds?', crippled), R.rankPassages('How do we count refunds?', everything)));
+
+  // A question of more than 64 words: both sides use the same first 64 (a long question never loses its passages).
+  const filler = Array.from({ length: 80 }, (_, i) => `filler${i}x`).join(' ');
+  const longQ = `${filler} refunds`; // the telling word is the 81st
+  ok('(setup) the helper cuts at 64 words and "refund" is past them', R.questionWords(longQ).length === 64 && !R.questionWords(longQ).includes('refund'));
+  const earlyQ = `refunds ${filler}`; // the telling word is first, so it stays in the 64
+  const viaPgLong = R.rankPassages(earlyQ, await b.run(BOSS, () => store.candidates(P, agent, earlyQ)));
+  const pureLong = R.rankPassages(earlyQ, await b.run(BOSS, () => store.allPassages(P, agent)));
+  ok('a >64-word question: Postgres-narrowed = pure, and the early telling word still finds its passages', same(viaPgLong, pureLong) && viaPgLong.length > 0, JSON.stringify(viaPgLong.map((r) => r.heading)));
+  const lateSql = await b.run(BOSS, () => store.candidates(P, agent, longQ));
+  ok('a >64-word question whose telling word is past 64: neither side scores it (no passage is lost to a mismatch)', same(R.rankPassages(longQ, lateSql), R.rankPassages(longQ, await b.run(BOSS, () => store.allPassages(P, agent)))));
+
+  // More candidates than the old 5,000-row limit: the best passage is in the document with the LAST doc id.
+  const P5: string = await b.run(BOSS, async () => (await projects.createProject('Many')).id);
+  await b.pool.query(`INSERT INTO knowledge_docs (org_id, project_id, id, title, source, chars, text, text_hash, created_by, updated_by)
+    SELECT 'acme', $1, ('00000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'Plain ' || g, 'typed', 1, 'x', 'h', 'u', 'u' FROM generate_series(1, 55) g`, [P5]);
+  await b.pool.query(`INSERT INTO knowledge_passages (org_id, project_id, doc_id, ord, title_words, heading_words, text_words, heading, text, words)
+    SELECT 'acme', $1, ('00000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, o, '{plain}', '{}', '{zebra}', '', 'zebra stripes', '{plain,zebra}' FROM generate_series(1, 55) g, generate_series(0, 99) o`, [P5]);
+  await b.pool.query(`UPDATE knowledge_passages SET heading_words = '{zebra}', text_words = '{zebra,stripe}', heading = 'Zebra', text = 'the best passage', words = '{plain,zebra,stripe}' WHERE project_id = $1 AND doc_id = '00000000-0000-4000-8000-000000000055' AND ord = 99`, [P5]);
+  const many = await b.run(BOSS, () => store.allPassages(P5, null));
+  ok('(setup) 5,500 candidate passages, more than the old 5,000 limit', many.length === 5500);
+  const manyPg = R.rankPassages('zebra stripes', await b.run(BOSS, () => store.candidates(P5, null, 'zebra stripes')));
+  ok('the best passage is found though it sits past the old limit; Postgres = pure', manyPg[0]?.docId.endsWith('000000000055') === true && manyPg[0].ord === 99 && same(manyPg, R.rankPassages('zebra stripes', many)), JSON.stringify(manyPg.map((r) => [r.docId.slice(-2), r.ord, r.score])));
+  const t0 = Date.now();
+  await b.run(BOSS, () => store.candidates(P5, null, 'zebra stripes'));
+  console.log(`candidates over 5,500 passages: ${Date.now() - t0} ms`);
+
+  // Ties that exercise every tie key: own agent, newer document, doc id (by code unit), ord.
+  const P6: string = await b.run(BOSS, async () => (await projects.createProject('Ties')).id);
+  const ag = randomUUID();
+  const ids = ['b0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000009', 'c0000000-0000-4000-8000-00000000000a'];
+  for (const [i, id] of ids.entries()) {
+    await b.pool.query(`INSERT INTO knowledge_docs (org_id, project_id, id, agent_id, title, source, chars, text, text_hash, created_by, updated_by, updated_at)
+      VALUES ('acme', $1, $2, $3, 'Tie', 'typed', 1, 'x', 'h', 'u', 'u', $4::timestamptz)`, [P6, id, i === 3 ? ag : null, i < 2 ? '2026-01-01T00:00:00.000001Z' : i === 4 ? '2026-01-01T00:00:00.000002Z' : '2026-01-01T00:00:00Z']);
+    for (const ord of [1, 0]) await b.pool.query(`INSERT INTO knowledge_passages (org_id, project_id, doc_id, agent_id, ord, title_words, heading_words, text_words, heading, text, words)
+      VALUES ('acme', $1, $2, $3, $4, '{tie}', '{}', '{shared}', '', 'shared text', '{tie,shared}')`, [P6, id, i === 3 ? ag : null, ord]);
+  }
+  const tiesPg = R.rankPassages('shared', await b.run(BOSS, () => store.candidates(P6, ag, 'shared')));
+  const tiesPure = R.rankPassages('shared', await b.run(BOSS, () => store.allPassages(P6, ag)));
+  ok('ties on own agent, microsecond updated_at, uuid and ord: Postgres order = pure order', same(tiesPg, tiesPure) && tiesPg.length === 6, tiesPg.map((r) => `${r.docId.slice(0, 2)}${r.ord}${r.own ? '*' : ''}`).join());
+  ok('…the agent\'s document first, then the later timestamps, then by code unit', tiesPg.map((r) => `${r.docId[0]}${r.ord}`).join() === 'f0,f1,c0,c1,a0,a1', tiesPg.map((r) => `${r.docId[0]}${r.ord}`).join());
 }).catch((err) => { console.error(err); process.exitCode = 1; }).finally(finish);

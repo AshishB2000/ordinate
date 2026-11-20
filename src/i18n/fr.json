@@ -465,6 +465,7 @@
   "knowledgeMessages.this_pdf_is_password_protected_remove": null,
   "knowledgeMessages.this_text_file_is_not_utf": null,
   "knowledgeMessages.this_word_file_expands_to_more": null,
+  "knowledgeMessages.untitled_document": null,
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate redémarre. Réessayez dans une minute.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate a redémarré pendant l’exécution. Relancez-le.",
   "liveMessages.a_copy_can_t_be_made": "Impossible de faire une copie : la source a plus de {count} lignes, le maximum qu’une copie lit, et les filtres toujours appliqués de ce jeu de données ne garderaient alors qu’une partie des lignes sur lesquelles il répond. Pour le copier, importez une requête qui filtre les lignes à la source.",

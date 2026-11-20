@@ -142,6 +142,23 @@ withServer('knowledge-access', {}, async (b) => {
   const farAgent = await must('ed', 'knowledge:upload', { projectId: P, agentId: '00000000-0000-4000-8000-000000000999', fileToken: farTok });
   ok('an upload for an agent that is not there is refused BEFORE the token is spent', farAgent.ok === false && (await must('ed', 'knowledge:upload', { projectId: P, fileToken: farTok })).ok === true);
 
+  // a long emoji file name is never refused for a title the user did not type (one unit, code points, both ways)
+  const emoji = await must('ed', 'knowledge:upload', { projectId: P, fileToken: await upload('ed', `${'😀'.repeat(130)}.md`, Buffer.from('# e\n\ntext')) });
+  ok('a file named with 130 emoji is stored, never refused for its title (the server may shorten the name; the title is at most 120 code points)', emoji.ok === true && Array.from(emoji.doc.title).length > 0 && Array.from(emoji.doc.title).length <= 120 && emoji.doc.title.startsWith('😀'), `${Array.from(emoji.doc?.title ?? '').length}`);
+  const emojiSave = await must('ed', 'knowledge:save', { projectId: P, title: '😀'.repeat(120), text: 'x' });
+  const emojiOver = await must('ed', 'knowledge:save', { projectId: P, title: '😀'.repeat(121), text: 'x' });
+  ok('NEGATIVE CONTROL: 120 emoji typed is a fine title, 121 is refused', emojiSave.ok === true && emojiOver.ok === false);
+  const noName = await must('ed', 'knowledge:upload', { projectId: P, fileToken: await upload('ed', '.md', Buffer.from('# n\n\ntext')) });
+  ok('a file with no name to title it is "Untitled document"', noName.ok === true && noName.doc.title.length > 0, show(noName).slice(0, 200));
+
+  // a throw while checking the agent is the usual refusal sentence, not a 500
+  const access: any = require('../src/ai/agentAccess'); // any: swapping the check for one that throws
+  const realCheck = access.agentForAsk;
+  access.agentForAsk = async () => { throw new Error('boom'); };
+  const thrown = await call('ed', 'knowledge:upload', { projectId: P, agentId: A, fileToken: await upload('ed', 'x.md', Buffer.from('# x')) });
+  access.agentForAsk = realCheck;
+  ok('upload: a throw in the agent check is { ok:false } with a sentence (HTTP 200), not a 500', thrown.status === 200 && thrown.body.ok === false && typeof thrown.body.error === 'string', show(thrown));
+
   // (f) no database
   inOrgMod.useOrgDb(null);
   const none = await Promise.all([must('ed', 'knowledge:list', { projectId: P }), must('ed', 'knowledge:save', { projectId: P, title: 'x', text: 'y' }), must('ed', 'knowledge:get', { projectId: P, id: D })]);

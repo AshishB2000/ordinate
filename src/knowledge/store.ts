@@ -7,9 +7,8 @@
 import { createHash } from 'crypto';
 import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from '../server/db/inOrg';
-import { searchWords } from '../ai/modelWords';
-import { MAX_DOCS_PER_PROJECT, MAX_TEXT_CHARS, MAX_TITLE } from './limits';
-import { passageWords, type RankPassage } from './rank';
+import { MAX_ASK_PASSAGES, MAX_DOCS_PER_PROJECT, MAX_TEXT_CHARS, MAX_TITLE } from './limits';
+import { passageWords, questionWords, type RankPassage } from './rank';
 import { splitText } from './split';
 import type { DocSource } from './parseTypes';
 import * as msg from './knowledgeMessages';
@@ -47,15 +46,18 @@ export class KnowledgeRefusal extends Error {
 const COLS = `id::text, project_id::text AS "projectId", agent_id::text AS "agentId", title, source, file_name AS "fileName", chars,
   created_by AS "createdBy", to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAt", updated_by AS "updatedBy", to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"`;
 
+/** A document's last edit as the fixed-width UTC string the pure ranking compares (./rank.ts). */
+const UPDATED = `to_char(d.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 const hashOf = (text: string): string => createHash('sha256').update(text).digest('hex');
 /** The edit tag: the stored document's identity at its last edit. Computed, never stored. */
 const tagOf = (updatedAt: string, textHash: string, title: string): string => createHash('sha256').update(`${updatedAt}\n${textHash}\n${title}`).digest('base64url');
 
-/** A title as stored: one line, at most MAX_TITLE; THROWS the refusal. */
+/** A title as stored: one line, at most MAX_TITLE code points; THROWS the refusal. */
 export function cleanTitle(raw: string): string {
   const title = raw.replace(/\s+/g, ' ').trim();
   if (!title) throw new KnowledgeRefusal('title', msg.titleMissing());
-  if (title.length > MAX_TITLE) throw new KnowledgeRefusal('title', msg.titleTooLong(MAX_TITLE));
+  // Code points, the unit the upload's default title is cut in (src/ipc/knowledge.ts), so a long emoji file name is never refused.
+  if (Array.from(title).length > MAX_TITLE) throw new KnowledgeRefusal('title', msg.titleTooLong(MAX_TITLE));
   return title;
 }
 /** A text as stored: LF newlines, no NUL; THROWS the refusal (empty, or past the cap: never cut silently). */
@@ -89,6 +91,12 @@ async function lockProject(c: PoolClient, org: string, projectId: string): Promi
 export async function listDocs(projectId: string, agentId: string | null): Promise<DocMeta[]> {
   return inOrg(async (c, org) => (await c.query<DocMeta>(
     `SELECT ${COLS} FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 AND agent_id IS NOT DISTINCT FROM $3::uuid ORDER BY updated_at DESC, id`, [org, projectId, agentId])).rows);
+}
+
+/** Every document of the project, its agents' too, with its text (the project export: ./bundle.ts). */
+export async function allDocs(projectId: string): Promise<Array<DocMeta & { text: string }>> {
+  return inOrg(async (c, org) => (await c.query<DocMeta & { text: string }>(
+    `SELECT ${COLS}, text FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 ORDER BY created_at, id`, [org, projectId])).rows);
 }
 
 /** How many documents the project holds, its agents' too (a trashed agent's included: they come back with it). */
@@ -155,38 +163,41 @@ export async function deleteDoc(projectId: string, id: string): Promise<boolean>
   return inOrg(async (c, org) => !!(await c.query('DELETE FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 AND id = $3', [org, projectId, id])).rowCount);
 }
 
-/** The titles of documents by id (a document gone is absent), for the answer's "How this was answered". */
-export async function titlesOf(projectId: string, ids: readonly string[]): Promise<Map<string, string>> {
+/** Titles of documents by id (a document gone is absent), with the agent each belongs to: the caller checks it may use that agent. */
+export async function titlesOf(projectId: string, ids: readonly string[]): Promise<Map<string, { title: string; agentId: string | null }>> {
   if (!ids.length || !knowledgeOn()) return new Map();
-  return inOrg(async (c, org) => new Map((await c.query<{ id: string; title: string }>(
-    'SELECT id::text, title FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 AND id = ANY($3::uuid[])', [org, projectId, ids])).rows.map((r) => [r.id, r.title])));
+  return inOrg(async (c, org) => new Map((await c.query<{ id: string; title: string; agentId: string | null }>(
+    'SELECT id::text, title, agent_id::text AS "agentId" FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 AND id = ANY($3::uuid[])', [org, projectId, ids])).rows.map((r) => [r.id, { title: r.title, agentId: r.agentId }])));
 }
 
-/** Passages ranked and read at most this many: a common word must not read a whole project's passages on every ask. */
-const NARROW_LIMIT = 5000;
-
 /**
- * The stored passages that share a word with `question`, for the project's documents and the answering agent's: the
- * candidates the pure ranking (./rank.ts) orders. `words && $1` is only a narrowing: a passage with no word in common
- * scores 0 there, so ranking these equals ranking every passage (scripts/test-knowledgeRank.ts holds the two equal).
- * shortcut: capped at NARROW_LIMIT rows (by doc id, ord); past it a very common word could hide a better passage. Lift
- * it with a SQL pre-score if a project ever holds that many matching passages.
+ * The best passages for `question` from the project's documents and the answering agent's, ranked IN POSTGRES: the score
+ * is the pure ranking's (./rank.ts: 2 per question word in the title, 2 in the heading path, 1 in the text), from the
+ * cardinalities of the three word lists against the question's words, and the order is its tie order, every string by
+ * code unit ("C" collation; the timestamp as the same fixed-width UTC string). `words && $4` only keeps the scan on the
+ * GIN index. LIMIT 6 is exact because the 6 / 4,000 budget breaks in rank order; the caller applies the cut-off and the
+ * budget to these rows (./retrieve.ts). Nothing is read past 6 rows, so a very common word costs one index scan, and
+ * the event loop is never given thousands of passages to score.
  */
 export async function candidates(projectId: string, agentId: string | null, question: string): Promise<RankPassage[]> {
-  const words = searchWords(question).slice(0, 64);
+  const words = questionWords(question);
   if (!words.length) return [];
   return inOrg(async (c, org) => (await c.query<RankPassage & { own: boolean }>(
-    `SELECT p.doc_id::text AS "docId", p.ord, (p.agent_id IS NOT NULL) AS own, to_char(d.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt", d.title, p.heading, p.text,
+    `SELECT p.doc_id::text AS "docId", p.ord, (p.agent_id IS NOT NULL) AS own, ${UPDATED} AS "updatedAt", d.title, p.heading, p.text,
        p.title_words AS "titleWords", p.heading_words AS "headingWords", p.text_words AS "textWords"
      FROM knowledge_passages p JOIN knowledge_docs d ON d.org_id = p.org_id AND d.id = p.doc_id
      WHERE p.org_id = $1 AND p.project_id = $2 AND (p.agent_id IS NULL OR p.agent_id = $3::uuid) AND p.words && $4::text[]
-     ORDER BY p.doc_id, p.ord LIMIT ${NARROW_LIMIT}`, [org, projectId, agentId, words])).rows);
+     ORDER BY 2 * cardinality(ARRAY(SELECT w FROM unnest(p.title_words) w WHERE w = ANY ($4::text[])))
+            + 2 * cardinality(ARRAY(SELECT w FROM unnest(p.heading_words) w WHERE w = ANY ($4::text[])))
+            + cardinality(ARRAY(SELECT w FROM unnest(p.text_words) w WHERE w = ANY ($4::text[]))) DESC,
+       (p.agent_id IS NOT NULL) DESC, d.updated_at DESC, p.doc_id::text COLLATE "C", p.ord
+     LIMIT ${MAX_ASK_PASSAGES}`, [org, projectId, agentId, words])).rows);
 }
 
 /** Every passage of the project's documents and the agent's (the reference the narrowed ranking is held equal to). */
 export async function allPassages(projectId: string, agentId: string | null): Promise<RankPassage[]> {
   return inOrg(async (c, org) => (await c.query<RankPassage>(
-    `SELECT p.doc_id::text AS "docId", p.ord, (p.agent_id IS NOT NULL) AS own, to_char(d.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt", d.title, p.heading, p.text,
+    `SELECT p.doc_id::text AS "docId", p.ord, (p.agent_id IS NOT NULL) AS own, ${UPDATED} AS "updatedAt", d.title, p.heading, p.text,
        p.title_words AS "titleWords", p.heading_words AS "headingWords", p.text_words AS "textWords"
      FROM knowledge_passages p JOIN knowledge_docs d ON d.org_id = p.org_id AND d.id = p.doc_id
      WHERE p.org_id = $1 AND p.project_id = $2 AND (p.agent_id IS NULL OR p.agent_id = $3::uuid) ORDER BY p.doc_id, p.ord`, [org, projectId, agentId])).rows);

@@ -323,7 +323,7 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
         <p className={g.help}>Create the agent first, then write its own instructions here.</p>
       )}
 
-      {row && <KnowledgeSection projectId={projectId} agentId={row.id} canEdit={canInstruct} />}
+      {row && <KnowledgeSection projectId={projectId} agentId={row.id} canEdit={canInstruct} instructionsId="agent-instructions-h" />}
 
       {asking && row && (
         <ConfirmDelete

@@ -85,3 +85,7 @@ export function uploadExpired(): string {
 export function tooComplex(): string {
   return t('knowledgeMessages.this_file_is_too_large_or');
 }
+
+export function untitledDocument(): string {
+  return t('knowledgeMessages.untitled_document');
+}

@@ -19,6 +19,23 @@ import k from './Knowledge.module.css';
 
 const ACCEPT = '.pdf,.docx,.md,.markdown,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain';
 const ICON = { typed: 'pencil', markdown: 'file-text', text: 'file-text', pdf: 'file-text', docx: 'file-text' } as const;
+/** "Instructions" as a link: scrolls to that section of this page and moves focus there. */
+function InstructionsLink({ id }: { id: string }) {
+  return (
+    <button
+      type="button"
+      className={k.link}
+      onClick={() => {
+        const h = document.getElementById(id);
+        h?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        h?.setAttribute('tabindex', '-1');
+        h?.focus({ preventScroll: true });
+      }}
+    >
+      Instructions
+    </button>
+  );
+}
 const chars = (n: number) => `${n.toLocaleString('en-US')} characters`;
 
 function Row({ doc, canEdit, onOpen, onRemove }: { doc: DocRow; canEdit: boolean; onOpen: () => void; onRemove: () => void }) {
@@ -47,7 +64,7 @@ function Row({ doc, canEdit, onOpen, onRemove }: { doc: DocRow; canEdit: boolean
 }
 
 /** `agentId`: the agent whose own documents these are; none for the project's. `canEdit`: may change them (an editor). */
-export function KnowledgeSection({ projectId, agentId, canEdit }: { projectId: string; agentId?: string; canEdit: boolean }) {
+export function KnowledgeSection({ projectId, agentId, canEdit, instructionsId = 'instructions-h' }: { projectId: string; agentId?: string; canEdit: boolean; instructionsId?: string }) {
   const q = useDocs(projectId, agentId);
   const upload = useUploadDoc(projectId, agentId);
   const del = useDeleteDoc(projectId);
@@ -118,7 +135,7 @@ export function KnowledgeSection({ projectId, agentId, canEdit }: { projectId: s
         )}
       >
         {editable
-          ? 'Attach what explains your business: how you count revenue, the fiscal calendar, what an active customer is. The Assistant reads the parts that match a question. Short rules, one line each, belong in Instructions instead.'
+          ? 'Attach what explains your business: how you count revenue, the fiscal calendar, what an active customer is. The Assistant reads the parts that match a question. Short rules, one line each, belong in the instructions instead.'
           : 'Documents that explain the business, like how revenue is counted, go here. An editor of this project can add them.'}
       </EmptyState>
     );
@@ -175,7 +192,7 @@ export function KnowledgeSection({ projectId, agentId, canEdit }: { projectId: s
         <p className={k.foot}>
           <Icon name="info" size={12} />
           <span>
-            Anyone who can ask this assistant can see what these documents say, including in Slack channels connected to it.
+            Short rules, one line each, belong in <InstructionsLink id={instructionsId} />. Anyone who can ask this assistant can see what these documents say, including in Slack channels connected to it.
             {agentId && q.data?.projectDocs ? ` The project’s ${q.data.projectDocs} document${q.data.projectDocs === 1 ? '' : 's'} apply to this assistant too.` : ''}
             {full ? ` A project can hold ${q.data?.max} documents, and this one is full.` : ''}
           </span>

@@ -34,6 +34,9 @@ CREATE TABLE knowledge_docs (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_by text        NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now(),
+  -- The sweep (src/knowledge/lifecycle.ts): since when the project or agent this belongs to was DEFINITELY not found; null
+  -- while it is found or unknown (a read that failed). A document is deleted only a day after that, any pod's sweep.
+  missing_since timestamptz,
   PRIMARY KEY (org_id, id)
 );
 CREATE INDEX knowledge_docs_project ON knowledge_docs (org_id, project_id, agent_id);

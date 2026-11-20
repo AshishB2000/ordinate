@@ -9,8 +9,9 @@
 //   (d) row-level security FORCED, as an ORDINARY role: no setting, no row; another org's rows are never seen; a write
 //       for another org is refused; the store works through that role
 //   (e) lifecycle: an agent purged for good takes its documents, a trashed one keeps them (and they still count); a deleted
-//       project takes all of its; the sweep removes a gone project's or agent's documents after TWO passes — NEGATIVE
-//       CONTROL: a live project's and a trashed agent's survive both
+//       project takes all of its; the sweep (a `missing_since` column, a day's grace, an injected clock) removes a gone
+//       project's or agent's documents only when DEFINITELY missing: a corrupt record or a failed lookup deletes nothing,
+//       found-again clears the stamp — NEGATIVE CONTROL: a live project's and a trashed agent's survive
 //   (f) the migration: 0042 applied on a database that never had 0041
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-knowledgeStore.js
@@ -138,19 +139,56 @@ withServer('knowledge-store', {}, async (b) => {
   await run(() => projects.deleteProject(P4));
   ok('a deleted project takes its documents with it', (await count('knowledge_docs', `project_id = '${P4}'`)) === 0 && (await count('knowledge_passages', `project_id = '${P4}'`)) === 0);
 
-  // the sweep
+  // the sweep: a column (`missing_since`), a day's grace, an injected clock; a read that failed or a corrupt record is "unknown"
+  const H = 3_600_000;
+  const T0 = Date.UTC(2026, 10, 20, 12, 0, 0);
   const GONE = randomUUID();
   await mk('Orphan of a gone project', 'x', null, GONE);
   const live = await mk('Live project doc', 'x', null, P);
   const trashedAgent = await run(async () => (await (require('../src/ai/agents') as typeof import('../src/ai/agents')).saveAgent(P, { name: 'Trashed', topicId: null, model: null, build: false, teamIds: [] }))!);
   const keep = await mk('Trashed agent doc', 'x', trashedAgent.id, P);
   await run(() => trash.trashRecord(P, 'agent', trashedAgent.id));
-  const ghost = await mk('Ghost agent doc', 'x', randomUUID(), P);
-  const first = await run(() => lifecycle.sweep(lifecycle.realExists(), ORG));
-  ok('sweep, first pass: nothing is deleted on one look', first === 0 && (await count('knowledge_docs', `project_id = '${GONE}'`)) === 1);
-  const second = await run(() => lifecycle.sweep(lifecycle.realExists(), ORG));
-  ok('sweep, second pass: the gone project\'s and every ghost agent\'s documents (and passages) go (the cap project\'s two of agent A too)', second === 4 && (await count('knowledge_docs', `agent_id = '${A}'`)) === 0 && (await count('knowledge_docs', `project_id = '${GONE}'`)) === 0 && (await count('knowledge_docs', `id = '${ghost.id}'`)) === 0 && (await count('knowledge_passages', `doc_id = '${ghost.id}'`)) === 0, String(second));
-  ok('NEGATIVE CONTROL: a live project\'s document and a trashed agent\'s survive both passes', (await count('knowledge_docs', `id = '${live.id}'`)) === 1 && (await count('knowledge_docs', `id = '${keep.id}'`)) === 1);
+  const ghostAgent = randomUUID();
+  const ghost = await mk('Ghost agent doc', 'x', ghostAgent, P);
+  const stamp = async (id: string): Promise<string | null> => (await b.pool.query('SELECT missing_since FROM knowledge_docs WHERE id = $1', [id])).rows[0]?.missing_since ?? null;
+  const goneId = (await b.pool.query(`SELECT id FROM knowledge_docs WHERE project_id = $1`, [GONE])).rows[0].id;
+  const sweepAt = (t: number) => run(() => lifecycle.sweep(lifecycle.realExists(), t));
+  ok('sweep, first look: a definitely missing project and agent are STAMPED, nothing is deleted', (await sweepAt(T0)) === 0 && (await stamp(goneId)) !== null && (await stamp(ghost.id)) !== null && (await count('knowledge_docs', `id = '${ghost.id}'`)) === 1);
+  ok('NEGATIVE CONTROL: a live project\'s document and a trashed agent\'s are never stamped', (await stamp(live.id)) === null && (await stamp(keep.id)) === null);
+  ok('23 hours later: still there', (await sweepAt(T0 + 23 * H)) === 0 && (await count('knowledge_docs', `project_id = '${GONE}'`)) === 1);
+  const gone24 = await sweepAt(T0 + 25 * H);
+  ok('25 hours after the first look: the gone project\'s and every ghost agent\'s documents (and passages) go', gone24 === 4 && (await count('knowledge_docs', `project_id = '${GONE}'`)) === 0 && (await count('knowledge_docs', `id = '${ghost.id}'`)) === 0 && (await count('knowledge_passages', `doc_id = '${ghost.id}'`)) === 0 && (await count('knowledge_docs', `agent_id = '${A}'`)) === 0, String(gone24));
+  ok('NEGATIVE CONTROL: the live project\'s document and the trashed agent\'s survive', (await count('knowledge_docs', `id = '${live.id}'`)) === 1 && (await count('knowledge_docs', `id = '${keep.id}'`)) === 1);
+
+  // Found again clears the stamp, and the day starts over.
+  const flap = await mk('Flapping owner', 'x', null, randomUUID());
+  const sees = (f: 'found' | 'missing' | 'unknown') => ({ project: async () => f, agent: async () => f });
+  await run(() => lifecycle.sweep(sees('missing'), T0));
+  ok('(setup) stamped', (await stamp(flap.id)) !== null);
+  await run(() => lifecycle.sweep(sees('found'), T0 + 10 * H));
+  ok('found again: the stamp is cleared', (await stamp(flap.id)) === null);
+  await run(() => lifecycle.sweep(sees('missing'), T0 + 30 * H));
+  ok('missing again 30 h after the FIRST look: stamped afresh, not deleted (the day restarted)', (await stamp(flap.id)) !== null && (await count('knowledge_docs', `id = '${flap.id}'`)) === 1);
+  await run(() => lifecycle.sweep(sees('unknown'), T0 + 90 * H));
+  ok('a lookup that FAILED never deletes and never stamps, however late', (await count('knowledge_docs', `id = '${flap.id}'`)) === 1);
+  const thrower = { project: async () => { throw new Error('db down'); }, agent: async () => 'found' as const };
+  await run(() => lifecycle.sweep(thrower, T0 + 100 * H));
+  ok('a lookup that THROWS is unknown too', (await count('knowledge_docs', `id = '${flap.id}'`)) === 1);
+  await run(() => lifecycle.sweep(sees('missing'), T0 + 100 * H + 25 * H));
+  ok('NEGATIVE CONTROL: definitely missing, more than a day after its stamp: deleted', (await count('knowledge_docs', `id = '${flap.id}'`)) === 0);
+
+  // A CORRUPT project record (the real lookups) deletes nothing, however many passes and however late.
+  const PC: string = await run(async () => (await projects.createProject('Corrupt record')).id);
+  const cdoc = await mk('In a project with a bad record', 'x', null, PC);
+  const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+  const kinds: typeof import('../src/app/recordKinds') = require('../src/app/recordKinds');
+  const projectFile = await run(async () => (require('path') as typeof import('path')).join(kinds.projectDir(PC), 'project.json'));
+  await run(() => recordFs.writeFile(projectFile, '{ this is not json', 'utf8'));
+  for (const h of [0, 30, 60, 90]) await sweepAt(T0 + h * H);
+  ok('a corrupt project.json: nothing is stamped or deleted after four passes over 90 hours', (await count('knowledge_docs', `id = '${cdoc.id}'`)) === 1 && (await stamp(cdoc.id)) === null);
+  await run(() => recordFs.rm(projectFile, { force: true }));
+  await sweepAt(T0 + 100 * H);
+  ok('NEGATIVE CONTROL: the same project with its record really gone is stamped', (await stamp(cdoc.id)) !== null);
 
   // (f) the migration
   const mig = (await b.pool.query('SELECT version FROM schema_migrations WHERE version >= 40 ORDER BY version')).rows.map((r) => r.version);

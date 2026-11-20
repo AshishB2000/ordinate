@@ -91,6 +91,16 @@ withServer('knowledge-ask', {}, async (b) => {
   ok('a document deleted since then comes back as gone', gone.guidance.documentRefs[0].gone === true && gone.guidance.documentRefs[0].title === '');
   const policy2 = await mk('Revenue policy', '# Revenue\n\n## Refunds\n\nA refund reduces revenue in the month it is paid out, never the month of the order.\n\n## Active customers\n\nAn active customer paid for an order in the trailing 30-day window. Revenue in 2025 was $4.2M.');
 
+  // (c2) a person taken off the agent's team no longer sees its documents' titles in their history.
+  const rFay = await ask('fay', 'What is a fiscal quarter?', { agentId: A, threadId: (await must('fay', 'copilot:newThread', { projectId: P, agentId: A })).thread.id });
+  ok('(setup) Fay\'s answer read the agent\'s document and names it by title', rFay.guidance.documentRefs?.[0]?.title === 'Finance glossary', show(rFay.guidance));
+  await must('boss', 'admin:teamMember', { teamId: team, userId: await b.uid('fay'), member: false });
+  const fayHist = (await must('fay', 'copilot:history', { projectId: P, threadId: rFay.threadId })).turns.filter((t: any) => t.role === 'assistant').at(-1); // any: a stored turn
+  ok('removed from the team: the agent\'s document comes back as gone, with no title', fayHist.guidance.documentRefs[0].gone === true && fayHist.guidance.documentRefs[0].title === '' && !JSON.stringify(fayHist.guidance).includes('Finance glossary'), show(fayHist.guidance));
+  const stillEd = (await must('ed', 'copilot:history', { projectId: P, threadId: (await ask('ed', 'How do we count refunds?')).threadId })).turns.filter((t: any) => t.role === 'assistant').at(-1); // any: a stored turn
+  ok('NEGATIVE CONTROL: the project\'s own document is still named for everyone', stillEd.guidance.documentRefs[0].title === 'Revenue policy');
+  await must('boss', 'admin:teamMember', { teamId: team, userId: await b.uid('fay'), member: true });
+
   // (d)
   const realCandidates = store.candidates;
   (store as any).candidates = async () => { throw Object.assign(new Error('boom: a document says secret-canary'), { code: 'XX000' }); }; // any: forcing the failure

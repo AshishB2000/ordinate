@@ -33,7 +33,7 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => planStore.prune(),
     () => pruneAudit(p, org, auditDays),
     () => pruneUnused(org),
-    () => knowledgeLifecycle.sweep(knowledgeLifecycle.realExists(), org), // knowledge documents of a project or agent that is gone (0042)
+    () => knowledgeLifecycle.sweep(knowledgeLifecycle.realExists()), // knowledge documents of a project or agent that is gone (0042)
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));

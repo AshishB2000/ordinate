@@ -41,6 +41,10 @@ export function passageWords(title: string, heading: string, text: string): { ti
   return { titleWords, headingWords, textWords, words: searchWordsOf([title, heading, text]) };
 }
 
+/** The question's words as BOTH sides score and narrow with them: deduplicated, at most 64 (Postgres gets the same list). */
+export const MAX_QUESTION_WORDS = 64;
+export const questionWords = (question: string): string[] => searchWords(question).slice(0, MAX_QUESTION_WORDS);
+
 const has = (list: readonly string[], w: string): boolean => list.includes(w);
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -52,7 +56,7 @@ export function scorePassage(question: readonly string[], p: RankPassage): numbe
 
 /** The passages to show for `question`, best first, after the cut-off and the 6 / 4,000-character budget. */
 export function rankPassages(question: string, all: readonly RankPassage[], limit = MAX_ASK_PASSAGES, maxChars = MAX_ASK_CHARS): Ranked[] {
-  const q = searchWords(question);
+  const q = questionWords(question);
   const scored: Ranked[] = [];
   for (const p of all) {
     const score = scorePassage(q, p);

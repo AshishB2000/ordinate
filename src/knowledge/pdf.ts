@@ -6,6 +6,7 @@
 // warning and carries on, and no native module is loaded (spiked on pdfjs-dist 6.5.438).
 
 import * as nodeModule from 'module';
+import * as path from 'path';
 import { MAX_TEXT_CHARS } from './limits';
 import { ParseError } from './parseTypes';
 
@@ -17,6 +18,11 @@ export const PDF_OPTIONS = {
   useWorkerFetch: false,
   isOffscreenCanvasSupported: false,
   verbosity: 0,
+  // pdf.js's own data, read from the package on disk (a path, never a URL: no network): the predefined CMaps CJK PDFs name
+  // instead of embedding, and the standard 14 fonts' metrics.
+  cMapUrl: path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'cmaps') + path.sep,
+  cMapPacked: true,
+  standardFontDataUrl: path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts') + path.sep,
 } as const;
 
 interface TextItem { str?: string; hasEOL?: boolean }

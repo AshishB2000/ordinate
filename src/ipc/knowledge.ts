@@ -79,14 +79,14 @@ export function register(): void {
 
   ipcMain.handle('knowledge:upload', async (_e, { projectId, agentId, fileToken, title }: { projectId: string; agentId?: string; fileToken: string; title?: string }) => {
     if (!knowledgeOn()) return NO_DB;
-    if (!(await mayReach(projectId, agentId ?? null))) return { ok: false, error: msg.agentGone() }; // before the single-use token is spent
     let upload: Awaited<ReturnType<typeof resolveUpload>> | null = null;
     try {
+      if (!(await mayReach(projectId, agentId ?? null))) return { ok: false, error: msg.agentGone() }; // before the single-use token is spent
       upload = await resolveUpload(fileToken);
       if ((await fs.promises.stat(upload.path)).size > MAX_FILE_BYTES) return { ok: false, error: msg.fileTooBig() };
       const read = await readDocument(await fs.promises.readFile(upload.path), upload.name);
       const name = upload.name.slice(0, 255);
-      const doc = await createDoc(projectId, agentId ?? null, { title: title && clipTitle(title) ? clipTitle(title) : titleOfFile(name) || 'Untitled document', text: read.text, source: read.source, fileName: name }, randomUUID(), osUser());
+      const doc = await createDoc(projectId, agentId ?? null, { title: title && clipTitle(title) ? clipTitle(title) : titleOfFile(name) || msg.untitledDocument(), text: read.text, source: read.source, fileName: name }, randomUUID(), osUser());
       return { ok: true, doc };
     } catch (err) {
       if (err instanceof FileTokenError) return { ok: false, error: msg.uploadExpired() };
