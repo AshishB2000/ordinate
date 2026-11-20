@@ -6,7 +6,8 @@
 // It records every call (`calls`) so a test can assert what was sent — and what was NOT.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
-import { createSign, generateKeyPairSync, randomBytes } from 'crypto';
+import type { Duplex } from 'stream';
+import { createHash, createSign, generateKeyPairSync, randomBytes } from 'crypto';
 import type { AddressInfo } from 'net';
 import { sign } from '../src/server/slack/signature';
 
@@ -29,6 +30,14 @@ export interface Stub {
   rateLimit: { method: string; times: number };
   /** Extra claims the next id_token carries instead of the signed-in user's (a mismatch test). */
   idTokenOverride: Record<string, unknown> | null;
+  /** Socket Mode: the app-level token `apps.connections.open` wants, the live connections, what each acknowledged, and a way to push to them. */
+  readonly appToken: string;
+  readonly sockets: Set<Duplex>;
+  readonly acks: Array<Record<string, any>>; // any: an acknowledgement frame
+  socketConnects: number;
+  /** Sends a JSON frame to every connected socket (or the newest). */
+  push(frame: unknown): void;
+  dropAll(): void;
   callsOf(method: string): Call[];
   reset(): void;
   /** Delivers a payload to the server's Events route, signed (or not) the way Slack signs. */
@@ -36,6 +45,38 @@ export interface Stub {
   /** The URL the authorize endpoint last saw. */
   lastAuthorize: URLSearchParams | null;
   close(): Promise<void>;
+}
+
+/** One unmasked server-to-client text frame (RFC 6455). */
+function frameOf(text: string): Buffer {
+  const body = Buffer.from(text);
+  const n = body.length;
+  const head = n < 126 ? Buffer.from([0x81, n]) : n < 65536 ? Buffer.from([0x81, 126, n >> 8, n & 255]) : Buffer.concat([Buffer.from([0x81, 127, 0, 0, 0, 0]), Buffer.from([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255])]);
+  return Buffer.concat([head, body]);
+}
+
+/** The text of each complete masked client frame in `buf`; the rest is returned for the next chunk. */
+function framesOf(buf: Buffer): { texts: string[]; rest: Buffer; closed: boolean } {
+  const texts: string[] = [];
+  let at = 0;
+  let closed = false;
+  while (buf.length - at >= 2) {
+    const op = buf[at] & 15;
+    let len = buf[at + 1] & 127;
+    let off = at + 2;
+    if (len === 126) { if (buf.length < off + 2) break; len = buf.readUInt16BE(off); off += 2; }
+    else if (len === 127) { if (buf.length < off + 8) break; len = Number(buf.readBigUInt64BE(off)); off += 8; }
+    const masked = (buf[at + 1] & 128) !== 0;
+    if (buf.length < off + (masked ? 4 : 0) + len) break;
+    const mask = masked ? buf.subarray(off, off + 4) : null;
+    if (masked) off += 4;
+    const data = Buffer.from(buf.subarray(off, off + len));
+    if (mask) for (let i = 0; i < data.length; i++) data[i] ^= mask[i % 4];
+    if (op === 1) texts.push(data.toString('utf8'));
+    if (op === 8) closed = true;
+    at = off + len;
+  }
+  return { texts, rest: buf.subarray(at), closed };
 }
 
 const b64u = (b: Buffer | string): string => Buffer.from(b).toString('base64url');
@@ -61,6 +102,12 @@ export async function startSlackStub(init: { team?: string; botToken?: string } 
     botChannels: [],
     team: { id: init.team ?? 'T001', name: 'Acme Slack', botUser: 'UBOT', botToken: init.botToken ?? 'xoxb-c4nary-b0t-t0ken-0001', appId: 'A001' },
     oauth: { clientId: 'client-001', clientSecret: 'c4nary-client-secret', signInAs: { userId: 'U1', teamId: init.team ?? 'T001' } },
+    appToken: 'xapp-c4nary-app-token-0001',
+    sockets: new Set(),
+    acks: [],
+    socketConnects: 0,
+    push: (frame) => { for (const s of stub.sockets) s.write(frameOf(JSON.stringify(frame))); },
+    dropAll: () => { for (const s of stub.sockets) s.destroy(); stub.sockets.clear(); },
     pageSize: 200,
     rateLimit: { method: '', times: 0 },
     idTokenOverride: null,
@@ -104,6 +151,9 @@ export async function startSlackStub(init: { team?: string; botToken?: string } 
     if (stub.rateLimit.method === method && stub.rateLimit.times > 0) {
       stub.rateLimit.times -= 1;
       return json(res, 429, { ok: false, error: 'ratelimited' }, { 'retry-after': '1' });
+    }
+    if (method === 'apps.connections.open') {
+      return token === stub.appToken ? json(res, 200, { ok: true, url: `${origin.replace('http', 'ws')}/link/?ticket=stub` }) : json(res, 200, { ok: false, error: 'invalid_auth' });
     }
     if (token !== stub.team.botToken) return json(res, 200, { ok: false, error: 'invalid_auth' });
     switch (method) {
@@ -173,6 +223,23 @@ export async function startSlackStub(init: { team?: string; botToken?: string } 
       res.writeHead(404);
       res.end();
     })().catch(() => { res.writeHead(500); res.end(); });
+  });
+  server.on('upgrade', (req, socket) => {
+    const key = String(req.headers['sec-websocket-key'] ?? '');
+    const accept = createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    stub.sockets.add(socket);
+    stub.socketConnects += 1;
+    socket.write(frameOf(JSON.stringify({ type: 'hello', num_connections: stub.sockets.size })));
+    let pending: Buffer = Buffer.alloc(0);
+    socket.on('data', (chunk: Buffer) => {
+      const got = framesOf(Buffer.concat([pending, chunk]));
+      pending = Buffer.from(got.rest);
+      for (const t of got.texts) { try { stub.acks.push(JSON.parse(t) as Record<string, any>); } catch { /* not JSON */ } }
+      if (got.closed) socket.destroy();
+    });
+    socket.on('close', () => stub.sockets.delete(socket));
+    socket.on('error', () => stub.sockets.delete(socket));
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

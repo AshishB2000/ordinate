@@ -16,6 +16,7 @@ import { processQuestion } from './answer';
 import { updateMessage } from './client';
 import * as store from './db';
 import { note } from './render';
+import { startSocketManager, type SocketManager } from './socket';
 
 let pollMs = 1_000;
 let leaseMs = store.LEASE_MS;
@@ -53,11 +54,16 @@ async function run(q: store.Question, owner: string, log: Pick<FastifyBaseLogger
   }
 }
 
-export interface SlackWorker { stop(): Promise<void>; tick(): Promise<number> }
+export interface SlackWorker { stop(): Promise<void>; tick(): Promise<number>; sockets: SocketManager }
+
+let latest: SlackWorker | null = null;
+/** Test hook: the worker the app started last. */
+export const latestForTest = (): SlackWorker | null => latest;
 
 export function startSlackWorker(log: Pick<FastifyBaseLogger, 'error' | 'warn'>): SlackWorker {
   const owner = `${os.hostname()}/${process.pid}/${randomUUID().slice(0, 8)}`;
   const running = new Set<Promise<void>>();
+  const sockets = startSocketManager(owner, log); // this pod's Socket Mode connections, if an install asks for them
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
 
@@ -90,12 +96,15 @@ export function startSlackWorker(log: Pick<FastifyBaseLogger, 'error' | 'warn'>)
     timer.unref();
   };
   loop();
-  return {
+  latest = {
     tick,
+    sockets,
     async stop() {
       stopped = true;
       if (timer) clearTimeout(timer);
+      await sockets.stop();
       await Promise.allSettled(running);
     },
   };
+  return latest;
 }

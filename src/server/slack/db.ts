@@ -81,6 +81,34 @@ export async function setSettings(org: string, s: { mode?: 'events' | 'socket'; 
   );
 }
 
+/** Installs that want a Socket Mode connection from some pod. */
+export async function socketInstalls(): Promise<Install[]> {
+  return (await db().query<Install>(`SELECT ${INSTALL_COLS} FROM slack_installs WHERE enabled AND mode = 'socket' ORDER BY created_at LIMIT 200`)).rows;
+}
+
+// ── Socket Mode slots: a pod holds one of SOCKET_SLOTS per install while it keeps a connection ──
+
+export const SOCKET_SLOTS = 10;
+
+/** Takes a free (or lapsed) slot for `owner`, or returns null when all ten are held. One statement per slot; the unique key decides a race. */
+export async function takeSlot(team: string, owner: string, leaseMs: number): Promise<number | null> {
+  for (let slot = 1; slot <= SOCKET_SLOTS; slot += 1) {
+    const r = await db().query(
+      `INSERT INTO slack_socket_slots (team_id, slot, lease_owner, lease_until) VALUES ($1, $2, $3, now() + ($4 || ' milliseconds')::interval)
+       ON CONFLICT (team_id, slot) DO UPDATE SET lease_owner = $3, lease_until = now() + ($4 || ' milliseconds')::interval WHERE slack_socket_slots.lease_until < now()`,
+      [team, slot, owner, String(leaseMs)]);
+    if (r.rowCount) return slot;
+  }
+  return null;
+}
+/** Pushes the lease on; false when the slot is no longer this owner's (it lapsed and another pod took it). */
+export async function renewSlot(team: string, slot: number, owner: string, leaseMs: number): Promise<boolean> {
+  return !!(await db().query(`UPDATE slack_socket_slots SET lease_until = now() + ($4 || ' milliseconds')::interval WHERE team_id = $1 AND slot = $2 AND lease_owner = $3`, [team, slot, owner, String(leaseMs)])).rowCount;
+}
+export async function releaseSlot(team: string, slot: number, owner: string): Promise<void> {
+  await db().query('DELETE FROM slack_socket_slots WHERE team_id = $1 AND slot = $2 AND lease_owner = $3', [team, slot, owner]);
+}
+
 /** Everything of a workspace: the admin uninstalled it, or another workspace replaced it. */
 export async function wipeTeam(org: string, team: string): Promise<void> {
   for (const t of ['slack_links', 'slack_link_states', 'slack_questions', 'slack_threads', 'slack_channel_agents', 'slack_socket_slots', 'slack_installs']) {
