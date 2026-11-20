@@ -1,0 +1,187 @@
+/* The Documents section (KnowledgeSection.tsx, DocumentDialog.tsx): rows on the tab's card like the instructions',
+   with a kind and size under each title, the upload's reading and refused states, and the document's dialog.
+   Theme tokens only, so both themes follow. Under 900px a row's who and actions stack under its title. */
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  gap: var(--sp-12);
+  align-items: center;
+  padding: var(--sp-12) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+.list > .row:first-child {
+  border-top: 0;
+}
+.row:hover {
+  background: var(--surface-2);
+}
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.open:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.docTitle {
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: var(--lh-body);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.docMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.fileName {
+  overflow-wrap: anywhere;
+}
+.who {
+  font-size: var(--t-12);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.actions {
+  display: inline-flex;
+  gap: 2px;
+}
+.reading {
+  grid-template-columns: 32px minmax(0, 1fr);
+  background: var(--surface-2);
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent-text);
+  border-right-color: transparent;
+  border-radius: var(--r-full);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* A file the server would not read: its own sentence, beside what it was. */
+.refused {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  color: var(--error-text);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.refused > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.foot svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ── The document's dialog ─────────────────────────────────────────── */
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+}
+.dialogFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+.fromFile {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.textArea {
+  min-height: 320px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--t-12);
+  line-height: 1.5;
+}
+.formError {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--error-text);
+}
+
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+  .who,
+  .actions {
+    grid-column: 2;
+  }
+}

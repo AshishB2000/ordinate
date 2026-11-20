@@ -1,6 +1,6 @@
 // Beside a test answer: how it was found (semantic part 3 D11). Worded here from the turn's `guidance`, which holds
 // ids and counts only: a verified question (no model call, or a model that only narrated it), or the model with N
-// instructions and these examples. Then the stored spec in words and, folded, as JSON. A turn with no guidance (a
+// instructions and these examples, and the documents whose passages it read, by title (a removed one says so). Then the stored spec in words and, folded, as JSON. A turn with no guidance (a
 // chip, a follow-up, an older turn) says nothing about how, but its spec is still there.
 
 import type { Turn } from '../../assistant/api';
@@ -28,6 +28,14 @@ export function HowAnswered({ turn, verified, terms }: { turn: Turn; verified: r
           <strong>{`The model, with ${plural(g.instructions, 'instruction')} and ${plural(g.examples.length, 'verified example')}.`}</strong>
           {examples.map((q) => (
             <span key={q}>{q}</span>
+          ))}
+        </p>
+      )}
+      {g?.documents && g.documents.length > 0 && (
+        <p className={t.howLine} data-testid="how-documents">
+          <strong>{`It read ${plural(g.documents.length, 'document')}.`}</strong>
+          {(g.documentRefs ?? g.documents.map((id) => ({ id, title: '', gone: true as const }))).map((d) => (
+            <span key={d.id}>{d.gone ? 'a removed document' : d.title}</span>
           ))}
         </p>
       )}
