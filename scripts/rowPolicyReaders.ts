@@ -97,6 +97,8 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'jobs:clear': 'META',
   'jobs:list': 'META',
   'key:status': 'META',
+  'knowledge:list': 'META', // knowledge documents: titles, kinds and sizes of editor prose (docs/knowledge-docs); never a dataset row
+  'knowledge:get': 'META', // one document's text: editor prose every reader of the project (or who may use the agent) sees, as catalog:instructions (D5)
   'lineage:get': 'META',
   'lineage:column': 'META', // names and counts of the records around one column, never a value (part 8)
   'lineage:fields': 'META',

@@ -1,5 +1,5 @@
 // The Data model's Assistant tab (semantic part 3, the owner's answer 1): what the project's editors tell the
-// Assistant: its agents (docs/assistant-agents), its instructions, then its verified questions; an editor then tries a
+// Assistant: its agents (docs/assistant-agents), its instructions, its documents, then its verified questions; an editor then tries a
 // question below them (./TestChat). An agent opens its own page in place of the tab's sections (`?agent=` in the URL,
 // so a reload or Back keeps it); `new` is a new one.
 
@@ -8,6 +8,7 @@ import { useCanEdit } from '../../projects/api';
 import { AgentPage } from './AgentPage';
 import { AgentsSection } from './AgentsSection';
 import { InstructionsList } from './InstructionsList';
+import { KnowledgeSection } from './KnowledgeSection';
 import { TestChat } from './TestChat';
 import { VerifiedList } from './VerifiedList';
 import a from './Assistant.module.css';
@@ -40,6 +41,7 @@ export function AssistantTab({ projectId }: { projectId: string }) {
     <div className={a.tab}>
       <AgentsSection projectId={projectId} onOpen={(id) => open(id)} />
       <InstructionsList projectId={projectId} canEdit={canEdit} />
+      <KnowledgeSection projectId={projectId} canEdit={canEdit} />
       <VerifiedList projectId={projectId} canEdit={canEdit} />
       {canEdit && <TestChat projectId={projectId} />}
     </div>

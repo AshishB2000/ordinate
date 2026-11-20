@@ -20,6 +20,8 @@
 export type ColumnTreatment = 'GATE' | 'DROP' | 'NET' | 'REDACT' | 'MARK' | 'FANOUT' | 'EXPORT' | 'SKIP' | 'META';
 
 export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
+  'knowledge:list': 'META', // knowledge documents: titles, kinds and sizes of editor prose, no cell, label or figure of a dataset
+  'knowledge:get': 'META', // one document's text: editor prose, no dataset cell
   'agent:list': 'META', // Assistant agents: names, teams, a topic's name and dataset ids, editor prose: no cell, label or figure of a dataset
   'ai:setMine': 'META',
   'ai:status': 'META',

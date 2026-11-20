@@ -38,6 +38,7 @@ import type { BundleManifest } from './bundleRules';
 import * as msg from './bundleMessages';
 import { countJsonValuesAsync, JsonTooComplex, MAX_JSON_VALUES, parseBounded } from './jsonBudget';
 import { logger } from './logger';
+import { importEntry as importKnowledge } from '../knowledge/bundle';
 import { openZip, ZipRefused, type ZipEntryInfo, type ZipReader, type ZipSource } from './zipReader';
 
 /** Progress (0–1) and a cancel check a job hands in; both optional. */
@@ -283,6 +284,8 @@ async function write(
   };
   try {
     const { entries } = zip;
+    // The agents this project gets (after the id swap): a knowledge document lands only on an agent that came with it.
+    const agentIds = new Set(entries.flatMap((e) => { const m = /^agents\/([0-9a-f-]{36})\.json$/i.exec(swap(e.name)); return m ? [m[1].toLowerCase()] : []; }));
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       if (e.name === 'manifest.json' || e.name === 'project.json' || e.name === 'themes.json' || e.name === 'templates.json') continue; // the new project has its own; themes are workspace records
@@ -290,6 +293,15 @@ async function write(
       if (!ruleFor(rel)) throw new Error(msg.notWritten()); // a remapped name left the whitelist: cannot happen; guard anyway
       const target = path.join(dir, ...rel.split('/'));
       const kind = kindOf(e.name);
+      if (rel.startsWith('knowledge/')) {
+        // A row, not a file: through the store (its caps and row-level security), with its ids swapped like any record's.
+        await oneAtATime(async () => {
+          const buf = await zip.read(e, opts.signal);
+          if (remap.size) await eachId(buf, (id, at) => { const to = remap.get(id.toLowerCase()); if (to) buf.write(to, at, 36, 'latin1'); });
+          await importKnowledge(created.id, buf, agentIds);
+        });
+        continue;
+      }
       if (kind === 'asset') {
         await writeBlob(target, await zip.read(e, opts.signal)); // a row, on a server with DATABASE_URL
       } else if (kind === 'table') {

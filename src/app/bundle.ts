@@ -33,6 +33,7 @@ import { centralHeader, deflateRawAsync, dosTime, endRecord, localHeader, pack, 
 import { openZip } from './zipReader';
 import { parseBounded } from './jsonBudget';
 import { walk, type BundleProgress } from './bundleImport';
+import { exportEntries as knowledgeEntries } from '../knowledge/bundle';
 
 export { BUNDLE_FORMAT, BUNDLE_VERSION } from './bundleRules';
 export type { BundleManifest } from './bundleRules';
@@ -210,6 +211,12 @@ export async function exportProject(
     entries.push({ name: rel, data });
     if (opts.onProgress) opts.onProgress(0.3 * ((i + 1) / files.length), 'Reading files');
     if (rule.count) counts[rule.count] = (counts[rule.count] || 0) + 1;
+  }
+  // Knowledge documents are rows in Postgres, not files: read from there, for the agents that travel (src/knowledge/bundle.ts).
+  const agentIds = new Set(entries.flatMap((e) => (/^agents\/[0-9a-f-]{36}\.json$/i.test(e.name) ? [e.name.slice(7, -5).toLowerCase()] : [])));
+  for (const e of await knowledgeEntries(projectId, agentIds)) {
+    entries.push(e);
+    counts.knowledge = (counts.knowledge || 0) + 1;
   }
   const themes = await bundleThemesEntry(entries);
   if (themes) entries.push(themes);

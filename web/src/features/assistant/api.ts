@@ -78,7 +78,7 @@ export interface Turn {
   /** The Visual this answer was saved as ("Save as visual"): its card links there instead of offering to save again. */
   savedVisualId?: string;
   /** How the answer was guided: ids and counts only (src/ai/turnGuidance.ts). None on a chip, a follow-up or an older turn. */
-  guidance?: { verifiedId?: string; instructions: number; examples: string[]; narrated?: boolean };
+  guidance?: { verifiedId?: string; instructions: number; examples: string[]; narrated?: boolean; documents?: string[]; documentRefs?: { id: string; title: string; gone?: true }[] };
   /** An Assistant agent's out-of-scope reply: the dataset the Project assistant can answer from (src/ipc/agentAsk.ts). */
   outside?: { dataset: string };
   /** What a refused answer needs an editor to add first (src/ai/answerNeeds.ts): the reason Ask an editor carries. */

@@ -706,6 +706,8 @@ export function registerHandlers(): void {
   (require('../ipc/folders') as typeof import('../ipc/folders')).register();
   // Dashboard requests (docs/team-folders, E9): a viewer asks, an editor approves.
   (require('./requests/rpc') as typeof import('./requests/rpc')).register();
+  // Knowledge documents (docs/knowledge-docs): reference text the Assistant reads, for a project or one agent.
+  (require('../ipc/knowledge') as typeof import('../ipc/knowledge')).register();
   // Ordinate in Slack (docs/slack): the admin's setup, each member's own link, an agent's channels.
   (require('./slack/rpc') as typeof import('./slack/rpc')).register();
   // Deep research (docs/deep-research): start, watch, stop, resume and add a run to the project; the org's limits.

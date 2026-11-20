@@ -23,6 +23,7 @@ import { useShareTargets } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { useNavigation } from '../navigation';
 import { InstructionsEditor } from './InstructionsList';
+import { KnowledgeSection } from './KnowledgeSection';
 import { SlackChannels } from './SlackChannels';
 import type { InstructionOp } from './api';
 import a from './Assistant.module.css';
@@ -330,6 +331,8 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
       ) : (
         <p className={g.help}>Create the agent first, then write its own instructions here.</p>
       )}
+
+      {row && <KnowledgeSection projectId={projectId} agentId={row.id} canEdit={canInstruct} instructionsId="agent-instructions-h" />}
 
       {asking && row && (
         <ConfirmDelete

@@ -23,6 +23,8 @@
 export type FolderClass = 'LIST' | 'ITEM' | 'FIGURE' | 'OPEN' | 'INDEX' | 'ASK' | 'SEND' | 'EXPORT' | 'OWN' | 'PROJECT' | 'EDIT' | 'CREATE' | 'FOLDER';
 
 export const READS: Readonly<Record<string, FolderClass>> = {
+  'knowledge:list': 'PROJECT', // documents belong to the project or an agent, never to a dataset or a folder
+  'knowledge:get': 'PROJECT',
   'agent:list': 'LIST', // agents are project-level; their topics' members filtered to what the caller opens
   'ai:setMine': 'OWN',
   'ai:status': 'PROJECT',
@@ -253,6 +255,9 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'research:resume': 'OWN', // the caller's own run, queued again
   'research:start': 'OWN', // the caller's own run and conversation turn; its steps run through the doors, as the starter
   'research:stop': 'OWN', // the caller's own run
+  'knowledge:save': 'PROJECT', // project-level prose: no folder
+  'knowledge:upload': 'PROJECT',
+  'knowledge:delete': 'PROJECT',
   'alerts:delete': 'EDIT',
   'alerts:fromAnswer': 'FIGURE', // the alert dialog's figure, through the alert's own door (testRule)
   'alerts:patch': 'EDIT',
