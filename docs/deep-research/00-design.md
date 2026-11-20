@@ -42,6 +42,13 @@ Lightdash's version (docs.lightdash.com/agents/deep-research):
      only a figure-shaped one), else it becomes "Finding n". The Story's name is the model's title only if it has
      no digit, else the starter's own question (clipped). Each saved chart is named from that same title and
      heading, so a digit never reaches a visual's name either.
+   - **Also restricted:**
+     - a run whose step dataset was restricted when it was computed. The flag is stored on the run, so a
+       dataset deleted later still counts as restricted;
+     - a run whose step dataset no longer exists at Add (fail closed);
+     - a run that used any agent's knowledge document. Only that agent's users may read it, and an agent with no
+       teams is editors-only. A document that can no longer be found also counts. Project documents don't
+       restrict a run, because every reader of the project may read them.
    - Either way, every section carries "Written on <date> from the data then", the date formatted by the app.
 
 ## Calls made in the design (shown to the owner as settled unless he objects)

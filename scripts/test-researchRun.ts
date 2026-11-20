@@ -436,7 +436,7 @@ const WRITE = JSON.stringify({
     stories.saveStory = realSave2;
     ok('lease lost at the story: the press deletes its own story and charts (finalize found nobody\'s story id)', lost.body?.ok === false && (await countStories()) === sS && (await countVisuals()) === vS, `${JSON.stringify(lost.body)} ${await countStories()} ${await countVisuals()} (${sS} ${vS})`);
 
-    // 3. An agent's own documents reach the run; a team-only agent's makes it restricted, an everyone agent\'s does not.
+    // 3. An agent's own documents reach the run and make it restricted (only the agent's users may read them); a project document does not.
     const agentRun = async (name: string, teamIds: string[]) => {
       const agentId: string = (await W.call('boss', 'agent:save', { projectId: W.P, agent: { name, topicId: null, model: null, build: true, teamIds } })).body?.agent?.id;
       await W.as('boss', () => knowledge.createDoc(W.P, agentId, { title: `${name} handbook`, text: `# ${name}\n\nzebrawords policy: always compare by region first.` }, crypto.randomUUID(), 'boss@acme.test'));
@@ -456,7 +456,18 @@ const WRITE = JSON.stringify({
     const everyone = await agentRun('Everyone', []);
     const addEvery = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: everyone.id });
     const textEvery = await storyText(addEvery.body.storyId);
-    ok('agent documents (negative control): an agent with no team gate → not restricted, prose kept', everyone.r?.restricted === false && textEvery.includes('EVERYONE_SUMMARY') && textEvery.includes('EVERYONE_SECTION') && /always compare/.test(everyone.plan));
+    ok('agent documents: an agent with no teams is editors-only (mayUse), so its document restricts the run too: no prose', everyone.r?.restricted === true && !textEvery.includes('EVERYONE_SUMMARY') && !textEvery.includes('EVERYONE_SECTION') && /always compare/.test(everyone.plan));
+    // Negative control: a PROJECT document is read by every reader of the project, so it does not restrict the run.
+    await W.as('boss', () => knowledge.createDoc(W.P, null, { title: 'Project handbook', text: '# Project\n\nquokkawords policy: always compare by region first.' }, crypto.randomUUID(), 'boss@acme.test'));
+    stub.reset();
+    stub.steps = [byRegion('Plain'), DONE];
+    stub.write = prose('PROJECT');
+    const projId = await go('boss', 'quokkawords policy please', {});
+    const projRun = await S.drive(projId);
+    const projPlan = stub.seen.plan;
+    const addProj = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: projId });
+    const textProj = await storyText(addProj.body.storyId);
+    ok('agent documents (negative control): a PROJECT document used → not restricted, prose kept', projRun?.restricted === false && textProj.includes('PROJECT_SUMMARY') && /quokkawords policy/.test(projPlan), `${projRun?.restricted} ${textProj.slice(0, 120)}`);
 
     // 5. A start whose turn cannot be written does not hold the person\'s slot.
     const realAppend = copilot.appendTurn;

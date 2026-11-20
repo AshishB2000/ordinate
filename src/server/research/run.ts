@@ -33,7 +33,6 @@ import { PLAN_SYSTEM, WRITE_SYSTEM, parsePlan, planUser, stepSystem, stepUser, w
 import { buildReport, chartsOnly, parseWriteReply, type Report } from '../../ai/researchWrite';
 import { underBudget } from '../slack/ask';
 import { restricted } from '../slack/check';
-import { readAgent } from '../../ai/agents';
 import { titlesOf } from '../../knowledge/store';
 import * as store from './db';
 import { computeStep, type StepScope } from './steps';
@@ -112,21 +111,20 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
       const facts = await buildFacts(run.projectId, asked, () => undefined, run.question);
       const agent = scope.agent ? { id: scope.agent.id, name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
       const guided = await askGuidance(run.projectId, asked, facts.provenance.kind, run.question, agent ? { agent } : {});
-      // A document of a TEAM-ONLY agent (a person outside its teams may not read it) makes the run restricted: Add to project keeps no prose.
-      let teamOnly = false;
+      // An AGENT's document makes the run restricted: only the agent's users may read it (mayUse: editors, or its teams;
+      // an agent with no teams is editors-only), and an added Story is read by the whole project. A document that cannot
+      // be found is unknown, so restricted too. Project documents are read by every reader of the project: not restricted.
+      let agentDocs = false;
       const docs = guided.used.documents ?? [];
       if (docs.length) {
-        const found = await titlesOf(run.projectId, docs).catch(() => new Map<string, { title: string; agentId: string | null }>());
-        for (const agentId of new Set([...found.values()].flatMap((d) => (d.agentId ? [d.agentId] : [])))) {
-          const a = await readAgent(run.projectId, agentId);
-          if (!a || a.rec.teamIds.length > 0) teamOnly = true; // gone or team-gated: unknown or restricted
-        }
+        const found = await titlesOf(run.projectId, docs).catch(() => null);
+        agentDocs = !found || found.size < new Set(docs).size || [...found.values()].some((d) => !!d.agentId);
       }
-      return { scope, facts, guided, teamOnly };
+      return { scope, facts, guided, agentDocs };
     });
     if (!prep) { await store.finish(org, run.id, owner, 'failed', 'access', null); return push(run, 'failed'); }
     const { scope, facts, guided } = prep;
-    if (prep.teamOnly) await store.markRestricted(org, run.id, owner);
+    if (prep.agentDocs) await store.markRestricted(org, run.id, owner);
     const model = scope.agent?.model ?? null;
     const ready = async (): Promise<boolean> => execConfig.assistantOn() && (await execConfig.executionReady());
 
