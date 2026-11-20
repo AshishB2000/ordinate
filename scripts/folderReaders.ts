@@ -220,6 +220,9 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'text:preview': 'OPEN',
   'text:profile': 'OPEN',
   'themes:list': 'PROJECT',
+  'slack:myLink': 'OWN', // the caller's own Slack link
+  'slack:openQuestion': 'OWN', // the caller's own Slack question (a channel question's words for anyone who may ask in its project)
+  'slack:unlink': 'OWN',
   'tokens:create': 'OWN',
   'tokens:list': 'OWN',
   'tokens:revoke': 'OWN',

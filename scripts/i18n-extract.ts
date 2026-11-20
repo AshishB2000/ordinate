@@ -413,6 +413,7 @@ export const MAIN_FILES = [
   'src/server/teamTableMessages.ts',
   'src/server/requestMessages.ts',
   'src/knowledge/knowledgeMessages.ts',
+  'src/server/slackMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

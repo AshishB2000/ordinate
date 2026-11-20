@@ -59,6 +59,7 @@ import { folders } from './folders';
 import { teamTables } from './teamTables';
 import { requests } from './requests';
 import { knowledge } from './knowledge';
+import { slack } from './slack';
 
 export const contracts = {
   ...projects,
@@ -119,6 +120,7 @@ export const contracts = {
   ...teamTables,
   ...requests,
   ...knowledge,
+  ...slack,
 } as const;
 
 export type Channel = keyof typeof contracts;

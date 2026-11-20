@@ -204,6 +204,9 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'text:profile': 'NET',
   'themes:list': 'META',
   'tokens:create': 'META',
+  'slack:myLink': 'META', // the caller's own Slack link: ids and a workspace name
+  'slack:openQuestion': 'META', // where a Slack question lives (ids) and, for another member, the question's own words
+  'slack:unlink': 'META', // removes the caller's own link; returns a count
   'tokens:list': 'META',
   'tokens:revoke': 'META',
   'topic:get': 'META', // ids and names of a project's datasets, fields, metrics and terms: never a value, the same reply for every caller

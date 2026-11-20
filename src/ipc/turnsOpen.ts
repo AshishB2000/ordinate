@@ -24,7 +24,7 @@ type Turn = Pick<copilot.CopilotTurn, 'role' | 'text' | 'answer' | 'suggest' | '
  * facts' (0039 `ordinate_turn_shows`). A related dataset a chart's category or split is read from (../ai/answerJoin) is
  * in `factsFrom` (../ai/copilot appendTurn writes it), so the list's SQL count and this agree with no new migration.
  */
-const shows = (t: Turn): string[] => [
+export const shows = (t: Turn): string[] => [
   ...(t.answer ? [t.answer.datasetId] : []), ...(t.suggest?.options ?? []).map((o) => o.spec.datasetId), ...(t.sql?.datasetIds ?? []), ...(t.factsFrom ?? []),
 ];
 

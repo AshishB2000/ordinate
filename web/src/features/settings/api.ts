@@ -41,7 +41,7 @@ export interface ThemeState {
   themes: ThemeRecord[];
 }
 
-export type SharePath = 'export' | 'report' | 'publish' | 'bundle';
+export type SharePath = 'export' | 'report' | 'publish' | 'bundle' | 'slack';
 export type ShareAction = 'mask' | 'drop' | 'include';
 export type Level = 'personal' | 'financial';
 

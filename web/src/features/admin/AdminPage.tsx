@@ -30,10 +30,11 @@ import { LiveUsageTab } from './LiveUsageTab';
 import { AiTab } from './AiTab';
 import { ChannelsTab } from './ChannelsTab';
 import { EmbeddingTab } from './EmbeddingTab';
+import { SlackTab } from './slack/SlackTab';
 import { Icon } from '../../ui/icons/Icon';
 import s from './Admin.module.css';
 
-const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings', 'embedding'] as const;
+const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings', 'embedding', 'slack'] as const;
 const ORG_TABS = ['workspace', 'ai', 'themes', 'backups', 'live', 'channels'] as const;
 type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
@@ -108,6 +109,9 @@ export default function AdminPage() {
               <Tab value="embedding" icon="code">
                 Embedding
               </Tab>
+              <Tab value="slack" icon="message-square">
+                Slack
+              </Tab>
             </>
           )}
           <Tab value="workspace" icon="sliders">
@@ -152,6 +156,9 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value="embedding">
               <EmbeddingTab />
+            </TabPanel>
+            <TabPanel value="slack">
+              <SlackTab />
             </TabPanel>
           </>
         )}

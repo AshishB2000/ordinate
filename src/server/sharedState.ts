@@ -15,6 +15,7 @@ import { pruneAudit } from './authz/audit';
 import { pruneUnused } from '../ai/copilotRows';
 import { defineJob } from './jobs/runner';
 import * as knowledgeLifecycle from '../knowledge/lifecycle';
+import * as slackDb from './slack/db';
 
 /** How often each org's expired tokens, stages, counter windows, plan runs, audit rows and unused conversations are swept. */
 export const SHARED_SWEEP_EVERY_MS = 5 * 60_000;
@@ -34,6 +35,7 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => pruneAudit(p, org, auditDays),
     () => pruneUnused(org),
     () => knowledgeLifecycle.sweep(knowledgeLifecycle.realExists()), // knowledge documents of a project or agent that is gone (0042)
+    () => (slackDb.dbOrNull() ? slackDb.sweep(org) : Promise.resolve()), // Slack's expired states, events, old questions, orphaned links (0041)
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));

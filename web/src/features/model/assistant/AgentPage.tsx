@@ -24,6 +24,7 @@ import { toastMovedToTrash } from '../../projects/trashToast';
 import { useNavigation } from '../navigation';
 import { InstructionsEditor } from './InstructionsList';
 import { KnowledgeSection } from './KnowledgeSection';
+import { SlackChannels } from './SlackChannels';
 import type { InstructionOp } from './api';
 import a from './Assistant.module.css';
 import g from './Agents.module.css';
@@ -288,6 +289,14 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
                 Its teams find it picked for them. The project's editors and admins can use every assistant, to try it first.
               </p>
             </dd>
+            {canManage && row && (
+              <>
+                <dt className={g.label}>Slack channels</dt>
+                <dd className={g.value}>
+                  <SlackChannels projectId={projectId} agentId={row.id} />
+                </dd>
+              </>
+            )}
           </dl>
           {canManage && (
             <div className={g.formFoot}>

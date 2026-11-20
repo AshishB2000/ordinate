@@ -1,0 +1,163 @@
+// Slack's RPC channels (contracts in src/api/slack.ts): the admin's setup, the member's own link, the channel picker and
+// an agent's channels. Replies carry has-key flags, ids and names only: a key never leaves the secrets store.
+
+import { ipcMain } from '../../ipc/bus';
+import { readAgent } from '../../ai/agents';
+import { ctx } from '../context';
+import { authTest, botChannels, SlackApiError } from './client';
+import * as store from './db';
+import { manifestFor, serverOrigin } from './manifest';
+import { mayAsk } from './ask';
+import { rankOn } from '../authz/caller';
+import * as projects from '../../app/projects';
+import * as say from '../slackMessages';
+import { appPool } from '../app';
+import { wake } from './wake';
+
+const noDb = () => ({ ok: false as const, error: say.needsDb() });
+const view = async (i: store.Install) => ({
+  teamId: i.teamId, teamName: i.teamName, mode: i.mode, enabled: i.enabled, allowGuests: i.allowGuests, allowShareOverride: i.allowShareOverride, botUserId: i.botUserId, clientId: i.clientId,
+  hasBotToken: !!(await store.getSecret(i.orgId, 'botToken')), hasSigningSecret: !!(await store.getSecret(i.orgId, 'signingSecret')),
+  hasClientSecret: !!(await store.getSecret(i.orgId, 'clientSecret')), hasAppToken: !!(await store.getSecret(i.orgId, 'appToken')),
+});
+
+export function register(): void {
+  ipcMain.handle('slack:status', async () => {
+    if (!store.dbOrNull()) return noDb();
+    const install = await store.installByOrg(ctx().org.id);
+    const manifests = { events: manifestFor('events'), socket: manifestFor('socket') };
+    return {
+      ok: true, canSave: store.canStoreSecrets(), publicUrl: serverOrigin(), install: install ? await view(install) : null,
+      linked: install ? (await store.allLinks(ctx().org.id)).length : 0,
+      manifest: { events: manifests.events && JSON.stringify(manifests.events, null, 2), socket: JSON.stringify(manifests.socket, null, 2) },
+    };
+  });
+
+  ipcMain.handle('slack:install', async (_e, p: { botToken: string; signingSecret?: string; clientId?: string; clientSecret?: string; appToken?: string; mode: 'events' | 'socket' }) => {
+    if (!store.dbOrNull()) return noDb();
+    if (!store.canStoreSecrets()) return { ok: false, error: say.needsMasterKey() };
+    const org = ctx().org.id;
+    const had = await store.installByOrg(org);
+    const signing = p.signingSecret || (await store.getSecret(org, 'signingSecret'));
+    const appToken = p.appToken || (await store.getSecret(org, 'appToken'));
+    if (p.mode === 'events' && !signing) return { ok: false, error: say.needSigningSecret() };
+    if (p.mode === 'socket' && !appToken) return { ok: false, error: say.needAppToken() };
+    if (p.mode === 'events' && !serverOrigin()) return { ok: false, error: say.cannotBeReached() };
+    let who;
+    try {
+      who = await authTest(p.botToken);
+    } catch (err) {
+      return { ok: false, error: err instanceof SlackApiError ? say.badBotToken() : say.slackUnreachable() };
+    }
+    const done = await store.saveInstall({
+      teamId: who.teamId, orgId: org, teamName: who.teamName, enterpriseId: who.enterpriseId, appId: who.appId, botUserId: who.botUserId,
+      clientId: p.clientId ?? had?.clientId ?? '', mode: p.mode,
+    });
+    if (done === 'taken') return { ok: false, error: say.workspaceTaken() };
+    await store.putSecret(org, 'botToken', p.botToken);
+    if (p.signingSecret) await store.putSecret(org, 'signingSecret', p.signingSecret);
+    if (p.clientSecret) await store.putSecret(org, 'clientSecret', p.clientSecret);
+    if (p.appToken) await store.putSecret(org, 'appToken', p.appToken);
+    wake();
+    return { ok: true, install: await view((await store.installByOrg(org)) as store.Install) };
+  });
+
+  ipcMain.handle('slack:uninstall', async () => {
+    if (!store.dbOrNull()) return noDb();
+    const org = ctx().org.id;
+    const i = await store.installByOrg(org);
+    if (i) await store.wipeTeam(org, i.teamId);
+    await store.dropSecrets(org);
+    return { ok: true };
+  });
+
+  ipcMain.handle('slack:settings', async (_e, p: { mode?: 'events' | 'socket'; allowGuests?: boolean; allowShareOverride?: boolean; enabled?: boolean }) => {
+    if (!store.dbOrNull()) return noDb();
+    const org = ctx().org.id;
+    if (!(await store.installByOrg(org))) return { ok: false, error: say.connectFirst() };
+    if (p.mode === 'socket' && !(await store.getSecret(org, 'appToken'))) return { ok: false, error: say.saveAppTokenFirst() };
+    if (p.mode === 'events' && !serverOrigin()) return { ok: false, error: say.cannotBeReachedStay() };
+    await store.setSettings(org, p);
+    return { ok: true, install: await view((await store.installByOrg(org)) as store.Install) };
+  });
+
+  ipcMain.handle('slack:links', async () => (store.dbOrNull() ? { ok: true, links: await store.allLinks(ctx().org.id) } : noDb()));
+
+  ipcMain.handle('slack:myLink', async () => {
+    if (!store.dbOrNull()) return { ok: true, available: false, links: [] };
+    const { org, user } = ctx();
+    const install = await store.installByOrg(org.id);
+    return { ok: true, available: !!install?.enabled, teamName: install?.teamName ?? '', links: await store.myLinks(org.id, user.email) };
+  });
+
+  ipcMain.handle('slack:unlink', async () => {
+    if (!store.dbOrNull()) return noDb();
+    const { org, user } = ctx();
+    return { ok: true, removed: await store.deleteLinksOf(org.id, user.email) };
+  });
+
+  ipcMain.handle('slack:openQuestion', async (_e, { id }: { id: string }) => {
+    if (!store.dbOrNull()) return noDb();
+    const { org, user } = ctx();
+    const q = await store.questionById(org.id, id);
+    const missing = { ok: false, error: say.questionGone() };
+    if (!q || q.kind !== 'ask') return missing;
+    const asker = await store.linkedEmail(org.id, q.teamId, q.slackUserId);
+    const mine = asker === user.email;
+    const pool = appPool();
+    const projectId = q.projectId;
+    if (!projectId || !pool || !(await mayAsk(pool, ctx(), projectId))) return missing;
+    // The asker lands on their conversation. Anyone else gets the words of a CHANNEL question to ask again as themselves
+    // (a direct message stays private to its asker).
+    if (mine) return { ok: true, mine: true, projectId, threadId: q.threadId, question: q.text };
+    return q.channelType === 'channel' ? { ok: true, mine: false, projectId, threadId: null, question: q.text } : missing;
+  });
+
+  ipcMain.handle('slack:channels', async (_e, { projectId }: { projectId: string }) => {
+    if (!store.dbOrNull()) return noDb();
+    const org = ctx().org.id;
+    const install = await store.installByOrg(org);
+    const token = install?.enabled ? await store.getSecret(org, 'botToken') : null;
+    if (!install || !token) return { ok: true, connected: false, channels: [] };
+    try {
+      const list = [];
+      for (const c of await botChannels(token)) {
+        const ca = await store.channelAgent(install.teamId, c.id);
+        const held = ca && ca.orgId === org ? ca : null;
+        // Another project's agent and project ids are not this project admin's to see: only that the channel is in use.
+        list.push(held && held.projectId !== projectId
+          ? { ...c, agentId: null, projectId: null, usedElsewhere: true }
+          : { ...c, agentId: held?.agentId ?? null, projectId: held?.projectId ?? null, usedElsewhere: false });
+      }
+      return { ok: true, connected: true, channels: list };
+    } catch {
+      return { ok: false, error: say.channelsUnread() };
+    }
+  });
+
+  ipcMain.handle('agent:slackChannels', async (_e, { projectId, agentId, channels }: { projectId: string; agentId: string; channels?: Array<{ id: string }> }) => {
+    if (!store.dbOrNull()) return noDb();
+    const org = ctx().org.id;
+    if (!(await readAgent(projectId, agentId))) return { ok: false, error: say.agentGone() };
+    const install = await store.installByOrg(org);
+    if (channels !== undefined) {
+      const token = install?.enabled ? await store.getSecret(org, 'botToken') : null;
+      if (!install || !token) return { ok: false, error: say.notConnectedAdmin() };
+      let inBot;
+      try {
+        inBot = new Map((await botChannels(token)).map((c) => [c.id, c.name] as const));
+      } catch {
+        return { ok: false, error: say.channelsUnread() };
+      }
+      const wanted = [...new Set(channels.map((c) => c.id))];
+      if (wanted.some((id) => !inBot.has(id))) return { ok: false, error: say.inviteFirst() };
+      // One agent per channel — and a channel another PROJECT holds is moved only by an admin of that project (or an org admin).
+      for (const id of wanted) {
+        const held = await store.channelAgent(install.teamId, id);
+        if (held && held.orgId === org && held.projectId !== projectId && (await projects.getProject(held.projectId)) && (await rankOn(held.projectId)) < 3) return { ok: false, error: say.heldByAnotherProject() };
+      }
+      await store.setAgentChannels(org, install.teamId, projectId, agentId, wanted.map((id) => ({ id, name: inBot.get(id) as string })));
+    }
+    return { ok: true, connected: !!install?.enabled, channels: await store.channelsOfAgent(org, projectId, agentId) };
+  });
+}
