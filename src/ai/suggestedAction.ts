@@ -198,7 +198,7 @@ const ANSWER_CALC =
   'the date to a single year); index (the first period is 100). Write {"column":"<column>","aggregation":"sum","calc":"<kind>"}, ' +
   'or "calc":{"kind":"moving_avg","window":3}. Every kind but pct_of_total, the ranks and percentile needs a date category; a ' +
   'calc never goes with "top"; "along":"down" works it out down the split instead of along the category. ';
-const ANSWER_SPEC =
+export const ANSWER_SPEC =
   'Use "answer" when the question can be answered with ONE chart of the data in the FACTS ' +
   '("revenue by region last quarter", "top 5 products by profit", "how did West do vs East"). ' +
   'For "answer" ONLY, the line carries a spec, all on the same single line:\n' +

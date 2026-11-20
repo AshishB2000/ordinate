@@ -60,7 +60,7 @@ export async function shownBy(projectId: string, history: readonly copilot.Copil
 
 // The per-user budget the RPC layer applies (RATE_LIMIT_RPC_PER_MINUTE), per pod like its buckets.
 const recent = new Map<string, number[]>();
-function underBudget(org: string, email: string): boolean {
+export function underBudget(org: string, email: string): boolean {
   const key = `${org}\u0000${email}`;
   const now = Date.now();
   const mine = (recent.get(key) ?? []).filter((t) => now - t < 60_000);
@@ -72,6 +72,11 @@ function underBudget(org: string, email: string): boolean {
   recent.set(key, mine);
   if (recent.size > 5000) for (const k of recent.keys()) { recent.delete(k); break; }
   return true;
+}
+
+/** Test hook: every person's count starts again. */
+export function _clearBudgetForTest(): void {
+  recent.clear();
 }
 
 /** Does `who` pass the RPC layer's check for `copilot:ask` on `projectId`? Inside `who`'s request context. */

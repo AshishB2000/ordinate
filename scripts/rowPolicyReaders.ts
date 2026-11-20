@@ -207,6 +207,9 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'slack:myLink': 'META', // the caller's own Slack link: ids and a workspace name
   'slack:openQuestion': 'META', // where a Slack question lives (ids) and, for another member, the question's own words
   'slack:unlink': 'META', // removes the caller's own link; returns a count
+  'research:card': 'DOOR', // a step's chart, drawn now for its starter through answer:card's handler, the SQL gate (storage net) or driversVizData: each takes the caller's row lock
+  'research:get': 'EXPLICIT', // the starter's own run: specs, statuses, reasons and the report words written under THEIR access; hidden once a step's dataset is closed to them (shows()'s rule); never a step's facts
+  'research:list': 'META', // the caller's own runs: ids, state, the question they typed
   'tokens:list': 'META',
   'tokens:revoke': 'META',
   'topic:get': 'META', // ids and names of a project's datasets, fields, metrics and terms: never a value, the same reply for every caller

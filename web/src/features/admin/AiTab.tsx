@@ -20,6 +20,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { PROVIDER_LABEL } from '../assistant/api';
 import { AiFingerprintCard } from './AiFingerprintCard';
+import { ResearchLimitsCard } from './ResearchLimitsCard';
 import { AiModelsDialog } from './AiModelsDialog';
 import { aiWhy, useAiAdmin, useAiWrite, type AiAdmin, type AiModelRow, type AiProviderState } from './api';
 import s from './Admin.module.css';
@@ -289,6 +290,7 @@ export function AiTab() {
         </div>
         <ModelsCard data={ai.data} />
         <AiFingerprintCard data={ai.data} />
+        <ResearchLimitsCard />
       </>
     );
   }

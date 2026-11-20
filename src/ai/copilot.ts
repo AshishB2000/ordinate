@@ -26,6 +26,7 @@
 // threads live in the ONE copilot.json, so adding threads adds no new path
 // component and needs no second guard.
 
+import { sanitizeResearch, type ResearchRef } from './researchTurn';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -96,6 +97,8 @@ export interface CopilotTurn {
   factsFrom?: string[];
   /** The dashboards it was asked about (an ask on a dashboard page, an alert on one): closed to a caller, it hides as `factsFrom` does. SERVER ONLY. */
   dashboardsFrom?: string[];
+  /** A deep-research run's turn (./researchTurn): the run id. Its text is a fixed sentence; the card reads the rest from research:get. */
+  research?: ResearchRef;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -148,6 +151,7 @@ export interface NewCopilotTurn {
   link?: AnswerLink;
   factsFrom?: string[];
   dashboardsFrom?: string[];
+  research?: ResearchRef;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -298,6 +302,8 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     if (factsFrom) turn.factsFrom = factsFrom;
     const dashboardsFrom = role === 'assistant' ? sanitizeIds(t.dashboardsFrom) : undefined;
     if (dashboardsFrom) turn.dashboardsFrom = dashboardsFrom;
+    const research = role === 'assistant' ? sanitizeResearch(t.research) : undefined;
+    if (research) turn.research = research;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -611,6 +617,8 @@ export async function appendTurn(
   if (factsFrom) record.factsFrom = factsFrom;
   const dashboardsFrom = role === 'assistant' ? sanitizeIds(turn && turn.dashboardsFrom) : undefined;
   if (dashboardsFrom) record.dashboardsFrom = dashboardsFrom;
+  const research = role === 'assistant' ? sanitizeResearch(turn && turn.research) : undefined;
+  if (research) record.research = research;
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {

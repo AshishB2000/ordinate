@@ -26,6 +26,7 @@ import { Composer } from './Composer';
 import { modelLabel } from './DockParts';
 import { pickDockProject } from './dockState';
 import { PlanCard } from './PlanCard';
+import { ResearchHelp, ResearchToggle } from './research/ResearchToggle';
 import { ThreadActionDialog } from './ThreadActions';
 import { Transcript } from './Transcript';
 import type { Conversation } from './useConversation';
@@ -177,6 +178,8 @@ function ConversationComposer({ c, layout, className }: { c: Conversation; layou
       status={c.status.data}
       fixedModel={c.fixedModel && c.agent ? { model: c.fixedModel, by: c.agent.name } : undefined}
       agentPick={<AgentPick c={c} />}
+      research={<ResearchToggle r={c.research} />}
+      researchHelp={<ResearchHelp r={c.research} />}
       context={c.about}
       pinned={c.pinned !== null}
       onPin={(p) => c.setPin(p && pid ? { projectId: pid, context: p } : null)}

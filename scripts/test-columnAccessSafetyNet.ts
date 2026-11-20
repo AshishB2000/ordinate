@@ -346,13 +346,22 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       const t = (await copilotStore.createThread(P))!;
       return { projectId: P, threadId: t.id, turnId: (await copilotStore.appendTurn(P, { role: 'assistant', text: '', answer: spec(column) as never }, t.id))!.at(-1)!.id };
     });
+    /** A deep-research run of the caller's own (a finished one with one answer step on `column`): what `research:card` names. */
+    const runOn = async (who: string, column: string) => {
+      const id = require('crypto').randomUUID();
+      await W.pool.query(`INSERT INTO research_runs (org_id, project_id, id, started_by, thread_id, question, state, steps) VALUES ('acme', $1, $2, $3, $4, 'q', 'done', $5::jsonb)`,
+        [P, id, `${who}@acme.test`, require('crypto').randomUUID(), JSON.stringify([{ n: 1, kind: 'answer', title: 't', status: 'done', spec: spec(column) }])]);
+      return { projectId: P, runId: id, step: 1 };
+    };
     /** A channel whose question is the caller's own record: each caller's pair. */
     const OWN: Record<string, Record<string, [unknown, unknown]>> = {
       'answer:refresh': { east: [await turnOn('east', 'ssn'), await turnOn('east', 'dept')], ed: [await turnOn('ed', 'ssn'), await turnOn('ed', 'dept')] },
+      'research:card': { east: [await runOn('east', 'ssn'), await runOn('east', 'dept')], ed: [await runOn('ed', 'ssn'), await runOn('ed', 'dept')] },
     };
     /** Each GATE channel: a question naming ssn, and the same question on dept. */
     const PAIRS: Record<string, [unknown, unknown]> = {
       'answer:refresh': OWN['answer:refresh'].east,
+      'research:card': OWN['research:card'].east,
       'visual:data': [viz(COUNT_BY('ssn')), viz(COUNT_BY('dept'))],
       'visual:preview': [viz(COUNT_BY('ssn')), viz(COUNT_BY('dept'))],
       'visual:dataBatch': [{ projectId: P, items: [{ datasetId: staff, encoding: COUNT_BY('ssn') }] }, { projectId: P, items: [{ datasetId: staff, encoding: COUNT_BY('dept') }] }],
@@ -391,7 +400,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     };
     const noFigure = (r: H.Reply, ch = ''): boolean => r.status === 409 || r.text.includes('row_policy') || r.text.includes(rowMessages.rowHiddenMessage()) || (r.status === 200 && !!EMPTY[ch]?.(r.body));
     /** What two callers' answers are compared on: an answer card's chips offer no hidden column by design; a re-run's thread is the caller's own. */
-    const FIGURE: Record<string, (b: any) => unknown> = { 'answer:card': (b) => b?.data, 'answer:rerun': (b) => b?.turns?.slice(-1).map(({ card, ...t }: any) => ({ ...t, data: card?.data })), 'answer:refresh': (b) => b?.data }; // any: as above; the kept card's chips are the caller's, as answer:card's
+    const FIGURE: Record<string, (b: any) => unknown> = { 'answer:card': (b) => b?.data, 'answer:rerun': (b) => b?.turns?.slice(-1).map(({ card, ...t }: any) => ({ ...t, data: card?.data })), 'answer:refresh': (b) => b?.data, 'research:card': (b) => b?.data }; // any: as above; the kept card's chips are the caller's, as answer:card's
     for (const [ch, [naming, other]] of Object.entries(PAIRS)) {
       const as = (who: string, i: 0 | 1): unknown => (OWN[ch]?.[who] ?? [naming, other])[i];
       const refused = await W.call('east', ch, as('east', 0));
