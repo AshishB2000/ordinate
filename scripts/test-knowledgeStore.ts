@@ -12,7 +12,7 @@
 //       project takes all of its; the sweep (a `missing_since` column, a day's grace, an injected clock) removes a gone
 //       project's or agent's documents only when DEFINITELY missing: a corrupt record or a failed lookup deletes nothing,
 //       found-again clears the stamp — NEGATIVE CONTROL: a live project's and a trashed agent's survive
-//   (f) the migration: 0042 applied on a database that never had 0041
+//   (f) the migration: 0042 applied, in order after 0041 (Slack)
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-knowledgeStore.js
 
@@ -192,5 +192,5 @@ withServer('knowledge-store', {}, async (b) => {
 
   // (f) the migration
   const mig = (await b.pool.query('SELECT version FROM schema_migrations WHERE version >= 40 ORDER BY version')).rows.map((r) => r.version);
-  ok('0042 applied with no 0041 on this database (the runner accepts the gap)', mig.includes(42) && !mig.includes(41), JSON.stringify(mig));
+  ok('0042 applied, after 0041', mig.includes(41) && mig.includes(42) && mig.indexOf(41) < mig.indexOf(42), JSON.stringify(mig));
 }).catch((err) => { console.error(err); process.exitCode = 1; }).finally(finish);
