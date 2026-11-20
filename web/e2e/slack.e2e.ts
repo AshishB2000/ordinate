@@ -138,6 +138,12 @@ if (!dbUrl) {
       await field.screenshot({ path: path.join(SCREENS, `slack-agent-${theme}.png`) });
     }
 
+    // The server's own log never holds the Connect token, the OIDC code or a key.
+    const logged = server.log();
+    const stateToken = new URL(connect).searchParams.get('s') ?? '';
+    for (const secret of [stateToken, BOT_TOKEN, SIGNING, CLIENT_SECRET]) assert.equal(logged.includes(secret), false, 'a secret reached the server log');
+    assert.ok(stateToken.length > 20);
+
     // ── Disconnect ──────────────────────────────────────────────────────
     await page.goto('/settings');
     await settled(page);

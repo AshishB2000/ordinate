@@ -101,3 +101,67 @@ export function shared(): string {
 export function shareRefused(): string {
   return t('slackMessages.i_cannot_share_this_to_the');
 }
+
+export function needsDb(): string {
+  return t('slackMessages.slack_needs_postgres_database_url');
+}
+
+export function needsMasterKey(): string {
+  return t('slackMessages.saving_slack_keys_needs_ordinate_master');
+}
+
+export function needSigningSecret(): string {
+  return t('slackMessages.paste_the_app_s_signing_secret');
+}
+
+export function needAppToken(): string {
+  return t('slackMessages.socket_mode_needs_the_app_level');
+}
+
+export function cannotBeReached(): string {
+  return t('slackMessages.slack_cannot_reach_this_server_set');
+}
+
+export function badBotToken(): string {
+  return t('slackMessages.slack_did_not_accept_that_bot');
+}
+
+export function slackUnreachable(): string {
+  return t('slackMessages.could_not_reach_slack');
+}
+
+export function workspaceTaken(): string {
+  return t('slackMessages.that_slack_workspace_is_connected_to');
+}
+
+export function connectFirst(): string {
+  return t('slackMessages.connect_slack_first');
+}
+
+export function saveAppTokenFirst(): string {
+  return t('slackMessages.socket_mode_needs_the_app_level_2');
+}
+
+export function cannotBeReachedStay(): string {
+  return t('slackMessages.slack_cannot_reach_this_server_set_2');
+}
+
+export function questionGone(): string {
+  return t('slackMessages.that_slack_question_is_no_longer');
+}
+
+export function channelsUnread(): string {
+  return t('slackMessages.could_not_read_the_channels_from');
+}
+
+export function agentGone(): string {
+  return t('slackMessages.that_agent_is_no_longer_there');
+}
+
+export function notConnectedAdmin(): string {
+  return t('slackMessages.slack_is_not_connected_an_org');
+}
+
+export function inviteFirst(): string {
+  return t('slackMessages.invite_ordinate_to_a_channel_in');
+}

@@ -2,7 +2,7 @@
 // app.ts (`useSlackDb`); without a database there is no Slack. Every statement names its org.
 
 import { randomBytes } from 'crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { SecretStore } from '../secrets/store';
 import { inOrg } from '../db/inOrg';
 
@@ -124,17 +124,31 @@ export async function markUninstalled(team: string): Promise<void> {
 
 // ── events and questions ─────────────────────────────────────────────────────
 
-/** True the first time an event id is seen; a Slack retry gets false and is acknowledged as a no-op. */
-export async function recordEvent(eventId: string): Promise<boolean> {
-  return !!(await db().query('INSERT INTO slack_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING', [eventId])).rowCount;
-}
-
 export interface NewQuestion {
   id: string; orgId: string; teamId: string; kind?: 'ask' | 'share'; channelId: string; channelType: 'channel' | 'im'; threadTs: string | null; eventTs: string | null;
   slackUserId: string; text: string; ofQuestion?: string | null;
 }
-export async function enqueue(q: NewQuestion): Promise<void> {
-  await db().query(
+export async function enqueue(q: NewQuestion, eventId?: string): Promise<boolean> {
+  // With an event id: the event and its question in ONE transaction, so a failed insert leaves no "seen" mark and Slack's retry is queued.
+  const c = await db().connect();
+  try {
+    await c.query('BEGIN');
+    if (eventId && !(await c.query('INSERT INTO slack_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING', [eventId])).rowCount) {
+      await c.query('ROLLBACK');
+      return false;
+    }
+    await insertQuestion(c, q);
+    await c.query('COMMIT');
+    return true;
+  } catch (err) {
+    await c.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    c.release();
+  }
+}
+async function insertQuestion(c: PoolClient, q: NewQuestion): Promise<void> {
+  await c.query(
     `INSERT INTO slack_questions (id, org_id, team_id, kind, channel_id, channel_type, thread_ts, event_ts, slack_user_id, text, of_question)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [q.id, q.orgId, q.teamId, q.kind ?? 'ask', q.channelId, q.channelType, q.threadTs, q.eventTs, q.slackUserId, q.text, q.ofQuestion ?? null],
@@ -250,7 +264,7 @@ export async function newState(org: string, team: string, slackUser: string, que
 /** /api/slack/connect (a signed-in session): the Ordinate user goes on the state row. Only an unused, unexpired, unbound-or-same row. */
 export async function bindState(token: string, org: string, email: string): Promise<LinkState | null> {
   return (await db().query<LinkState>(
-    `UPDATE slack_link_states SET user_email = $3 WHERE token = $1 AND org_id = $2 AND used_at IS NULL AND expires_at > now()
+    `UPDATE slack_link_states SET user_email = $3 WHERE token = $1 AND org_id = $2 AND used_at IS NULL AND expires_at > now() AND (user_email IS NULL OR user_email = $3)
        RETURNING token, org_id AS "orgId", team_id AS "teamId", slack_user_id AS "slackUserId", user_email AS "userEmail", question_id AS "questionId", nonce`,
     [token, org, email])).rows[0] ?? null;
 }

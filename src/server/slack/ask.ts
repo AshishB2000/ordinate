@@ -65,12 +65,16 @@ export async function ask(pool: Pool, who: Identity, requestId: string, question
   const contract = contractFor('copilot:ask');
   const handler = handlers.get('copilot:ask');
   if (!contract || !handler) return { ok: false, reason: 'failed' };
-  const parsed = contract.input.safeParse({
-    projectId: target.projectId, context: { kind: '' }, question, ...(target.threadId ? { threadId: target.threadId } : {}), ...(target.agentId ? { agentId: target.agentId } : {}),
-  });
-  if (!parsed.success) return { ok: false, reason: 'failed' };
   return runInContext(who, requestId, async (): Promise<Asked> => {
     if (!(await mayAsk(pool, who, target.projectId))) return { ok: false, reason: 'denied' };
+    // Always a conversation named here: left to the handler, a first question would land in the asker's LATEST conversation
+    // (a web one, with ITS agent). A new one is made for the asker with the channel's agent; a Slack thread's own is continued.
+    const into = target.threadId ?? (await copilot.createThread(target.projectId, target.agentId))?.id;
+    if (!into) return { ok: false, reason: 'failed' };
+    const parsed = contract.input.safeParse({
+      projectId: target.projectId, context: { kind: '' }, question, threadId: into, ...(target.agentId ? { agentId: target.agentId } : {}),
+    });
+    if (!parsed.success) return { ok: false, reason: 'failed' };
     const res = (await handler({}, parsed.data)) as { ok?: boolean; notReady?: boolean; threadId?: string | null; turns?: Array<{ role: string; card?: Card }>; agent?: { name?: string } | null };
     if (!res || res.ok !== true) return { ok: false, reason: res?.notReady ? 'not_ready' : 'failed' };
     const threadId = res.threadId;

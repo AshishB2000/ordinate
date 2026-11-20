@@ -19,7 +19,7 @@ import { columnsRuled, policyClosed } from '../../data/rowAccess';
 import { accessPrint } from '../../ipc/answerSnapshots';
 import { accessFrom, levelIn, placementOf, type FolderRow } from '../authz/folders';
 import { levelsOf } from '../authz/folderGate';
-import { ctx } from '../context';
+import { ctx, type Identity } from '../context';
 import { inOrg, orgDb } from '../db/inOrg';
 import { asMember } from '../requests/where';
 import { channelInfo, channelMembers, userInfo } from './client';
@@ -58,7 +58,7 @@ export async function restricted(s: Shown): Promise<boolean> {
 }
 
 /** What one person sees of the answer's data, as themselves: null when they may not read it at all. */
-async function viewOf(pool: Pool, who: ReturnType<typeof ctx>, s: Shown): Promise<string | null> {
+export async function viewOf(pool: Pool, who: Identity, s: Shown): Promise<string | null> {
   if (!(await mayAsk(pool, who, s.projectId))) return null;
   const datasets = await levelsOf(s.projectId, 'dataset');
   if (datasets && s.datasetIds.some((id) => datasets(id) === 'none')) return null;

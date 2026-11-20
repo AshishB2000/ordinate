@@ -18,7 +18,7 @@ import { appLink } from '../publicUrl';
 import * as say from '../slackMessages';
 import { ask, directTarget, type Asked, type Target } from './ask';
 import { chartBlocks } from './charts';
-import { check, type Shown, type Verdict } from './check';
+import { check, viewOf, type Shown, type Verdict } from './check';
 import { openDm, postEphemeral, postMessage, updateMessage } from './client';
 import * as store from './db';
 import { connectUrl, mayLink } from './linking';
@@ -26,7 +26,7 @@ import { answerMessage, connectPrompt, note, type Message } from './render';
 import { shape } from './shape';
 
 type Ok = Extract<Asked, { ok: true }>;
-export interface Kept extends Omit<Ok, 'ok'> { datasetNames: string[] }
+export interface Kept extends Omit<Ok, 'ok'> { datasetNames: string[]; /** The asker's access print when it was asked (./check.ts viewOf). */ view: string | null }
 
 const REFUSALS: Record<string, () => string> = { denied: say.noAccess, not_ready: say.notReady, failed: say.failed, no_project: say.noProject };
 
@@ -92,10 +92,10 @@ export async function processQuestion(pool: Pool, q: store.Question, owner: stri
 
     if (!dm && q.threadTs && !target.threadId) await store.saveThread(q.orgId, q.teamId, q.channelId, q.threadTs, { projectId: res.projectId, threadId: res.threadId, askerEmail: email });
     const names = await Promise.all(res.datasetIds.map(async (id) => (await datasets.getDatasetMeta(res.projectId, id))?.name ?? '')); // inside the asker's context
-    const kept: Kept = { ...res, datasetNames: names.filter(Boolean) };
+    const shown: Shown = { projectId: res.projectId, datasetIds: res.datasetIds, dashboardIds: res.dashboardIds };
+    const kept: Kept = { ...res, datasetNames: names.filter(Boolean), view: await viewOf(pool, who, shown) };
     await store.saveAnswer(q.id, owner, kept);
 
-    const shown: Shown = { projectId: res.projectId, datasetIds: res.datasetIds, dashboardIds: res.dashboardIds };
     const verdict = await check(pool, inst, token, q.channelId, q.slackUserId, shown, { dm });
     await deliver(pool, inst, token, q, owner, placeholder, kept, verdict);
     await audit(pool, { org: q.orgId, actor: email, action: 'rpc', channel: 'slack:ask', projectId: res.projectId, targets: [q.id, ...res.datasetIds], outcome: 'ok', requestId: `slack:${q.id}` }).catch(() => undefined);
@@ -136,14 +136,18 @@ async function shareJob(pool: Pool, inst: store.Install, token: string, q: store
     let verdict = await check(pool, inst, token, orig.channelId, q.slackUserId, shown, { dm: orig.channelType === 'im' });
     if (!verdict.post && verdict.why !== 'external' && inst.allowShareOverride) verdict = await check(pool, inst, token, orig.channelId, q.slackUserId, shown, { override: true });
     const dm = await openDm(token, q.slackUserId);
-    if (!verdict.post || !orig.placeholderTs) {
+    // The kept card was computed under the asker's access of THEN: if it has narrowed since, it is not posted (the app withholds a kept card the same way).
+    const same = (await viewOf(pool, who, shown)) === kept.view;
+    const at = orig.placeholderTs;
+    const post = same && verdict.post && !!at;
+    if (!post || !at) {
       await postMessage(token, dm, note(say.shareRefused()));
     } else {
-      await updateMessage(token, orig.channelId, orig.placeholderTs, await build(originalQ, kept, {}));
+      await updateMessage(token, orig.channelId, at, await build(originalQ, kept, {}));
       await postMessage(token, dm, note(say.shared()));
     }
-    await audit(pool, { org: q.orgId, actor: email, action: 'rpc', channel: 'slack:share', projectId: kept.projectId, targets: [originalQ.id], outcome: verdict.post ? 'ok' : 'denied', requestId: `slack:${q.id}` }).catch(() => undefined);
-    await store.finish(q.id, owner, 'done', verdict.post ? 'shared' : 'share_refused');
+    await audit(pool, { org: q.orgId, actor: email, action: 'rpc', channel: 'slack:share', projectId: kept.projectId, targets: [originalQ.id], outcome: post ? 'ok' : 'denied', requestId: `slack:${q.id}` }).catch(() => undefined);
+    await store.finish(q.id, owner, 'done', post ? 'shared' : 'share_refused');
   });
 }
 

@@ -4,6 +4,7 @@
 // with a fixed caption.
 
 import { applyToChart, applyToTable, sensitiveColumns } from '../../app/sharePolicy';
+import { getPolicy } from '../../app/privacyStore';
 import { specEncoding } from '../../ai/answerJoin';
 import type { ParsedColumn } from '../../data/parse';
 import type { Card } from './ask';
@@ -31,7 +32,13 @@ async function shapeSql(projectId: string, card: Card, datasetIds: readonly stri
   let changed = false;
   for (const id of datasetIds) {
     const marked = await sensitiveColumns(projectId, id);
-    if (![...marked.keys()].some((m) => columns.some((c) => c.name === m))) continue;
+    if (![...marked.keys()].some((m) => columns.some((c) => c.name === m))) {
+      // Not named in the result: but the statement may have RENAMED it (`customer AS c`). A marked column the statement names and
+      // the result does not is withheld whole: the table cannot be told apart from a masked one, and fails closed.
+      const sql = typeof card.sql === 'string' ? card.sql.toLowerCase() : '';
+      if (sql && [...marked.keys()].some((m) => new RegExp(`\\b${m.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(sql)) && (await policyActs(projectId))) return { card: null, changed: true };
+      continue;
+    }
     const t = await applyToTable(projectId, id, { columns, rows }, 'slack');
     columns = t.columns;
     rows = t.rows as Cell[][];
@@ -39,3 +46,6 @@ async function shapeSql(projectId: string, card: Card, datasetIds: readonly stri
   }
   return changed ? { card: { ...card, columns, rows, chart: undefined }, changed } : { card, changed };
 }
+
+/** Does the project's `slack` share path act on marked columns at all (anything but `include`)? */
+const policyActs = async (projectId: string): Promise<boolean> => (await getPolicy(projectId)).slack !== 'include';

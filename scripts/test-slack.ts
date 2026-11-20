@@ -120,6 +120,15 @@ const sharePolicy: typeof import('../src/app/privacyStore') = require('../src/ap
     ok('Linking: an id_token for a different Slack user than the state\'s is refused ("another Slack account")', /slack=mismatch/.test(String(mismatch.headers.location)) && !(await store.linkedEmail('acme', stub.team.id, 'U_WEST')));
     const replay = await W.app.inject({ method: 'GET', url: back1.pathname + back1.search });
     ok('Linking: a used state is refused', /slack=state/.test(String(replay.headers.location)));
+    // A state is bound to ONE person: a second signed-in user cannot take it over (they could keep the authorize URL and its nonce).
+    await S.deliver(S.dm('west', 'bind test', { id: 'EvWB' }));
+    const tokBind = connectTokenOf();
+    const bound = await asWest(`/api/slack/connect?s=${tokBind}`);
+    const second = await W.app.inject({ method: 'GET', url: `/api/slack/connect?s=${tokBind}`, headers: { 'x-forwarded-email': 'east@acme.test' }, remoteAddress: '127.0.0.1' });
+    ok('Linking: a state bound to one person cannot be rebound to another (negative control: the first binding went to Slack)',
+      String(bound.headers.location).startsWith(stub.origin) && /slack=state/.test(String(second.headers.location)), `${bound.headers.location} | ${second.headers.location}`);
+    const again2 = await asWest(`/api/slack/connect?s=${tokBind}`);
+    ok('Linking: the same person may open their own Connect button again', String(again2.headers.location).startsWith(stub.origin));
     // Expired.
     await S.deliver(S.dm('west', 'second try', { id: 'EvW2' }));
     const tokExp = connectTokenOf();
@@ -158,6 +167,16 @@ const sharePolicy: typeof import('../src/app/privacyStore') = require('../src/ap
     await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'include' } });
     await S.deliver(S.dm('boss', 'customers again?', { id: 'EvSP2' }));
     ok('Share policy (negative control): with `include` the same card goes through unmasked', /"c1"/.test(JSON.stringify(S.updated().at(-1))));
+    await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'mask' } });
+    // An alias must not hide a marked column: `customer AS c` is not named in the result, but the statement names it.
+    const aliased = { ...sqlCard, columns: [{ name: 'c', type: 'text' }, { name: 'sales', type: 'number' }], sql: 'SELECT customer AS c, sales FROM Plain' };
+    S.answer = { text: 'Customer c1 bought 5.', datasets: [W.plain], card: aliased };
+    await S.deliver(S.dm('boss', 'customers aliased?', { id: 'EvSP3' }));
+    const al = JSON.stringify(S.updated().at(-1));
+    ok('Share policy: a marked column renamed by the SQL (customer AS c) is withheld, not posted under its alias', !/"c1"|"c2"|bought/.test(al) && al.includes('hidden by the project'), al.slice(0, 400));
+    await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'include' } });
+    await S.deliver(S.dm('boss', 'customers aliased again?', { id: 'EvSP4' }));
+    ok('Share policy (negative control): with `include` the aliased table is posted', /"c1"/.test(JSON.stringify(S.updated().at(-1))));
     await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'mask' } });
     ok('Share policy: `slack` is a share path, default mask', sharePolicy.SHARE_PATHS.includes('slack') && sharePolicy.DEFAULT_POLICY.slack === 'mask');
 

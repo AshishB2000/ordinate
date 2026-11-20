@@ -43,15 +43,14 @@ export async function handleEvent(env: Envelope): Promise<Handled> {
   if (!(ev.type === 'app_mention' || dm)) return 'dropped';
   // Not a person's new message: a bot's (Ordinate's own among them), an edit, a delete, a join.
   if (ev.bot_id || ev.subtype || !ev.user || ev.user === install.botUserId || !ev.channel || !ev.ts || typeof ev.text !== 'string') return 'dropped';
-  if (!(await store.recordEvent(env.event_id))) return 'duplicate';
   const text = plainText(ev.text).slice(0, MAX_QUESTION);
   if (!text) return 'dropped';
-  await store.enqueue({
+  const queued = await store.enqueue({
     id: randomUUID(), orgId: install.orgId, teamId: env.team_id, channelId: ev.channel, channelType: dm ? 'im' : 'channel',
     // A channel answer goes in a thread under the mention; a DM answers in place.
     threadTs: dm ? (ev.thread_ts ?? null) : (ev.thread_ts ?? ev.ts), eventTs: ev.ts, slackUserId: ev.user, text,
-  });
-  return 'queued';
+  }, env.event_id); // the event id and the question are written together: a retry after a failed insert is queued, a repeat after a good one is a no-op
+  return queued ? 'queued' : 'duplicate';
 }
 
 interface Interaction {

@@ -35,7 +35,7 @@ function cut(raw: readonly unknown[]): string[] | null {
 
 /** The block for `card`, or null when it does not fit exactly (the caller posts the table). */
 export function chartBlock(card: Card | null): Record<string, unknown> | null {
-  const kind = card && !('kind' in card && card.kind === 'sql') ? KIND[String(card.chartType ?? '')] : undefined;
+  const kind = card && !('kind' in card && card.kind === 'sql') ? KIND[String(card.chartType ?? (card.spec as { chartType?: unknown } | undefined)?.chartType ?? '')] : undefined;
   const data = card?.data as Data | undefined;
   const title = typeof card?.title === 'string' ? card.title : '';
   if (!kind || !data || !Array.isArray(data.labels) || !Array.isArray(data.series) || !title || title.length > MAX_TITLE) return null;

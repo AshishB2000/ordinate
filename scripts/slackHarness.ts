@@ -50,7 +50,8 @@ export interface SlackWorld {
   close(): Promise<void>;
 }
 
-export async function slackWorld(label: string): Promise<SlackWorld | null> {
+/** `realAsk`: keep the REAL `copilot:ask` handler (a verified question answers with no model) instead of the fake. */
+export async function slackWorld(label: string, o: { realAsk?: boolean } = {}): Promise<SlackWorld | null> {
   const W = await H.world(label);
   if (!W) return null;
   const stub = await startSlackStub();
@@ -100,8 +101,8 @@ export async function slackWorld(label: string): Promise<SlackWorld | null> {
   await W.app.listen({ port: 0, host: '127.0.0.1' });
   const port = (W.app.server.address() as import('net').AddressInfo).port;
 
-  rpc.registry.removeHandler('copilot:ask');
-  rpc.registry.handle('copilot:ask', async (_e: unknown, p: Record<string, any>) => { // any: the contract's input
+  if (!o.realAsk) rpc.registry.removeHandler('copilot:ask');
+  if (!o.realAsk) rpc.registry.handle('copilot:ask', async (_e: unknown, p: Record<string, any>) => { // any: the contract's input
     const email = context.ctx().user.email;
     state.asked.push({ email, payload: p });
     const a = typeof state.answer === 'function' ? state.answer(p, email) : state.answer;

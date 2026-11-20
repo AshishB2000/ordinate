@@ -71,7 +71,7 @@ const noUrl = (m: unknown): string => JSON.stringify(m).replace(/https?:\/\/[^"]
     ok('Thread: the first asker\'s follow-up continues their conversation', S.asked.at(-1)?.payload.threadId === t1?.threadId, JSON.stringify(S.asked.at(-1)));
     await S.link('east');
     await S.deliver(S.mention('east', 'and the east?', { channel: 'CTEAM', ts: '1800000202.000100', thread_ts: '1800000200.000100' }));
-    ok('Thread: another member\'s question in it is their own conversation, run as them', S.asked.at(-1)?.email === 'east@acme.test' && S.asked.at(-1)?.payload.threadId === undefined, JSON.stringify(S.asked.at(-1)));
+    ok('Thread: another member\'s question in it is their own conversation, run as them', S.asked.at(-1)?.email === 'east@acme.test' && !!S.asked.at(-1)?.payload.threadId && S.asked.at(-1)?.payload.threadId !== t1?.threadId, JSON.stringify(S.asked.at(-1)));
 
     // ── outsiders: an externally shared channel never gets figures ────────────
     S.answer = { text: 'Revenue was 4711 across 9 regions.', datasets: [W.plain] };
@@ -144,6 +144,25 @@ const noUrl = (m: unknown): string => JSON.stringify(m).replace(/https?:\/\/[^"]
     await press('ord_share', `${extQ?.id}:share`);
     await sleep(800);
     ok('Share (negative control): the override never applies to a channel shared with another company', !(await S.questions()).some((q) => q.kind === 'share' && q.outcome === 'shared'));
+    await store.setSettings('acme', { allowShareOverride: false });
+
+    // ── Share posts only while the asker's access is what it was ─────────────
+    await W.call('east', 'projects:list');
+    const eastAsked = await b('east', 'CTEAM', '1800000650.000100');
+    ok('Share (setup): east\'s restricted answer went private (others unlinked)', eastAsked?.outcome === 'private:unlinked', JSON.stringify(eastAsked));
+    await store.setSettings('acme', { allowShareOverride: true });
+    await W.pool.query(`DELETE FROM slack_questions WHERE kind = 'share'`);
+    const rules = (values: string[]) => W.call('boss', 'dataset:setRowPolicy', { projectId: W.P, datasetId: W.orders, policy: { column: 'region', rules: [{ teamId: W.team, values }, { userId: W.uid.west, values: ['West'] }] } });
+    const narrowed = await rules(['North']); // east's rows change after the ask
+    ok('Share (setup): the row rule changed', narrowed.body?.ok === true, narrowed.text);
+    await press('ord_share', `${eastAsked?.id}:share`, 'U_EAST');
+    await until(async () => (await S.questions()).some((q) => q.kind === 'share' && q.status === 'done'));
+    ok('Share: an answer computed under access that has since narrowed is not posted, even with the override on', (await S.questions()).find((q) => q.kind === 'share')?.outcome === 'share_refused', JSON.stringify((await S.questions()).find((q) => q.kind === 'share')));
+    await rules(['East']);
+    await W.pool.query(`DELETE FROM slack_questions WHERE kind = 'share'`);
+    await press('ord_share', `${eastAsked?.id}:share`, 'U_EAST');
+    await until(async () => (await S.questions()).some((q) => q.kind === 'share' && q.status === 'done'));
+    ok('Share (negative control): with the access unchanged the same press posts', (await S.questions()).find((q) => q.kind === 'share')?.outcome === 'shared');
     await store.setSettings('acme', { allowShareOverride: false });
 
     // ── feedback is stored with the answer ────────────────────────────────────
