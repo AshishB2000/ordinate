@@ -67,7 +67,7 @@ export async function slackWorld(label: string): Promise<SlackWorld | null> {
     async link(person) { await slackDb.saveLink('acme', stub.team.id, slackId[person], `${person}@acme.test`); },
     mention: (person, text, o = {}) => ({
       type: 'event_callback', team_id: stub.team.id, event_id: o.id ?? `Ev${Math.random().toString(36).slice(2)}`,
-      event: { type: 'app_mention', user: slackId[person], text: `<@${stub.team.botUser}> ${text}`, channel: o.channel ?? 'C_TEAM', ts: o.ts ?? `${1800000000 + Math.floor(Math.random() * 1e6)}.000100`, ...(o.thread_ts ? { thread_ts: o.thread_ts } : {}) },
+      event: { type: 'app_mention', user: slackId[person], text: `<@${stub.team.botUser}> ${text}`, channel: o.channel ?? 'CTEAM', ts: o.ts ?? `${1800000000 + Math.floor(Math.random() * 1e6)}.000100`, ...(o.thread_ts ? { thread_ts: o.thread_ts } : {}) },
     }),
     dm: (person, text, o = {}) => ({
       type: 'event_callback', team_id: stub.team.id, event_id: o.id ?? `Ev${Math.random().toString(36).slice(2)}`,

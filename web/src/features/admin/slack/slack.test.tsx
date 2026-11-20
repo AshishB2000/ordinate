@@ -2,11 +2,23 @@
 // accounts, empty, connected), the member's Slack row on Settings, and an agent's channel picker.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router';
 import { SlackTab } from './SlackTab';
 import { SlackGroup } from '../../settings/SlackGroup';
 import { SlackChannels } from '../../model/assistant/SlackChannels';
 import { mount, serve } from '../../subscriptions/testServer';
+import { useSlackLanding } from '../../assistant/useSlackLanding';
+import { takePendingQuestion } from '../../assistant/dockState';
+
+const select = vi.fn();
+vi.mock('../../projects/current', () => ({ useCurrentProject: () => ({ select }) }));
+
+function Landing() {
+  useSlackLanding();
+  return <p>landed</p>;
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -169,5 +181,23 @@ describe('Agent page → Slack channels', () => {
     serve({ 'slack:channels': { body: { ok: true, connected: true, channels: [] } }, 'agent:slackChannels': { body: { ok: true, connected: true, channels: [] } } });
     mount(<SlackChannels {...props} />);
     expect(await screen.findByText(/Invite @Ordinate/)).toBeTruthy();
+  });
+});
+
+describe('Open in Ordinate (/assistant?slack=)', () => {
+  const ID = '11111111-1111-4111-8111-111111111111';
+  const at = (calls: ReturnType<typeof serve>) => calls.filter((c) => c.channel === 'slack:openQuestion');
+  it('hands another member\'s channel question to the Assistant to ask again, as them', async () => {
+    const calls = serve({ 'slack:openQuestion': { body: { ok: true, mine: false, projectId: 'p9', threadId: null, question: 'revenue last month?' } } });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={[`/assistant?slack=${ID}`]}>
+          <Landing />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(at(calls).length).toBe(1));
+    await waitFor(() => expect(takePendingQuestion().question).toBe('revenue last month?'));
+    expect(select).toHaveBeenCalledWith('p9');
   });
 });

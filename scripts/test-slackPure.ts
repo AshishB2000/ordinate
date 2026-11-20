@@ -71,4 +71,13 @@ ok('Base URL: a socket URL must be slack.com or a subdomain', base.isSlackUrl('w
 ok('Secrets: the four Slack kinds are appended, never renamed', ['slack.botToken', 'slack.signingSecret', 'slack.clientSecret', 'slack.appToken'].every((k) => (secrets.SECRET_KINDS as readonly string[]).includes(k)) && secrets.SECRET_KINDS[5] === 'privacy.salt');
 ok('Share policy: `slack` is a share path, default mask', privacy.SHARE_PATHS.includes('slack') && privacy.DEFAULT_POLICY.slack === 'mask' && privacy.sanitizePolicy({ slack: 'drop' }).slack === 'drop');
 
+// What an answer showed is read from the STORED turn: the chart's dataset (a verified hit stores one), every dataset an SQL answer
+// read (a verified SQL hit and the model's SQL path store them), a "Did you mean" option's, and the facts' (a prose answer's).
+const { shows }: typeof import('../src/ipc/turnsOpen') = require('../src/ipc/turnsOpen');
+const turn = (t: object) => ({ role: 'assistant' as const, text: '', ...t }) as Parameters<typeof shows>[0];
+ok('Shows: a chart answer (the verified-question hit and the model\'s answer path) names its dataset', shows(turn({ answer: { datasetId: 'd1' } })).includes('d1'));
+ok('Shows: an SQL answer (a verified SQL hit, the model\'s SQL path) names every dataset it read', shows(turn({ sql: { text: 'x', datasetIds: ['d2', 'd3'], title: 't' } })).join() === 'd2,d3');
+ok('Shows: a prose answer names the datasets its facts came from; a "Did you mean" option its own', shows(turn({ factsFrom: ['d4'] })).join() === 'd4' && shows(turn({ suggest: { options: [{ spec: { datasetId: 'd5' } }] } })).join() === 'd5');
+ok('Shows (negative control): a turn that shows nothing names nothing', shows(turn({})).length === 0);
+
 finish();
