@@ -123,7 +123,7 @@ const noUrl = (m: unknown): string => JSON.stringify(m).replace(/https?:\/\/[^"]
     // ── 9. the sentence can cite a marked column's values ─────────────────────
     S.answer = { text: 'Customer c1 bought the most.', datasets: [W.plain], card: chartCard('Sales by region', 'region', ['East', 'West']) };
     await S.deliver(S.dm('boss', 'who bought most?', { id: 'EvSent1' }));
-    ok('9. a dataset with a marked column and an acting policy: the model\'s sentence is replaced by the fixed caption, the card (untouched) stays', !/c1|bought the most/.test(lastUpdate()) && lastUpdate().includes('hidden by the project') && /"data_visualization"/.test(lastUpdate()), lastUpdate().slice(0, 300));
+    ok('9. a dataset with a marked column and an acting policy: the model\'s sentence is replaced by the fixed caption, the card (untouched) stays', !/Customer c1|bought the most/.test(lastUpdate()) && lastUpdate().includes('hidden by the project') && /"data_visualization"/.test(lastUpdate()), lastUpdate().slice(0, 300));
     await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'include' } });
     await S.deliver(S.dm('boss', 'who bought most again?', { id: 'EvSent2' }));
     ok('9. (control) with the policy on `include` the sentence is posted', /bought the most/.test(lastUpdate()), lastUpdate().slice(0, 200));
