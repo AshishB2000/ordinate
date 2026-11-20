@@ -6,6 +6,7 @@
 //   npm run build:ts && DATABASE_URL=… node scripts/test-slackRls.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { randomBytes } from 'crypto';
 import { Pool } from 'pg';
 import { ok, finish } from './selfcheck';
 import { slackWorld } from './slackHarness';
@@ -18,13 +19,15 @@ const store: typeof import('../src/server/slack/db') = require('../src/server/sl
   const { W } = S;
   const url = new URL((W.pool as unknown as { options: { connectionString: string } }).options.connectionString);
   let restricted: Pool | null = null;
+  const role = `slack_rls_${process.pid}`;
+  const pw = randomBytes(12).toString('hex'); // CI's Postgres asks for a password over TCP (SCRAM); trust auth here hid that
   try {
-    await W.pool.query(`DROP ROLE IF EXISTS slack_rls`).catch(() => undefined);
-    await W.pool.query(`CREATE ROLE slack_rls LOGIN`);
-    await W.pool.query(`GRANT ALL ON ALL TABLES IN SCHEMA public TO slack_rls`);
-    await W.pool.query(`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO slack_rls`);
-    url.username = 'slack_rls';
-    url.password = '';
+    await W.pool.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
+    await W.pool.query(`CREATE ROLE ${role} LOGIN PASSWORD '${pw}'`);
+    await W.pool.query(`GRANT ALL ON ALL TABLES IN SCHEMA public TO ${role}`);
+    await W.pool.query(`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${role}`);
+    url.username = role;
+    url.password = pw;
     restricted = new Pool({ connectionString: url.toString(), max: 3 });
     restricted.on('error', () => undefined);
 
@@ -91,9 +94,9 @@ const store: typeof import('../src/server/slack/db') = require('../src/server/sl
   } finally {
     store.useSlackDb(W.pool, S.secrets);
     await restricted?.end();
-    await W.pool.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM slack_rls`).catch(() => undefined);
-    await W.pool.query(`REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM slack_rls`).catch(() => undefined);
-    await W.pool.query(`DROP ROLE IF EXISTS slack_rls`).catch(() => undefined);
+    await W.pool.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${role}`).catch(() => undefined);
+    await W.pool.query(`REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${role}`).catch(() => undefined);
+    await W.pool.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
     await S.close();
   }
 })().catch((err) => {
