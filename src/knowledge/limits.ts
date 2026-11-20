@@ -11,3 +11,9 @@ export const MAX_ASK_CHARS = 4000;
 export const MAX_DOCX_XML_BYTES = 50 * 1024 * 1024;
 /** A parse worker gets this long, then it is terminated. */
 export const PARSE_TIMEOUT_MS = 30_000;
+/** The child process that reads a file is killed past this much resident memory (src/knowledge/parseChild.ts). */
+export const PARSE_MEMORY_MB = 256;
+/** Parses running at once per pod; more wait. */
+export const PARSE_CONCURRENCY = 2;
+/** The exit code of a child that went past its memory budget. */
+export const EXIT_MEMORY = 87;

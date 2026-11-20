@@ -38,8 +38,15 @@ const ranked = R.rankPassages('refund revenue counted', [weak, mid, top]);
 ok('the top passage is kept', ranked[0].docId === 'a');
 ok('the cut-off drops passages under half the top score', !ranked.some((r) => r.docId === 'b'), JSON.stringify(ranked.map((r) => [r.docId, r.score])));
 ok('NEGATIVE CONTROL: with a floor of 0, a weak passage would come along', R.scorePassage(['refund', 'revenue', 'counted'], weak) > 0);
-const odd = R.rankPassages('alpha beta gamma', [passage({ docId: 'x', title: 'alpha', text: 'beta gamma delta' }), passage({ docId: 'y', text: 'alpha epsilon' })]);
-ok('half is rounded up (top 4 keeps 2, drops 1)', odd.length === 1 || odd.every((r) => r.score >= Math.ceil(odd[0].score / 2)));
+// An ODD top score (5): half is 2.5, rounded UP to 3. A passage scoring 3 stays, one scoring 2 goes (a floor of 2 would keep it).
+const oddQ = 'alpha beta gamma delta epsilon';
+const oddTop = passage({ docId: 'x', title: 'alpha', text: 'beta gamma delta' }); // 2 + 1 + 1 + 1
+const oddThree = passage({ docId: 'y', text: 'beta gamma delta' }); // 3
+const oddTwo = passage({ docId: 'z', text: 'beta gamma' }); // 2
+ok('(setup) the scores are 5, 3 and 2', [oddTop, oddThree, oddTwo].map((p) => R.scorePassage(R.passageWords('', '', oddQ).textWords, p)).join() === '5,3,2');
+const odd = R.rankPassages(oddQ, [oddTop, oddThree, oddTwo]);
+ok('half is rounded UP: top 5 keeps 3 and drops 2', odd.map((r) => r.docId).join() === 'x,y', odd.map((r) => `${r.docId}:${r.score}`).join());
+ok('NEGATIVE CONTROL: a floor of 2 (rounded down) would have kept the 2', Math.floor(5 / 2) === 2 && R.scorePassage(R.passageWords('', '', oddQ).textWords, oddTwo) >= Math.floor(5 / 2));
 
 // Tie order: own, newer, doc id, ord; strings by code unit.
 const base = { text: 'revenue' };

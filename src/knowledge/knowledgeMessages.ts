@@ -81,3 +81,7 @@ export function agentGone(): string {
 export function uploadExpired(): string {
   return t('knowledgeMessages.that_upload_has_expired_choose_the');
 }
+
+export function tooComplex(): string {
+  return t('knowledgeMessages.this_file_is_too_large_or');
+}

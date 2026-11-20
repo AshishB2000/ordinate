@@ -19,7 +19,7 @@ const net: typeof import('net') = require('net');
 const cp: typeof import('child_process') = require('child_process');
 const JSZip: typeof import('jszip') = require('jszip');
 const { parseBytes } = require('../src/knowledge/parse') as typeof import('../src/knowledge/parse');
-const { readDocument, setWorkerForTest, KnowledgeReadError } = require('../src/knowledge/readDocument') as typeof import('../src/knowledge/readDocument');
+const { readDocument, setChildForTest, KnowledgeReadError } = require('../src/knowledge/readDocument') as typeof import('../src/knowledge/readDocument');
 const { docxText } = require('../src/knowledge/docx') as typeof import('../src/knowledge/docx');
 const { PDF_OPTIONS } = require('../src/knowledge/pdf') as typeof import('../src/knowledge/pdf');
 const msg = require('../src/knowledge/knowledgeMessages') as typeof import('../src/knowledge/knowledgeMessages');
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     para('Revenue policy', 'Heading1'), para('Net of discounts.'), para('Refunds', 'Heading 2'),
     '<w:p><w:r><w:t>a</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>b</w:t></w:r><w:r><w:br/></w:r><w:r><w:t>c</w:t></w:r></w:p>',
     '<w:tbl><w:tr><w:tc>' + para('Region') + '</w:tc><w:tc>' + para('Rule') + '</w:tc></w:tr><w:tr><w:tc>' + para('EU') + '</w:tc><w:tc>' + para('ship country') + para('not billing') + '</w:tc></w:tr></w:tbl>',
-    '<w:p><w:del><w:r><w:delText>deleted words</w:delText></w:r></w:del><w:ins><w:r><w:t>inserted words</w:t></w:r></w:ins></w:p>',
+    '<w:p><w:del><w:r><w:t>deleted words</w:t></w:r></w:del><w:ins><w:r><w:t>inserted words</w:t></w:r></w:ins></w:p>',
     '<w:p><w:r><w:drawing><wp:txbx><w:p><w:r><w:t>picture text</w:t></w:r></w:p></wp:txbx></w:drawing></w:r></w:p>',
     para('Ünïcode &amp; entities'),
   ].join('');
@@ -74,7 +74,9 @@ async function main(): Promise<void> {
   ok('docx: a table row is a | b', d.text.includes('Region | Rule\nEU | ship country not billing'), JSON.stringify(d.text));
   ok('docx: tracked deletions and pictures are left out', !d.text.includes('deleted words') && !d.text.includes('picture text') && d.text.includes('inserted words'));
   ok('docx: entities decode', d.text.includes('Ünïcode & entities'));
-  ok('NEGATIVE CONTROL: without the skip a deletion\'s text would show (docxText on a bare w:t)', docxText(`<w:document ${W}><w:body><w:p><w:r><w:t>kept</w:t></w:r></w:p></w:body></w:document>`) === 'kept');
+  const asInsert = docxText(`<w:document ${W}><w:body><w:p><w:ins><w:r><w:t>deleted words</w:t></w:r></w:ins></w:p></w:body></w:document>`);
+  const asDelete = docxText(`<w:document ${W}><w:body><w:p><w:del><w:r><w:t>deleted words</w:t></w:r></w:del><w:r><w:t>kept</w:t></w:r></w:p></w:body></w:document>`);
+  ok('NEGATIVE CONTROL: the same w:t inside w:ins is kept, inside w:del it is skipped (the skip is what removes it)', asInsert === 'deleted words' && asDelete === 'kept', `${asInsert} / ${asDelete}`);
   ok('a .docx renamed .pdf is read as docx', (await parseBytes(await docx(para('Hello')), 'renamed.pdf')).source === 'docx');
   ok('another zip (no word/document.xml) is refused naming the types', (await codeOf(parseBytes(await docx(para('x'), 'xl/workbook.xml'), 'sheet.docx'))) === 'type');
   ok('a broken zip is refused', (await codeOf(parseBytes(Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from('garbage garbage')]), 'x.docx'))) === 'type');
@@ -95,6 +97,8 @@ async function main(): Promise<void> {
       if (e && typeof name === 'string') {
         const real = e.async.bind(e);
         (e as any).async = (...a: any[]) => { inflated.push(name); return (real as any)(...a); };
+        const stream = e.nodeStream.bind(e);
+        (e as any).nodeStream = (...a: any[]) => { inflated.push(name); return (stream as any)(...a); };
       }
       return e;
     };
@@ -125,10 +129,10 @@ async function main(): Promise<void> {
   const marker = path.join(dir, 'beat');
   const hang = path.join(dir, 'hang.js');
   fs.writeFileSync(hang, `const fs=require('fs');setInterval(()=>fs.appendFileSync(${JSON.stringify(marker)},'x'),20);`);
-  setWorkerForTest(hang, 400);
+  setChildForTest(hang, 400);
   const t0 = Date.now();
   const hung = await codeOf(readDocument(utf8('hello'), 'a.txt'));
-  setWorkerForTest(null);
+  setChildForTest(null);
   ok('a hung worker times out, with its own sentence', hung === 'timeout' && Date.now() - t0 < 5000 && msg.timedOut().length > 0, `${hung} ${Date.now() - t0}`);
   await new Promise((r) => setTimeout(r, 150));
   const size = fs.existsSync(marker) ? fs.statSync(marker).size : 0;

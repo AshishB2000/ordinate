@@ -25,17 +25,36 @@ async function open(b: Uint8Array): Promise<JSZip.JSZipObject> {
   return entry;
 }
 
+/**
+ * The entry's text, inflated with a cap of our own: the declared size is only the sender's word (a header may say 1,000
+ * bytes over a 400 MB stream), so the output is counted as it comes and the stream destroyed past MAX_DOCX_XML_BYTES.
+ */
+function inflateCapped(entry: JSZip.JSZipObject): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    const stream = entry.nodeStream('nodebuffer') as import('stream').Readable; // jszip types it as the bare interface
+    stream.on('data', (c: Buffer) => {
+      total += c.length;
+      if (total > MAX_DOCX_XML_BYTES) {
+        chunks.length = 0;
+        stream.destroy();
+        reject(new ParseError('zipBomb'));
+        return;
+      }
+      chunks.push(c);
+    });
+    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    stream.on('error', () => reject(new ParseError('unreadable')));
+  });
+}
+
 /** The text of a .docx, or THROWS: 'zipBomb' before anything is inflated, 'type', 'noText', 'tooLong', 'unreadable'. */
 export async function readDocx(b: Uint8Array): Promise<string> {
   const entry = await open(b);
   const size = declaredSize(entry);
   if (!Number.isFinite(size) || size > MAX_DOCX_XML_BYTES) throw new ParseError('zipBomb'); // BEFORE inflating
-  let xml: string;
-  try {
-    xml = await entry.async('string');
-  } catch {
-    throw new ParseError('unreadable');
-  }
+  const xml = await inflateCapped(entry);
   const text = docxText(xml);
   if (!text.trim()) throw new ParseError('noText');
   if (text.length > MAX_TEXT_CHARS) throw new ParseError('tooLong');

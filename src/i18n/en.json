@@ -457,6 +457,7 @@
   "knowledgeMessages.this_document_was_changed_in_another": "This document was changed in another tab or by someone else. Reload it and make your change again.",
   "knowledgeMessages.this_file_could_not_be_read": "This file could not be read. It may be damaged.",
   "knowledgeMessages.this_file_is_larger_than_10": "This file is larger than 10 MB.",
+  "knowledgeMessages.this_file_is_too_large_or": "This file is too large or complex to read.",
   "knowledgeMessages.this_file_type_is_not_accepted": "This file type is not accepted. Use a PDF, a Word file (.docx), or a Markdown or plain text file (.md, .txt).",
   "knowledgeMessages.this_pdf_is_password_protected_remove": "This PDF is password-protected. Remove the password and upload it again.",
   "knowledgeMessages.this_text_file_is_not_utf": "This text file is not UTF-8. Save it as UTF-8 and try again.",
