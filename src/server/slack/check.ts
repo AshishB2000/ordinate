@@ -28,10 +28,10 @@ import { mayAsk } from './ask';
 
 export const MEMBER_CAP = 500;
 
-export type Why = 'external' | 'too_many' | 'stranger' | 'guest' | 'unlinked' | 'no_access' | 'different_view' | 'account';
+export type Why = 'external' | 'too_many' | 'stranger' | 'guest' | 'unlinked' | 'no_access' | 'different_view' | 'source_table' | 'outside';
 export type Verdict = { post: true; case: 'direct' | 'A' | 'B' } | { post: false; why: Why };
 
-export interface Shown { projectId: string; datasetIds: readonly string[]; dashboardIds: readonly string[] }
+export interface Shown { projectId: string; datasetIds: readonly string[]; dashboardIds: readonly string[]; sourceTable?: boolean; outside?: boolean }
 
 /** Is a dataset in a folder everyone in the project may open? (A caller-independent read of the folder rule: a viewer with no team grants.) */
 async function openToEveryone(projectId: string, datasetIds: readonly string[]): Promise<Set<string>> {
@@ -75,23 +75,34 @@ export async function check(pool: Pool, inst: store.Install, token: string, chan
   const info = await channelInfo(token, channelId);
   if (info.isIm) return { post: true, case: 'direct' };
   if (info.isExtShared) return { post: false, why: 'external' }; // never overridden: another company
+  // Never in a channel, whatever the members may see: an answer from a source table (a document id no folder or rule is recorded for)
+  // and the app's "outside the topic" reply (it names a dataset but records none it was built from).
+  if (shown.sourceTable) return { post: false, why: 'source_table' };
+  if (shown.outside) return { post: false, why: 'outside' };
   if (!(await restricted(shown))) return { post: true, case: 'A' };
   if (o.override) return { post: true, case: 'B' }; // an org admin's setting let the asker post past the check (./worker.ts passes it)
 
   const ids = await channelMembers(token, channelId, MEMBER_CAP);
   if (ids.length > MEMBER_CAP) return { post: false, why: 'too_many' };
-  const people = new Set<string>();
-  for (const id of ids) {
-    if (id === inst.botUserId) continue;
+  const others = ids.filter((id) => id !== inst.botUserId && id !== asker);
+  // One query for the links first: anyone unlinked fails fast, before a users.info call for each linked member.
+  const linked = await store.linkedAmong(inst.orgId, inst.teamId, [...others, asker]);
+  const people = new Set<string>([asker]);
+  for (const id of others.filter((x) => !linked.has(x))) {
+    const u = await userInfo(token, id);
+    if (u.isBot || u.deleted) continue; // another app's bot, a deactivated account: no one to see it
+    if (u.isStranger || u.teamId !== inst.teamId) return { post: false, why: 'stranger' };
+    if (u.isGuest && !inst.allowGuests) return { post: false, why: 'guest' };
+    return { post: false, why: 'unlinked' };
+  }
+  if (!linked.has(asker)) return { post: false, why: 'unlinked' };
+  for (const id of others) {
     const u = await userInfo(token, id);
     if (u.isBot || u.deleted) continue;
     if (u.isStranger || u.teamId !== inst.teamId) return { post: false, why: 'stranger' };
     if (u.isGuest && !inst.allowGuests) return { post: false, why: 'guest' };
     people.add(id);
   }
-  people.add(asker);
-  const linked = await store.linkedAmong(inst.orgId, inst.teamId, [...people]);
-  if ([...people].some((p) => !linked.has(p))) return { post: false, why: 'unlinked' };
 
   const me = ctx();
   const mine = await viewOf(pool, me, shown);

@@ -262,7 +262,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // Embedding (docs/embed): the org's switch and origins in org_settings, its signing secret in the store — none without a master key.
       useEmbedDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
       // Ordinate in Slack: its rows, and its four keys in the encrypted store (none without a master key: nothing can be saved).
-      (require('./slack/db') as typeof import('./slack/db')).useSlackDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
+      (require('./slack/db') as typeof import('./slack/db')).useSlackDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, { timeoutMs: cfg.limits.rpcTimeoutMs, perMinute: cfg.limits.rpcUserPerMinute });
       // The org's settings document is a row every pod reads, not a file on this pod's disk (0014).
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);

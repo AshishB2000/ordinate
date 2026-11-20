@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'crypto';
 import * as store from './db';
+import { wake } from './wake';
 
 /** The same cap as `copilot:ask`'s question (src/api/assistant.ts). */
 export const MAX_QUESTION = 4000;
@@ -23,7 +24,10 @@ export function plainText(raw: string): string {
 
 interface SlackEvent {
   type?: string; subtype?: string; bot_id?: string; user?: string; text?: string; channel?: string; channel_type?: string; ts?: string; thread_ts?: string;
+  /** tokens_revoked: `oauth` are USER ids whose user token was revoked, `bot` the bot users whose token was. */
+  tokens?: { oauth?: unknown; bot?: unknown };
 }
+const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 export interface Envelope { type?: string; team_id?: string; event_id?: string; event?: SlackEvent; challenge?: string }
 
 export type Handled = 'queued' | 'duplicate' | 'dropped' | 'uninstalled';
@@ -34,9 +38,18 @@ export async function handleEvent(env: Envelope): Promise<Handled> {
   if (env.type !== 'event_callback' || !ev || typeof env.team_id !== 'string' || typeof env.event_id !== 'string') return 'dropped';
   const install = await store.installByTeam(env.team_id);
   if (!install) return 'dropped';
-  if (ev.type === 'app_uninstalled' || ev.type === 'tokens_revoked') {
+  if (ev.type === 'app_uninstalled') {
     await store.markUninstalled(env.team_id);
     return 'uninstalled';
+  }
+  if (ev.type === 'tokens_revoked') {
+    // Only the BOT token's revocation switches the install off. A person's user token (tokens.oauth) going is their own link only.
+    if (ids(ev.tokens?.bot).includes(install.botUserId)) {
+      await store.markUninstalled(env.team_id);
+      return 'uninstalled';
+    }
+    for (const user of ids(ev.tokens?.oauth)) await store.deleteLinkOf(env.team_id, user);
+    return 'dropped';
   }
   if (!install.enabled) return 'dropped';
   const dm = ev.type === 'message' && ev.channel_type === 'im';
@@ -50,6 +63,7 @@ export async function handleEvent(env: Envelope): Promise<Handled> {
     // A channel answer goes in a thread under the mention; a DM answers in place.
     threadTs: dm ? (ev.thread_ts ?? null) : (ev.thread_ts ?? ev.ts), eventTs: ev.ts, slackUserId: ev.user, text,
   }, env.event_id); // the event id and the question are written together: a retry after a failed insert is queued, a repeat after a good one is a no-op
+  if (queued) wake();
   return queued ? 'queued' : 'duplicate';
 }
 
@@ -76,7 +90,7 @@ export async function handleInteraction(p: Interaction): Promise<'feedback' | 's
     await store.setFeedback(install.orgId, qid, arg);
     return 'feedback';
   }
-  if (act.action_id === SHARE_ID && !(await store.shareExists(q.id))) { // a double click is one share
+  if (act.action_id === SHARE_ID && !(await store.shareExists(install.orgId, q.id))) { // a double click is one share
     await store.enqueue({
       id: randomUUID(), orgId: install.orgId, teamId: team, kind: 'share', channelId: q.channelId, channelType: q.channelType, threadTs: q.threadTs,
       eventTs: null, slackUserId: clicker, text: '', ofQuestion: q.id,

@@ -12,7 +12,8 @@ import type { FastifyBaseLogger } from 'fastify';
 import { isDraining } from '../lifecycle';
 import { scrubbed } from '../db/pool';
 import * as say from '../slackMessages';
-import { processQuestion } from './answer';
+import { LeaseLost, processQuestion } from './answer';
+import { onWake } from './wake';
 import { updateMessage } from './client';
 import * as store from './db';
 import { note } from './render';
@@ -26,6 +27,7 @@ export function tuneForTest(o: { pollMs?: number; leaseMs?: number }): void {
   if (o.leaseMs) leaseMs = o.leaseMs;
 }
 const CONCURRENCY = 2;
+const IDLE_MS = 30_000;
 let paused = false;
 /** Test hook: no worker claims anything while paused (a crash test claims by hand). */
 export function pauseForTest(on: boolean): void {
@@ -35,10 +37,18 @@ export function pauseForTest(on: boolean): void {
 /** Runs `q` under a heartbeat; a throw is the answer's failure, said in fixed words. */
 async function run(q: store.Question, owner: string, log: Pick<FastifyBaseLogger, 'error' | 'warn'>): Promise<void> {
   const pool = store.db();
-  const beat = setInterval(() => void store.heartbeat(q.id, owner, leaseMs).catch(() => undefined), Math.max(200, leaseMs / 3));
+  // The heartbeat is the lease: when it says the lease is lost (another pod retook the row), the work stops (its signal aborts).
+  const lease = new AbortController();
+  const beat = setInterval(() => {
+    void store.heartbeat(q.id, owner, leaseMs).then((held) => { if (!held) lease.abort(new LeaseLost()); }, () => undefined);
+  }, Math.max(200, leaseMs / 3));
   try {
-    await processQuestion(pool, q, owner);
+    await processQuestion(pool, q, owner, lease.signal);
   } catch (err) {
+    if (err instanceof LeaseLost || lease.signal.aborted) { // the pod that retook it finishes it
+      log.warn({ question: q.id }, 'slack question stopped: its lease was lost');
+      return;
+    }
     log.error({ err: scrubbed(err, '') , question: q.id }, 'slack question failed');
     try {
       const inst = await store.installByTeam(q.teamId);
@@ -66,12 +76,19 @@ export function startSlackWorker(log: Pick<FastifyBaseLogger, 'error' | 'warn'>)
   const sockets = startSocketManager(owner, log); // this pod's Socket Mode connections, if an install asks for them
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+  let idleUntil = 0; // no workspace switched on: look again later (a question or an install on this pod wakes it)
+  const unwake = onWake(() => { idleUntil = 0; });
 
   /** Claims up to the free slots; returns how many it started. */
   async function tick(): Promise<number> {
     if (stopped || paused || isDraining() || !store.dbOrNull()) return 0;
     let started = 0;
+    if (Date.now() < idleUntil) return 0;
     try {
+      if (!(await store.anyEnabledInstall())) { // nothing to serve: no claim, no sweep of exhausted rows, until the next look
+        idleUntil = Date.now() + IDLE_MS;
+        return 0;
+      }
       for (const gone of await store.failExhausted()) {
         const inst = await store.installByTeam(gone.teamId);
         const token = inst ? await store.getSecret(gone.orgId, 'botToken') : null;
@@ -102,6 +119,7 @@ export function startSlackWorker(log: Pick<FastifyBaseLogger, 'error' | 'warn'>)
     async stop() {
       stopped = true;
       if (timer) clearTimeout(timer);
+      unwake();
       await sockets.stop();
       await Promise.allSettled(running);
     },

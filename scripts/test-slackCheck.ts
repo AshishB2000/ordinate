@@ -23,7 +23,7 @@ const noUrl = (m: unknown): string => JSON.stringify(m).replace(/https?:\/\/[^"]
   const TEAM = stub.team.id;
   try {
     // ── world: an agent, channels, people ─────────────────────────────────────
-    const saved = await W.call('boss', 'agent:save', { projectId: W.P, agent: { name: 'Sales agent', topicId: null, model: null, build: false, teamIds: [] } });
+    const saved = await W.call('boss', 'agent:save', { projectId: W.P, agent: { name: 'Sales agent', topicId: null, model: null, build: false, teamIds: [W.team] } });
     const agent: string = saved.body.agent.id;
     const everyone = Object.values(S.slackId);
     const channel = (id: string, members: string[], o: object = {}) => { stub.channels.set(id, { id, name: id.toLowerCase(), members: [stub.team.botUser, ...members], ...o }); if (!stub.botChannels.includes(id)) stub.botChannels.push(id); };

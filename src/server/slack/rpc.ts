@@ -8,8 +8,11 @@ import { authTest, botChannels, SlackApiError } from './client';
 import * as store from './db';
 import { manifestFor, serverOrigin } from './manifest';
 import { mayAsk } from './ask';
+import { rankOn } from '../authz/caller';
+import * as projects from '../../app/projects';
 import * as say from '../slackMessages';
 import { appPool } from '../app';
+import { wake } from './wake';
 
 const noDb = () => ({ ok: false as const, error: say.needsDb() });
 const view = async (i: store.Install) => ({
@@ -55,6 +58,7 @@ export function register(): void {
     if (p.signingSecret) await store.putSecret(org, 'signingSecret', p.signingSecret);
     if (p.clientSecret) await store.putSecret(org, 'clientSecret', p.clientSecret);
     if (p.appToken) await store.putSecret(org, 'appToken', p.appToken);
+    wake();
     return { ok: true, install: await view((await store.installByOrg(org)) as store.Install) };
   });
 
@@ -109,7 +113,7 @@ export function register(): void {
     return q.channelType === 'channel' ? { ok: true, mine: false, projectId, threadId: null, question: q.text } : missing;
   });
 
-  ipcMain.handle('slack:channels', async () => { // the contract scopes it to a project admin; the picker lists the workspace's channels
+  ipcMain.handle('slack:channels', async (_e, { projectId }: { projectId: string }) => {
     if (!store.dbOrNull()) return noDb();
     const org = ctx().org.id;
     const install = await store.installByOrg(org);
@@ -119,8 +123,11 @@ export function register(): void {
       const list = [];
       for (const c of await botChannels(token)) {
         const ca = await store.channelAgent(install.teamId, c.id);
-        const mine = ca && ca.orgId === org ? ca : null;
-        list.push({ ...c, agentId: mine?.agentId ?? null, projectId: mine?.projectId ?? null });
+        const held = ca && ca.orgId === org ? ca : null;
+        // Another project's agent and project ids are not this project admin's to see: only that the channel is in use.
+        list.push(held && held.projectId !== projectId
+          ? { ...c, agentId: null, projectId: null, usedElsewhere: true }
+          : { ...c, agentId: held?.agentId ?? null, projectId: held?.projectId ?? null, usedElsewhere: false });
       }
       return { ok: true, connected: true, channels: list };
     } catch {
@@ -144,6 +151,11 @@ export function register(): void {
       }
       const wanted = [...new Set(channels.map((c) => c.id))];
       if (wanted.some((id) => !inBot.has(id))) return { ok: false, error: say.inviteFirst() };
+      // One agent per channel — and a channel another PROJECT holds is moved only by an admin of that project (or an org admin).
+      for (const id of wanted) {
+        const held = await store.channelAgent(install.teamId, id);
+        if (held && held.orgId === org && held.projectId !== projectId && (await projects.getProject(held.projectId)) && (await rankOn(held.projectId)) < 3) return { ok: false, error: say.heldByAnotherProject() };
+      }
       await store.setAgentChannels(org, install.teamId, projectId, agentId, wanted.map((id) => ({ id, name: inBot.get(id) as string })));
     }
     return { ok: true, connected: !!install?.enabled, channels: await store.channelsOfAgent(org, projectId, agentId) };

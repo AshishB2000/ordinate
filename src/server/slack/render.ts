@@ -56,8 +56,10 @@ export function tableBlock(t: { header: string[]; rows: string[][] }): unknown {
 export interface AnswerParts {
   /** The model's sentence, already through the ask's guard and number audit. */
   sentence: string;
-  /** The share policy masked or held back something: the sentence is replaced by a fixed caption. */
+  /** The share policy masked or held back something in the card: the model's sentence AND its title are replaced by fixed words. */
   masked: boolean;
+  /** The sentence could cite a marked column's values (./shape.ts sentenceAtRisk): replaced by the fixed caption, the card as it is. */
+  atRisk?: boolean;
   card: Card | null;
   agent: string | null;
   datasets: string[];
@@ -72,15 +74,17 @@ export interface AnswerParts {
 }
 
 export function answerMessage(p: AnswerParts): Message {
-  const sentence = p.masked ? say.maskedCaption() : p.sentence;
-  const title = typeof p.card?.title === 'string' && p.card.title ? `*${escapeSlack(clip(p.card.title, 150))}*\n` : '';
+  const sentence = p.masked || p.atRisk ? say.maskedCaption() : p.sentence;
+  // The card's title is the model's (or the question's) words, which may quote a masked value: a fixed one when anything was masked.
+  const shownTitle = p.masked ? say.maskedTitle() : typeof p.card?.title === 'string' ? p.card.title : '';
+  const title = shownTitle ? `*${escapeSlack(clip(shownTitle, 150))}*\n` : '';
   const blocks: unknown[] = [];
   if (p.intro) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: escapeSlack(p.intro) }] });
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: clip(title + escapeSlack(sentence), 2900) } });
   const table = tableOf(p.card);
   if (p.chart && p.chart.length) blocks.push(...p.chart);
   else if (table && table.rows.length) blocks.push(tableBlock(table));
-  const footer = [say.footer(p.agent ?? 'the Project assistant', p.datasets.join(', '))];
+  const footer = [say.footer(p.agent ?? say.projectAssistant(), p.datasets.join(', '))];
   if (table && table.total > TABLE_ROWS) footer.push(say.moreRows(String(Math.min(TABLE_ROWS, table.rows.length)), String(table.total)));
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: escapeSlack(clip(footer.join(' '), 2900)) }] });
   const buttons: unknown[] = [];

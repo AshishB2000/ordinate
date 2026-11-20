@@ -30,15 +30,14 @@ async function shapeSql(projectId: string, card: Card, datasetIds: readonly stri
   let columns = card.columns as ParsedColumn[];
   let rows = card.rows as Cell[][];
   let changed = false;
+  const sql = typeof card.sql === 'string' ? card.sql.toLowerCase() : '';
   for (const id of datasetIds) {
-    const marked = await sensitiveColumns(projectId, id);
-    if (![...marked.keys()].some((m) => columns.some((c) => c.name === m))) {
-      // Not named in the result: but the statement may have RENAMED it (`customer AS c`). A marked column the statement names and
-      // the result does not is withheld whole: the table cannot be told apart from a masked one, and fails closed.
-      const sql = typeof card.sql === 'string' ? card.sql.toLowerCase() : '';
-      if (sql && [...marked.keys()].some((m) => new RegExp(`\\b${m.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(sql)) && (await policyActs(projectId))) return { card: null, changed: true };
-      continue;
-    }
+    const marked = [...(await sensitiveColumns(projectId, id)).keys()];
+    // A marked column the statement NAMES but the result does not has been RENAMED (`phone AS contact`): the table cannot be told apart
+    // from a masked one, so it is withheld whole — for EVERY such column, whatever else the result names as it is.
+    const renamed = marked.filter((m) => !columns.some((c) => c.name === m) && sql && new RegExp(`\\b${m.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(sql));
+    if (renamed.length && (await policyActs(projectId))) return { card: null, changed: true };
+    if (!marked.some((m) => columns.some((c) => c.name === m))) continue;
     const t = await applyToTable(projectId, id, { columns, rows }, 'slack');
     columns = t.columns;
     rows = t.rows as Cell[][];
@@ -49,3 +48,14 @@ async function shapeSql(projectId: string, card: Card, datasetIds: readonly stri
 
 /** Does the project's `slack` share path act on marked columns at all (anything but `include`)? */
 const policyActs = async (projectId: string): Promise<boolean> => (await getPolicy(projectId)).slack !== 'include';
+
+/**
+ * Could the model's SENTENCE cite a value or figure of a marked column? Any dataset the answer was built from with a
+ * marked column, while the `slack` policy acts: the sentence is replaced by the fixed caption (the card is shaped as
+ * above). Fail closed: the sentence cannot be shaped, only kept or replaced.
+ */
+export async function sentenceAtRisk(projectId: string, datasetIds: readonly string[]): Promise<boolean> {
+  if (!(await policyActs(projectId))) return false;
+  for (const id of datasetIds) if ((await sensitiveColumns(projectId, id)).size) return true;
+  return false;
+}

@@ -16,6 +16,8 @@ const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const worker: typeof import('../src/server/slack/worker') = require('../src/server/slack/worker');
+const { makeSnapshot }: typeof import('../src/ai/answerSnapshot') = require('../src/ai/answerSnapshot');
+const { accessPrint, sqlAccessPrint }: typeof import('../src/ipc/answerSnapshots') = require('../src/ipc/answerSnapshots');
 
 export const SIGNING = 'c4nary-signing-secret';
 export const APP_TOKEN = 'xapp-c4nary-app-token-0001';
@@ -25,7 +27,7 @@ export async function until(fn: () => Promise<boolean>, ms = 20_000): Promise<bo
   return false;
 }
 
-export interface Answer { text: string; datasets: string[]; dashboards?: string[]; card?: Record<string, unknown> | null }
+export interface Answer { text: string; datasets: string[]; /** The answer was read from a source table (its spec / SQL names a `table`). */ table?: boolean; dashboards?: string[]; card?: Record<string, unknown> | null; /** The app's out-of-scope reply. */ outside?: boolean }
 export interface AskSeen { email: string; payload: Record<string, any> } // any: the contract's input
 
 export interface SlackWorld {
@@ -38,6 +40,14 @@ export interface SlackWorld {
   asked: AskSeen[];
   /** Links a person's Slack account (what the Connect flow ends in). */
   link(person: string): Promise<void>;
+  /** The real `copilot:ask` handler the app registered (the fake replaces it unless `realAsk`). */
+  realAsk: (e: unknown, p: Record<string, any>) => Promise<unknown>; // any: the contract's input
+  /** The fake `copilot:ask` handler (restore it after a test swapped the handler). */
+  fakeAsk: (e: unknown, p: Record<string, any>) => Promise<unknown>; // any: the contract's input
+  /** The RPC time limit and per-user budget a Slack ask is held to (the app wires the server's own). */
+  setLimits(l: { timeoutMs: number; perMinute: number }): void;
+  /** The pool and secrets the Slack store was wired with. */
+  secrets: import('../src/server/secrets/store').SecretStore;
   /** A Slack `event_callback` for a message. */
   mention(person: string, text: string, o?: { channel?: string; ts?: string; thread_ts?: string; id?: string }): unknown;
   dm(person: string, text: string, o?: { ts?: string; id?: string }): unknown;
@@ -58,13 +68,18 @@ export async function slackWorld(label: string, o: { realAsk?: boolean } = {}): 
   process.env.SSRF_ALLOW = [process.env.SSRF_ALLOW, '127.0.0.1/32'].filter(Boolean).join(',');
   process.env.ORDINATE_TEST_SLACK_BASE = stub.origin;
   process.env.ORDINATE_PUBLIC_URL = 'http://ordinate.test';
-  slackDb.useSlackDb(W.pool, secretsMod.createSecretStore(W.pool, createSecretKey(randomBytes(32))));
+  const secretStore = secretsMod.createSecretStore(W.pool, createSecretKey(randomBytes(32)));
+  slackDb.useSlackDb(W.pool, secretStore);
   const slackId: Record<string, string> = { boss: 'U_BOSS', ed: 'U_ED', east: 'U_EAST', west: 'U_WEST', nobody: 'U_NOBODY' };
   for (const id of Object.values(slackId)) stub.users.set(id, { id, team_id: stub.team.id });
   stub.oauth.signInAs = { userId: 'U_EAST', teamId: stub.team.id };
 
   const state: SlackWorld = {
     W, stub, slackId, asked: [], answer: { text: 'There were 42 orders.', datasets: [W.plain] },
+    fakeAsk: async () => ({ ok: false }), // replaced below
+    realAsk: rpc.handlers.get('copilot:ask') as never,
+    secrets: secretStore,
+    setLimits: (l) => slackDb.useSlackDb(W.pool, secretStore, l),
     async link(person) { await slackDb.saveLink('acme', stub.team.id, slackId[person], `${person}@acme.test`); },
     mention: (person, text, o = {}) => ({
       type: 'event_callback', team_id: stub.team.id, event_id: o.id ?? `Ev${Math.random().toString(36).slice(2)}`,
@@ -101,16 +116,29 @@ export async function slackWorld(label: string, o: { realAsk?: boolean } = {}): 
   await W.app.listen({ port: 0, host: '127.0.0.1' });
   const port = (W.app.server.address() as import('net').AddressInfo).port;
 
-  if (!o.realAsk) rpc.registry.removeHandler('copilot:ask');
-  if (!o.realAsk) rpc.registry.handle('copilot:ask', async (_e: unknown, p: Record<string, any>) => { // any: the contract's input
+  state.fakeAsk = async (_e: unknown, p: Record<string, any>) => { // any: the contract's input
     const email = context.ctx().user.email;
     state.asked.push({ email, payload: p });
     const a = typeof state.answer === 'function' ? state.answer(p, email) : state.answer;
     const tid = p.threadId ?? (await copilot.createThread(p.projectId, p.agentId ?? null))?.id;
     await copilot.appendTurn(p.projectId, { role: 'user', text: p.question }, tid);
-    await copilot.appendTurn(p.projectId, { role: 'assistant', text: a.text, factsFrom: a.datasets, ...(a.dashboards ? { dashboardsFrom: a.dashboards } : {}) }, tid);
+    // What the real handler stores: the chart's spec (or the SQL answer's statement) with a snapshot of its card, kept under the asker's access.
+    const card = a.card as { kind?: string; spec?: { datasetId: string }; title?: string } | null | undefined;
+    const now = new Date().toISOString();
+    const snap = (access: string) => makeSnapshot(card as object, { asOf: now, firstAsked: now }, access, []) ?? undefined;
+    const shape = !card ? {} : card.kind === 'sql'
+      ? { sql: { text: 'SELECT 1', datasetIds: a.datasets, title: card.title ?? 'Answer', ...(a.table ? { table: '22222222-2222-4222-8222-222222222222' } : {}) }, snapshot: snap(await sqlAccessPrint(p.projectId, a.datasets)) }
+      : { answer: { chartType: 'column', title: card.title ?? 'Answer', filters: [], ...card.spec, ...(a.table ? { table: '22222222-2222-4222-8222-222222222222' } : {}) }, snapshot: snap(await accessPrint(p.projectId, (card.spec as { datasetId: string }).datasetId)) };
+    const turns = await copilot.appendTurn(p.projectId, {
+      role: 'assistant', text: a.text, factsFrom: a.datasets, ...shape, ...(a.dashboards ? { dashboardsFrom: a.dashboards } : {}), ...(a.outside ? { outside: { dataset: a.datasets[0] } } : {}),
+    } as never, tid);
+    void turns;
     return { ok: true, threadId: tid, turns: [{ role: 'assistant', text: a.text, ...(a.card ? { card: a.card } : {}) }], agent: p.agentId ? { id: p.agentId, name: 'Sales agent' } : null };
-  });
+  };
+  if (!o.realAsk) {
+    rpc.registry.removeHandler('copilot:ask');
+    rpc.registry.handle('copilot:ask', state.fakeAsk);
+  }
 
   const installed = await W.call('boss', 'slack:install', {
     botToken: stub.team.botToken, signingSecret: SIGNING, clientId: stub.oauth.clientId, clientSecret: stub.oauth.clientSecret, appToken: APP_TOKEN, mode: 'events',

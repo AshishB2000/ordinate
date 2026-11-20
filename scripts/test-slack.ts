@@ -132,7 +132,7 @@ const sharePolicy: typeof import('../src/app/privacyStore') = require('../src/ap
     // Expired.
     await S.deliver(S.dm('west', 'second try', { id: 'EvW2' }));
     const tokExp = connectTokenOf();
-    await W.pool.query(`UPDATE slack_link_states SET expires_at = now() - interval '1 minute' WHERE token = $1`, [tokExp]);
+    await W.pool.query(`UPDATE slack_link_states SET expires_at = now() - interval '1 minute' WHERE token_hash = $1`, [store.stateHash(tokExp)]);
     ok('Linking: an expired state is refused at Connect', /slack=state/.test(String((await asWest(`/api/slack/connect?s=${tokExp}`)).headers.location)));
     // The real thing, from a cross-site form_post with no session cookie.
     await S.deliver(S.dm('west', 'third try', { id: 'EvW3' }));
@@ -186,8 +186,10 @@ const sharePolicy: typeof import('../src/app/privacyStore') = require('../src/ap
       spec: { datasetId: W.plain, category, measures: [{ column: 'sales', aggregation: 'sum' }] }, data: { labels, series: [{ name: 'Sum of sales', values: [5, 9] }] },
     });
     S.answer = { text: 'Sales by region.', datasets: [W.plain], card: chartCard('region', ['East', 'West']) };
+    await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'include' } }); // Plain has a marked column: under `mask` even this sentence is replaced
     await S.deliver(S.dm('boss', 'sales by region?', { id: 'EvCh1' }));
     ok('Charts: an answer whose chart fits is posted as a data_visualization block, with the sentence', /"data_visualization"/.test(JSON.stringify(S.updated().at(-1))) && /Sales by region/.test(JSON.stringify(S.updated().at(-1))));
+    await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'mask' } });
     S.answer = { text: 'Sales by customer c1.', datasets: [W.plain], card: chartCard('customer', ['c1', 'c2']) };
     await S.deliver(S.dm('boss', 'sales by customer?', { id: 'EvCh2' }));
     const maskedChart = JSON.stringify(S.updated().at(-1));
@@ -195,7 +197,7 @@ const sharePolicy: typeof import('../src/app/privacyStore') = require('../src/ap
 
     // ── crash: a lapsed lease is retaken and the thread gets ONE answer ───────
     workerMod.pauseForTest(true);
-    S.answer = { text: 'Crash test answer 77.', datasets: [W.plain] };
+    S.answer = { text: 'Crash test answer 77.', datasets: [W.orders] };
     const crashEv = S.dm('boss', 'crash?', { id: 'EvCr1' });
     await stub.send(base, '/api/slack/events', crashEv);
     const first = await until(async () => (await S.questions()).some((q) => q.status === 'pending'), 3000);

@@ -28,6 +28,10 @@ export interface Stub {
   pageSize: number;
   /** The next N calls of this method answer 429 (Retry-After: 1). */
   rateLimit: { method: string; times: number };
+  /** The next N calls of this Web API method answer HTTP 500 (a crash-after-this-step test). */
+  fail: { method: string; times: number };
+  /** Sign the next id_token with a key Slack's JWKS does not list. */
+  badSignature: boolean;
   /** Extra claims the next id_token carries instead of the signed-in user's (a mismatch test). */
   idTokenOverride: Record<string, unknown> | null;
   /** Socket Mode: the app-level token `apps.connections.open` wants, the live connections, what each acknowledged, and a way to push to them. */
@@ -90,6 +94,7 @@ async function body(req: IncomingMessage): Promise<string> {
 export async function startSlackStub(init: { team?: string; botToken?: string } = {}): Promise<Stub> {
   const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const kid = 'stub-key-1';
+  const other = generateKeyPairSync('rsa', { modulusLength: 2048 }); // a key Slack's JWKS does not list
   const jwk = { ...(publicKey.export({ format: 'jwk' }) as Record<string, unknown>), kid, use: 'sig', alg: 'RS256' };
   const codes = new Map<string, { nonce: string; clientId: string; userId: string; teamId: string }>();
   let n = 0;
@@ -110,12 +115,16 @@ export async function startSlackStub(init: { team?: string; botToken?: string } 
     dropAll: () => { for (const s of stub.sockets) s.destroy(); stub.sockets.clear(); },
     pageSize: 200,
     rateLimit: { method: '', times: 0 },
+    fail: { method: '', times: 0 },
+    badSignature: false,
     idTokenOverride: null,
     lastAuthorize: null,
     callsOf: (m) => stub.calls.filter((c) => c.method === m),
     reset() {
       stub.calls.length = 0;
       stub.rateLimit = { method: '', times: 0 };
+      stub.fail = { method: '', times: 0 };
+      stub.badSignature = false;
       stub.idTokenOverride = null;
     },
     async send(base, path, payload, o = {}) {
@@ -138,7 +147,7 @@ export async function startSlackStub(init: { team?: string; botToken?: string } 
     };
     const head = b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid }));
     const signing = `${head}.${b64u(JSON.stringify(claims))}`;
-    return `${signing}.${b64u(createSign('RSA-SHA256').update(signing).sign(privateKey))}`;
+    return `${signing}.${b64u(createSign('RSA-SHA256').update(signing).sign(stub.badSignature ? other.privateKey : privateKey))}`;
   };
 
   const json = (res: ServerResponse, status: number, v: unknown, headers: Record<string, string> = {}): void => {
@@ -151,6 +160,10 @@ export async function startSlackStub(init: { team?: string; botToken?: string } 
     if (stub.rateLimit.method === method && stub.rateLimit.times > 0) {
       stub.rateLimit.times -= 1;
       return json(res, 429, { ok: false, error: 'ratelimited' }, { 'retry-after': '1' });
+    }
+    if (stub.fail.method === method && stub.fail.times > 0) {
+      stub.fail.times -= 1;
+      return json(res, 500, { ok: false, error: 'fatal_error' });
     }
     if (method === 'apps.connections.open') {
       return token === stub.appToken ? json(res, 200, { ok: true, url: `${origin.replace('http', 'ws')}/link/?ticket=stub` }) : json(res, 200, { ok: false, error: 'invalid_auth' });

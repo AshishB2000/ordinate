@@ -165,3 +165,38 @@ export function notConnectedAdmin(): string {
 export function inviteFirst(): string {
   return t('slackMessages.invite_ordinate_to_a_channel_in');
 }
+
+/** The title of a card the share policy changed, in place of the model's. */
+export function maskedTitle(): string {
+  return t('slackMessages.answer');
+}
+
+/** Who answered when no agent did. */
+export function projectAssistant(): string {
+  return t('slackMessages.the_project_assistant');
+}
+
+/** More questions than the per-user budget allows. */
+export function tooBusy(): string {
+  return t('slackMessages.you_are_asking_faster_than_ordinate');
+}
+
+/** The answer took longer than the server's time limit. */
+export function timedOut(): string {
+  return t('slackMessages.that_took_too_long_so_i');
+}
+
+/** An agent the asker may not use. */
+export function agentNotYours(): string {
+  return t('slackMessages.you_cannot_use_the_assistant_this');
+}
+
+/** A person who has to choose a new password first. */
+export function changePasswordFirst(): string {
+  return t('slackMessages.sign_in_to_ordinate_and_choose');
+}
+
+/** A channel tied to an agent of another project, which only that project's admin may move. */
+export function heldByAnotherProject(): string {
+  return t('slackMessages.that_channel_is_used_by_another');
+}

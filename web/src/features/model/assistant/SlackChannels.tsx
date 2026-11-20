@@ -43,6 +43,7 @@ export function SlackChannels({ projectId, agentId }: { projectId: string; agent
               <Checkbox label={`#${c.name}`} checked={current.includes(c.id)} onCheckedChange={(on) => toggle(c.id, on === true)} />
               <span className={s.pickName} />
               {c.isPrivate && <Badge tone="neutral" icon="lock">Private</Badge>}
+              {c.usedElsewhere && <span className={s.pickMeta}>Used by another project: only an admin of that project can move it.</span>}
               {elsewhere && <span className={s.pickMeta}>Held by another agent: choosing it moves it here.</span>}
             </div>
           );

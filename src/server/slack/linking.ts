@@ -6,12 +6,14 @@
 //      sends the browser to Slack's OpenID authorize endpoint (scope `openid`, state = the token, a nonce).
 //   3. Slack answers to /api/slack/connect/callback (GET, or a cross-site form_post: no session cookie arrives, none
 //      is read). The state row alone says who this is for: it is consumed (single use), the code is exchanged, the
-//      id_token verified (signature by JWKS, aud, nonce), and its Slack user and team must equal the row's. Then the
+//      id_token verified (its RS256 signature against Slack's JWKS by `verifySignature` below — openid-client checks
+//      the claims, not a token received straight from the token endpoint — then aud, nonce), and its Slack user and team must equal the row's. Then the
 //      link is saved and the parked question goes back in the queue.
 //
 // A link says who someone is, never what they may see: every question re-reads the Ordinate account.
 // Outbound calls go through the SSRF guard (`safeFetch`) to slack.com.
 
+import { createPublicKey, verify } from 'crypto';
 import * as client from 'openid-client';
 import { safeFetch } from '../../connectors/ssrf';
 import { appLink } from '../publicUrl';
@@ -58,6 +60,27 @@ export async function authorizeUrl(token: string, org: string, email: string): P
   }).href;
 }
 
+/**
+ * The id_token's RS256 signature against the keys at Slack's `jwks_uri` (fetched through the SSRF guard). openid-client
+ * validates an id_token's claims but trusts one that came straight from the token endpoint over TLS; a link is an identity
+ * decision, so the signature is checked as well.
+ */
+export async function verifySignature(idToken: string, jwksUri: string): Promise<boolean> {
+  const [head, body, sig] = idToken.split('.');
+  if (!head || !body || !sig) return false;
+  try {
+    const h = JSON.parse(Buffer.from(head, 'base64url').toString('utf8')) as { alg?: string; kid?: string };
+    if (h.alg !== 'RS256') return false;
+    const res = await guarded(jwksUri, { method: 'GET', headers: {}, body: null } as unknown as Parameters<client.CustomFetch>[1]);
+    const keys = ((await res.json()) as { keys?: Array<Record<string, unknown>> }).keys ?? [];
+    const jwk = keys.find((k) => k.kid === h.kid && (k.kty === 'RSA') && (k.use === undefined || k.use === 'sig'));
+    if (!jwk) return false;
+    return verify('RSA-SHA256', Buffer.from(`${head}.${body}`), createPublicKey({ key: jwk as never, format: 'jwk' }), Buffer.from(sig, 'base64url'));
+  } catch {
+    return false;
+  }
+}
+
 export type LinkResult = { ok: true; email: string } | { ok: false; reason: 'state' | 'slack' | 'mismatch' | 'stranger' | 'denied' };
 
 /** The callback. `params`: code, state, error — from the query or the form body, whichever Slack used. No session is consulted. */
@@ -76,6 +99,8 @@ export async function finishLink(params: { code?: string; state?: string; error?
     current.searchParams.set('code', params.code);
     current.searchParams.set('state', params.state);
     const tokens = await client.authorizationCodeGrant(conf, current, { expectedState: params.state, expectedNonce: state.nonce, idTokenExpected: true });
+    const jwks = conf.serverMetadata().jwks_uri;
+    if (!jwks || !tokens.id_token || !(await verifySignature(tokens.id_token, jwks))) return { ok: false, reason: 'slack' };
     claims = tokens.claims() as Record<string, unknown> | undefined;
   } catch {
     return { ok: false, reason: 'slack' };

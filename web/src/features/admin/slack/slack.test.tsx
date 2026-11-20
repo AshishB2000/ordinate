@@ -166,12 +166,14 @@ describe('Agent page → Slack channels', () => {
       'slack:channels': { body: { ok: true, connected: true, channels: [
         { id: 'C1', name: 'sales', isPrivate: false, agentId: null, projectId: null },
         { id: 'C2', name: 'ops', isPrivate: true, agentId: 'other', projectId: 'p1' },
+        { id: 'C3', name: 'finance', isPrivate: false, agentId: null, projectId: null, usedElsewhere: true },
       ] } },
       'agent:slackChannels': { body: { ok: true, connected: true, channels: [] } },
     });
     mount(<SlackChannels {...props} />);
     expect(await screen.findByText('#sales')).toBeTruthy();
     expect(screen.getByText(/another agent/)).toBeTruthy();
+    expect(screen.getByText(/Used by another project/)).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /sales/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Save channels' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'agent:slackChannels' && (c.payload as { channels?: unknown }).channels)?.payload).toMatchObject({ channels: [{ id: 'C1' }] }));

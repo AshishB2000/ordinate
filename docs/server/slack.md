@@ -49,6 +49,19 @@ The scopes asked for are `app_mentions:read`, `chat:write`, `im:history`, `im:re
 - **The Share policy.** A Slack post leaves the app, so the project's Share policy has a `slack` path
   (Settings → Privacy, default *Mask*). When it masks or drops anything, a fixed caption replaces the model's sentence.
 
+- **Never in a channel.** An answer from a source table, the app's "outside the topic" reply, and any answer whose
+  conversation earlier showed restricted data (the model is replayed the earlier turns) are never posted in a channel: they go to the
+  asker by direct message.
+- **Wording under the Share policy.** When a dataset behind an answer has a marked column and the `slack` path is not *Include*, the model's
+  sentence is replaced by a fixed caption (a sentence cannot be masked); a masked card also loses the model's title.
+- **Channels.** One agent per channel, and one project per channel: moving a channel that another project holds needs an admin of
+  that project or an org admin. A channel whose project is deleted or archived stops answering.
+- **Revoked tokens.** Slack's `tokens_revoked` for this app's bot (or `app_uninstalled`) switches Ordinate's side off; a person's
+  revoked user token only drops that person's link.
+- **Limits.** A Slack question is held to the RPC time limit (`RPC_TIMEOUT_SECONDS`) and the per-user budget
+  (`RATE_LIMIT_RPC_PER_MINUTE`, per pod); over either, the person gets a fixed sentence.
+- **Database.** The Slack tables are under forced row-level security: run Ordinate as an ordinary Postgres role, not a superuser.
+
 ## Settings
 
 | Setting | Default | Meaning |

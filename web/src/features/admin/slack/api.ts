@@ -89,7 +89,8 @@ export function useUnlinkSlack() {
 
 // ── an agent's channels (the agent page) ─────────────────────────────────────
 
-export interface PickerChannel { id: string; name: string; isPrivate: boolean; agentId: string | null; projectId: string | null }
+/** `usedElsewhere`: another project's agent holds it (its ids are never sent). */
+export interface PickerChannel { id: string; name: string; isPrivate: boolean; agentId: string | null; projectId: string | null; usedElsewhere?: boolean }
 
 export const useSlackChannels = (projectId: string) =>
   useQuery({ queryKey: ['slack:channels', projectId], queryFn: async () => (await rpc('slack:channels', { projectId })) as { ok: true; connected: boolean; channels: PickerChannel[] } | Refusal });

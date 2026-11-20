@@ -2,35 +2,79 @@
 // the org's configured model. Slack carries text in and out only; nothing is built from Slack (no `askId`, so no
 // streaming, and any `suggestedAction` that is not an answer is ignored).
 //
-// Calling a handler skips the RPC layer's 403, so this runs `authorize()` first, for that user, on the contract and the
-// project — the same rule the route applies (src/server/authz/index.ts). A refusal answers "denied" and the handler
-// is never called.
+// Calling a handler skips the RPC layer, so this does what the layer does first: `authorize()` for that user on the
+// contract and the project (a refusal answers "denied", the handler never called), the same per-user budget and the same
+// time limit (an aborted ask stops its DuckDB queries). The contract does not take `context.noSources`: only this server
+// code sets it, after the input has parsed, so that a Slack question is never offered the project's SOURCE TABLES (an
+// answer over one names a document id no folder, row rule or column rule is recorded for: src/ipc/sourceAnswers.ts).
 //
-// The datasets an answer showed come from the STORED turn (`shows()` and `dashboardsFrom`), not the browser reply,
-// which strips them (src/ipc/answerSnapshots.ts turnsForBrowser).
+// What an answer showed comes from the STORED turns, not the browser reply (which strips them): every assistant turn of
+// the conversation the model was replayed (`openTurns`), because the handler hands the earlier turns' words to the model,
+// which may quote them: the union of `shows()` and `dashboardsFrom`.
 
 import type { Pool } from 'pg';
 import { contractFor } from '../../api/index';
 import { authorize } from '../authz/index';
 import { seedRank } from '../authz/caller';
 import { runInContext, type Identity } from '../context';
-import { inOrg } from '../db/inOrg';
 import { handlers } from '../rpc';
+import { untilAborted } from '../limits';
 import * as copilot from '../../ai/copilot';
 import { agentsFor, preselect } from '../../ai/agentAccess';
-import { shows } from '../../ipc/turnsOpen';
+import { askScope } from '../../ipc/agentAsk';
+import { openTurns, shows } from '../../ipc/turnsOpen';
 import * as projects from '../../app/projects';
+import { inOrg } from '../db/inOrg';
+import { slackLimits } from './db';
 
 export interface Target { projectId: string; agentId: string | null; threadId?: string }
 
 /** A card as the browser gets it (src/ipc/answerSnapshots.ts): a chart's, or an SQL answer's table. Read, never written. */
 export type Card = Record<string, any>; // any: AnswerCard | SqlCard, told apart by `kind`
 
-export type Asked =
-  | { ok: true; text: string; card: Card | null; datasetIds: string[]; dashboardIds: string[]; threadId: string; projectId: string; agentName: string | null }
-  | { ok: false; reason: 'denied' | 'not_ready' | 'failed' | 'no_project' };
+export interface Shown {
+  datasetIds: string[]; dashboardIds: string[];
+  /** Some turn of the conversation answered from a source table (never posted in a channel). */
+  sourceTable: boolean;
+  /** The answer is the app's "outside the topic" reply (never posted in a channel). */
+  outside: boolean;
+}
 
-/** Does `who` pass the RPC layer's check for `copilot:ask` on `projectId`? (The caller seeds the rank for the request.) */
+export type Asked =
+  | ({ ok: true; text: string; card: Card | null; turnId: string; threadId: string; projectId: string; agentName: string | null } & Shown)
+  | { ok: false; reason: 'denied' | 'not_ready' | 'failed' | 'no_project' | 'limited' | 'agent' | 'timeout' };
+
+/** What an assistant turn (or a replayed set of them) showed. */
+export async function shownBy(projectId: string, history: readonly copilot.CopilotTurn[]): Promise<Shown & { last: copilot.CopilotTurn | undefined }> {
+  const replayed = (await openTurns(projectId, history)).filter((t) => t.role === 'assistant'); // the turns the handler replayed to the model
+  const last = [...history].reverse().find((t) => t.role === 'assistant');
+  const all = last && !replayed.includes(last) ? [...replayed, last] : replayed;
+  return {
+    last,
+    datasetIds: [...new Set(all.flatMap((t) => shows(t)))],
+    dashboardIds: [...new Set(all.flatMap((t) => t.dashboardsFrom ?? []))],
+    sourceTable: all.some((t) => t.answer?.table !== undefined || t.sql?.table !== undefined),
+    outside: !!last?.outside,
+  };
+}
+
+// The per-user budget the RPC layer applies (RATE_LIMIT_RPC_PER_MINUTE), per pod like its buckets.
+const recent = new Map<string, number[]>();
+function underBudget(org: string, email: string): boolean {
+  const key = `${org}\u0000${email}`;
+  const now = Date.now();
+  const mine = (recent.get(key) ?? []).filter((t) => now - t < 60_000);
+  if (mine.length >= slackLimits().perMinute) {
+    recent.set(key, mine);
+    return false;
+  }
+  mine.push(now);
+  recent.set(key, mine);
+  if (recent.size > 5000) for (const k of recent.keys()) { recent.delete(k); break; }
+  return true;
+}
+
+/** Does `who` pass the RPC layer's check for `copilot:ask` on `projectId`? Inside `who`'s request context. */
 export async function mayAsk(pool: Pool, who: Identity, projectId: string): Promise<boolean> {
   const contract = contractFor('copilot:ask');
   if (!contract) return false;
@@ -60,33 +104,51 @@ export async function directTarget(pool: Pool, who: Identity): Promise<Target | 
   return null;
 }
 
-/** Asks as `who` and reads the stored answer. Runs inside `runInContext(who)`; the caller chose `target`. */
-export async function ask(pool: Pool, who: Identity, requestId: string, question: string, target: Target): Promise<Asked> {
+/** Asks as `who` and reads the stored turns. `signal`: the caller's lease; it aborts the ask when the lease is lost. */
+export async function ask(pool: Pool, who: Identity, requestId: string, question: string, target: Target, signal?: AbortSignal): Promise<Asked> {
   const contract = contractFor('copilot:ask');
   const handler = handlers.get('copilot:ask');
   if (!contract || !handler) return { ok: false, reason: 'failed' };
-  return runInContext(who, requestId, async (): Promise<Asked> => {
+  if (!underBudget(who.org.id, who.user.email)) return { ok: false, reason: 'limited' };
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(new Error('slack ask time limit')), slackLimits().timeoutMs);
+  const onLost = () => ac.abort(signal?.reason);
+  signal?.addEventListener('abort', onLost, { once: true });
+  const work = runInContext(who, requestId, async (): Promise<Asked> => {
     if (!(await mayAsk(pool, who, target.projectId))) return { ok: false, reason: 'denied' };
     // Always a conversation named here: left to the handler, a first question would land in the asker's LATEST conversation
-    // (a web one, with ITS agent). A new one is made for the asker with the channel's agent; a Slack thread's own is continued.
-    const into = target.threadId ?? (await copilot.createThread(target.projectId, target.agentId))?.id;
+    // (a web one, with ITS agent). A new one is made for the asker with the channel's agent, refused as copilot:newThread
+    // refuses an agent the caller may not use; a Slack thread's own is continued.
+    let into = target.threadId;
+    if (!into) {
+      if (target.agentId && !(await askScope(target.projectId, target.agentId)).agent) return { ok: false, reason: 'agent' };
+      into = (await copilot.createThread(target.projectId, target.agentId))?.id;
+    }
     if (!into) return { ok: false, reason: 'failed' };
     const parsed = contract.input.safeParse({
       projectId: target.projectId, context: { kind: '' }, question, threadId: into, ...(target.agentId ? { agentId: target.agentId } : {}),
     });
     if (!parsed.success) return { ok: false, reason: 'failed' };
-    const res = (await handler({}, parsed.data)) as { ok?: boolean; notReady?: boolean; threadId?: string | null; turns?: Array<{ role: string; card?: Card }>; agent?: { name?: string } | null };
+    const data = parsed.data as { context: object };
+    const input = { ...data, context: { ...data.context, noSources: true } }; // server-only: never the project's source tables
+    const res = (await handler({}, input)) as { ok?: boolean; notReady?: boolean; threadId?: string | null; turns?: Array<{ role: string; card?: Card }>; agent?: { name?: string } | null };
     if (!res || res.ok !== true) return { ok: false, reason: res?.notReady ? 'not_ready' : 'failed' };
     const threadId = res.threadId;
     if (!threadId) return { ok: false, reason: 'failed' };
-    // The stored turn: what it showed (the browser reply strips this).
     const history = await copilot.loadHistory(target.projectId, threadId);
-    const turn = [...history].reverse().find((t) => t.role === 'assistant');
-    if (!turn) return { ok: false, reason: 'failed' };
+    const seen = await shownBy(target.projectId, history);
+    if (!seen.last) return { ok: false, reason: 'failed' };
     const shown = [...(res.turns ?? [])].reverse().find((t) => t.role === 'assistant');
-    return {
-      ok: true, text: turn.text, card: shown?.card ?? null, datasetIds: [...new Set(shows(turn))], dashboardIds: [...new Set(turn.dashboardsFrom ?? [])],
-      threadId, projectId: target.projectId, agentName: res.agent?.name ?? null,
-    };
-  });
+    const { last, ...rest } = seen;
+    return { ok: true, text: last?.text ?? '', card: shown?.card ?? null, turnId: seen.last.id, threadId, projectId: target.projectId, agentName: res.agent?.name ?? null, ...rest };
+  }, undefined, ac.signal);
+  try {
+    return await untilAborted(work, ac.signal);
+  } catch (err) {
+    if (signal?.aborted) throw err; // the lease was lost: the caller stops
+    return { ok: false, reason: 'timeout' };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onLost);
+  }
 }

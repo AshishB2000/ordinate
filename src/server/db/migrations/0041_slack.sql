@@ -1,8 +1,15 @@
 -- Ordinate in Slack (docs/slack/00-design.md): people ask the Assistant from Slack.
 --
--- Every table carries org_id and every statement names it. There is no row-level security here: Slack's first
--- contact (an event, a signature check) arrives with no org, and finds it through slack_installs.team_id, so the
--- tables are read by the server's own role only. Secrets (bot token, signing secret, client secret, app token)
+-- Every table that holds org data carries org_id, every statement names its org, and the tables are under forced
+-- row-level security as well (the pattern of 0011 refresh_hooks: a table first looked up WITHOUT an org). A statement
+-- sees a row only inside a transaction that set one of:
+--   ordinate.org          the org's own (a member's call, an admin's)
+--   ordinate.slack_team   one Slack workspace's rows (an event, an interaction or a socket envelope: the first thing
+--                         known is the team id, which finds the org through slack_installs)
+--   ordinate.slack_state  one Connect button's row, by the sha256 of its token (the callback names no org)
+--   ordinate.slack_scope  'system': the worker's claim and the sweeps, across orgs
+-- Without one, no row. src/server/slack/db.ts sets them. A superuser or BYPASSRLS role skips RLS: run the app as an
+-- ordinary role. Secrets (bot token, signing secret, client secret, app token)
 -- are NOT here: they are in the encrypted secrets store (src/server/secrets/store.ts, kinds slack.*).
 --
 -- Additive only: new tables.
@@ -37,7 +44,7 @@ CREATE INDEX slack_links_user ON slack_links (org_id, user_email);
 
 -- One Connect button: single use, ten minutes.
 CREATE TABLE slack_link_states (
-  token         text        PRIMARY KEY,
+  token_hash    text        PRIMARY KEY,                 -- sha256 hex of the token in the Connect URL: the URL holds the credential, the table never does
   org_id        text        NOT NULL,
   team_id       text        NOT NULL,
   slack_user_id text        NOT NULL,
@@ -76,7 +83,9 @@ CREATE TABLE slack_questions (
   thread_id      uuid,                                     -- the Assistant conversation
   of_question    uuid,                                     -- a share: the answered question it posts
   outcome        text,
-  answer         jsonb,                                    -- what was answered, kept so Share to channel can post it again (30 days)
+  answer         jsonb,                                    -- ids and names of what was answered (no card, no figure): where the stored turn is, and its view
+  delivered_at   timestamptz,                              -- the answer was posted (or its private note was): a retaken question only finishes
+  dm_at          timestamptz,                              -- the private answer was sent: never sent twice
   feedback       text CHECK (feedback IN ('helpful', 'not_helpful')),
   created_at     timestamptz NOT NULL DEFAULT now(),
   finished_at    timestamptz
@@ -118,3 +127,25 @@ CREATE TABLE slack_socket_slots (
   lease_until timestamptz NOT NULL,
   PRIMARY KEY (team_id, slot)
 );
+
+-- Row-level security (see the head of this file).
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['slack_installs', 'slack_links', 'slack_link_states', 'slack_questions', 'slack_threads', 'slack_channel_agents'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+    EXECUTE format($p$CREATE POLICY %I ON %I
+      USING (org_id = current_setting('ordinate.org', true)
+          OR %s
+          OR current_setting('ordinate.slack_scope', true) = 'system')
+      WITH CHECK (org_id = current_setting('ordinate.org', true)
+          OR %s
+          OR current_setting('ordinate.slack_scope', true) = 'system')$p$,
+      t || '_scope', t,
+      CASE t WHEN 'slack_link_states' THEN $q$token_hash = current_setting('ordinate.slack_state', true) OR team_id = current_setting('ordinate.slack_team', true)$q$
+             ELSE $q$team_id = current_setting('ordinate.slack_team', true)$q$ END,
+      CASE t WHEN 'slack_link_states' THEN $q$token_hash = current_setting('ordinate.slack_state', true) OR team_id = current_setting('ordinate.slack_team', true)$q$
+             ELSE $q$team_id = current_setting('ordinate.slack_team', true)$q$ END);
+  END LOOP;
+END $$;

@@ -99,6 +99,45 @@ catches a clash). Slack's OpenID sign-in answers with a `form_post` back to the 
 POST that carries no SameSite session cookie, so the callback authenticates by its one-time state row,
 never the session.
 
+## Changes after the independent review (2026-11-20)
+
+The build was reviewed against the code; each finding below changed behaviour, and has a test in `scripts/test-slackReview.ts`
+(and `test-slackRls.ts`, `test-slackLogs.ts`).
+
+- **Source tables are never offered to Slack.** A Slack ask has context `{kind:''}`, a Home question, which would offer the
+  project's source tables; an answer over one names a document id that no folder, row rule or column rule is recorded for.
+  `ask.ts` adds `context.noSources` after the input has parsed (the contract has no such field, so an RPC caller cannot set it)
+  and `homeTables` returns none for it. As a second guard, any turn with `answer.table` or `sql.table` is never posted in a channel.
+- **Every replayed turn is checked.** The handler hands the earlier turns' words to the model, which may quote them. The check
+  takes the union of `shows()` and `dashboardsFrom` over every assistant turn the model was replayed (`openTurns` of the
+  conversation), not only the last one.
+- **An `outside` turn never goes to a channel.** It names a dataset but records no `factsFrom`; it is private to the asker.
+- **Share policy, whole answer.** When the card was masked or dropped, the model's title is replaced as well as its sentence.
+  When any dataset the answer was built from has a marked column and the `slack` policy is not `include`, the sentence is
+  replaced by the fixed caption even if the card was untouched (a sentence cannot be shaped, only kept or replaced). An SQL
+  card is withheld whole when the statement names a marked column the result does not (`phone AS contact`), for every such column.
+- **`tokens_revoked`.** Only a revoked bot token of this install (`tokens.bot` holds its bot user) switches the install off, as
+  `app_uninstalled` does. A person's user token (`tokens.oauth`) drops only that person's link.
+- **A channel belongs to one project.** Moving a channel that another project's agent holds needs an admin of that project (or an
+  org admin). The picker says only "used by another project", never that project's or its agent's ids. A channel whose project is
+  deleted or archived stops answering and its mapping is dropped (on use, and by the sweep).
+- **No copy of the card.** `slack_questions.answer` holds ids and names only (where the stored turn is, what it showed, the
+  asker's view then). Delivery and Share to channel re-read the stored turn and its snapshot, so a card is shown only while the
+  asker's access is what it was when it was computed.
+- **A retaken question repeats nothing.** The ask's outcome is stored before anything is posted; `delivered_at` and `dm_at`
+  record the post and the private answer. A pod whose heartbeat reports the lease lost stops (its signal aborts).
+- **The ask is bounded like an RPC:** the same time limit (`RPC_TIMEOUT_SECONDS`, an aborted ask stops its DuckDB queries) and
+  the same per-user budget (`RATE_LIMIT_RPC_PER_MINUTE`, per pod); over either, a fixed sentence. A first question's conversation
+  is made as `copilot:newThread` makes it, refusing an agent the asker may not use. A person who must change their password gets
+  a fixed sentence.
+- **Linking.** The id_token's RS256 signature is verified against Slack's JWKS (`verifySignature` in `linking.ts`) as well as its
+  claims. Only the sha256 of a Connect token is stored. A parked question is dropped, and its text with it, when its Connect
+  state expires.
+- **Row-level security** is forced on the six Slack tables that hold org data (`0041_slack.sql`), on four scopes
+  (`ordinate.org`, `ordinate.slack_team`, `ordinate.slack_state`, `ordinate.slack_scope = 'system'`); `db.ts` `scoped()` sets them,
+  and `test-slackRls.ts` runs the store as an ordinary role.
+- **Idle.** The worker does not claim while no workspace is switched on.
+
 ## Approaches considered
 
 1. **Customer-created app; Events API by default, Socket Mode as an option; Postgres queue.** (Chosen.)
