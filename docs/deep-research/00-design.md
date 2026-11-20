@@ -55,8 +55,8 @@ Lightdash's version (docs.lightdash.com/agents/deep-research):
 - **Any pod, survives a restart:** a run is a Postgres row with a lease and a heartbeat. A retake never
   re-runs a finished step.
 - **Not in Slack, not over MCP**, in this version.
-- **Built after feature 3 is pushed**, so two builders never share the one local Postgres and
-  `node_modules` at the same time.
+- **Built alongside feature 3's fixes**, on a Postgres server of its own (local port 54331), and with no
+  new dependency, so the two never share a database or an install.
 - **Saved charts land where Save as visual puts them.** "Add to project" saves each chart through
   `answer:saveVisual`'s path, so it lands with its dataset under the team-folder rules (D18). Each one
   is named `<report title> · <section heading>` so they group in lists. On the explainer page this was
