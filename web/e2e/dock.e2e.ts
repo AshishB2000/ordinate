@@ -667,6 +667,6 @@ if (!dbUrl) {
     await review.getByRole('button', { name: 'Discard' }).click();
     await review.waitFor({ state: 'detached' });
     // Two loads here carry a whole scripted flow on Home with the dock open (an ask, a plan's four calls, the @ picker's
-    // three lists, a second ask): 25 calls before Assistant agents, and the picker's one `agent:list` per load makes 26.
-  }, { rpcBudget: 26 });
+    // three lists, a second ask): 25 calls before Assistant agents, and the picker's one `agent:list` per load makes 26, and Deep research's switch reading `research:list` once (is a run going?) 27.
+  }, { rpcBudget: 27 });
 }

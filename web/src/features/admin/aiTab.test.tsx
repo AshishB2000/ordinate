@@ -16,6 +16,8 @@ const EMPTY = { keyStore: null, providers: ['anthropic', 'openai', 'gemini', 'ga
 const SET_UP = { keyStore: null, providers: [on('anthropic'), off('openai'), off('gemini'), off('gateway')], models: [SONNET, HAIKU] };
 
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
+/** Channels the AI tab reads beside its own (deep research's limits card), answered quietly unless a test says otherwise. */
+const ALSO: Record<string, Reply> = { 'research:limits': { body: { ok: true, limits: { steps: 8, queries: 12, minutes: 10 }, ceilings: { steps: 20, queries: 30, minutes: 30 } } } };
 
 function serve(routes: Record<string, Reply>) {
   const calls: { channel: string; payload: unknown }[] = [];
@@ -26,7 +28,7 @@ function serve(routes: Record<string, Reply>) {
       const channel = path.startsWith('/api/rpc/') ? decodeURIComponent(path.slice('/api/rpc/'.length)) : path;
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
-      const r = routes[channel] ?? { body: [] };
+      const r = routes[channel] ?? ALSO[channel] ?? { body: [] };
       const out = typeof r === 'function' ? r(payload) : r;
       return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
     }),
