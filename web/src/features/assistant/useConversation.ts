@@ -22,6 +22,7 @@ import { agentModel, usableAgents, useAgents, type AgentRow } from './agents';
 import type { Learn } from './DidYouMean';
 import { takePendingQuestion, takePendingSpec, useDockContext, useDockProject, usePendingQuestion, usePendingSpec, type DockContext, type HandedTo } from './dockState';
 import type { PlanAction } from './PlanCard';
+import { useResearch } from './research/useResearch';
 import { starterPrompts } from './prompts';
 import type { ThreadAct } from './ThreadActions';
 import type { Pending } from './Transcript';
@@ -116,6 +117,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   // An agent's verified answers are its topic's: one outside it is the Project assistant's to give.
   const chips = topic ? allChips.filter((v) => topic.datasetIds.includes(v.spec.datasetId)) : allChips;
   const usable = !!pid && enabled && !pending && (ready || chips.length > 0); // a verified question needs no model
+  const research = useResearch(pid ?? null, canEdit && ready && enabled); // Deep research: editors and admins, with a model
   const focusComposer = useCallback(() => (input.current && !input.current.disabled ? input.current : panel.current)?.focus(), []);
 
   // Opening focuses the composer — or the frame, when the composer is disabled and refuses focus.
@@ -309,6 +311,24 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   async function send(question: string, on: DockContext = context, into: string = shownThread, withAgent: string | null = agentId, skipVerified = false): Promise<void> {
     const q = question.trim();
     if (!q || !pid || pending) return;
+    if (research.on) {
+      // Deep research: a run in place of an ask (docs/deep-research). Its question and one research turn land in the conversation.
+      setPending({ askId: crypto.randomUUID(), question: q, text: '', steps: [] });
+      setHint('');
+      setText('');
+      const r = await research.start(pid, q, into || undefined, withAgent).catch(() => ({ ok: false as const, error: 'Something went wrong. Try again.', notReady: false }));
+      setPending(null);
+      if (r.ok) {
+        setTurns(r.turns, r.threadId, into ? undefined : refOf(withAgent));
+        research.setOn(false);
+        research.refresh();
+      } else {
+        setText(q);
+        if (r.notReady) void qc.invalidateQueries({ queryKey: ['ai:status'] });
+        setHint(r.error || 'Could not start the research. Try again.');
+      }
+      return;
+    }
     const askId = crypto.randomUUID();
     setPending({ askId, question: q, text: '', steps: [] });
     setLastSteps(null);
@@ -436,6 +456,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     stage,
     send,
     notThis,
+    research,
     followUp,
     startNew,
     switchThread,

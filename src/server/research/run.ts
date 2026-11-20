@@ -116,17 +116,20 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
     const model = scope.agent?.model ?? null;
     const ready = async (): Promise<boolean> => execConfig.assistantOn() && (await execConfig.executionReady());
 
-    /** One model call: budgeted, bounded by the signal. 'limited' | 'model' on failure. */
+    /** One model call, as the starter (the provider and the model are the org's, read in the person's context): budgeted, bounded by the signal. */
     const call = async (system: string, text: string): Promise<{ ok: true; raw: string } | { ok: false; code: 'limited' | 'model' | 'time' }> => {
       if (!underBudget(org, run.startedBy)) return { ok: false, code: 'limited' };
-      if (!(await ready())) return { ok: false, code: 'model' };
-      try {
-        const r = await untilAborted(analyze.dispatch(system, [{ role: 'user', text }], undefined, { prose: true, model }), ac.signal);
-        return r.error || !r.rawText ? { ok: false, code: 'model' } : { ok: true, raw: r.rawText };
-      } catch {
-        alive();
-        return { ok: false, code: 'time' };
-      }
+      const r = await asStarter(async () => {
+        if (!(await ready())) return { ok: false as const, code: 'model' as const };
+        try {
+          const out = await untilAborted(analyze.dispatch(system, [{ role: 'user', text }], undefined, { prose: true, model }), ac.signal);
+          return out.error || !out.rawText ? { ok: false as const, code: 'model' as const } : { ok: true as const, raw: out.rawText };
+        } catch {
+          return { ok: false as const, code: 'time' as const };
+        }
+      });
+      alive();
+      return r ?? { ok: false, code: 'model' };
     };
     const fail = async (code: 'model' | 'limited'): Promise<void> => {
       await store.finish(org, run.id, owner, 'failed', code, null);

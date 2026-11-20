@@ -59,11 +59,14 @@ export interface ComposerProps {
   agentPick?: ReactNode;
   /** An agent's own model, which answers everyone in it: named instead of the person's picker. */
   fixedModel?: { model: AiModel; by: string };
+  /** Deep research's switch (./research/ResearchToggle) and its line of help, for editors and admins. */
+  research?: ReactNode;
+  researchHelp?: ReactNode;
   layout?: 'dock' | 'page';
   className?: string;
 }
 
-export function Composer({ inputRef, projectId, status, context, pinned, onPin, text, onText, onSend, usable, placeholder, projectPick, agentPick, fixedModel, layout = 'dock', className }: ComposerProps) {
+export function Composer({ inputRef, projectId, status, context, pinned, onPin, text, onText, onSend, usable, placeholder, projectPick, agentPick, fixedModel, research, researchHelp, layout = 'dock', className }: ComposerProps) {
   const [picking, setPicking] = useState(false);
   const caret = useRef<number | null>(null); // where the `@` was typed, to return to
 
@@ -128,6 +131,7 @@ export function Composer({ inputRef, projectId, status, context, pinned, onPin, 
         onChange={onChange}
         onKeyDown={onKey}
       />
+      {researchHelp}
       <div className={s.composeFoot}>
         {wide ? (
           <>
@@ -147,6 +151,7 @@ export function Composer({ inputRef, projectId, status, context, pinned, onPin, 
             <ModelPicker status={status} fixed={fixedModel} />
           </>
         )}
+        {research}
         <div className={s.composeActions}>
           {!wide && picker()}
           <AddData projectId={projectId} />

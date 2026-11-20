@@ -85,6 +85,8 @@ export interface Turn {
   needs?: 'link' | 'copy';
   /** Outcome E for an editor: the link the server checked, which ./LinkCard offers to add. */
   link?: AnswerLink;
+  /** A deep-research run's turn: the run id (src/ai/researchTurn.ts). Its text is a fixed sentence; the run card reads the rest from `research:get`. */
+  research?: { runId: string };
 }
 
 /** A link the server checked between two datasets (src/ai/answerNeeds.ts `AnswerLink`): every check is the engine's. */

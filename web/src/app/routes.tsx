@@ -100,6 +100,8 @@ export const pages: RouteObject[] = [
   page('/assistant', () => import('../features/assistant/AssistantPage')),
   // A viewer's dashboard request, as its approver reviews it (docs/team-folders, "Dashboard requests").
   page('/requests/:projectId/:requestId', () => import('../features/dashboards/requests/RequestReviewPage')),
+  // A deep-research report (docs/deep-research): private to the person who ran it, its charts drawn live.
+  page('/research/:projectId/:runId', () => import('../features/assistant/research/ReportPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

@@ -89,7 +89,8 @@ export async function researchWorld(label: string): Promise<ResearchWorld | null
     if (system === answerSql.SQL_SYSTEM_PROMPT) { stub.calls.sql += 1; return { rawText: stub.sql }; }
     return err;
   };
-  execConfig.executionReady = async () => true;
+  const context: typeof import('../src/server/context') = require('../src/server/context');
+  execConfig.executionReady = async () => { context.ctx(); return true; }; // like the real one: it reads the org's config, so it throws outside a request context
   execConfig.assistantOn = () => true;
   const roles: string[] = [];
   const pools: Pool[] = [];
