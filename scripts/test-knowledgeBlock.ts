@@ -63,4 +63,11 @@ const withFacts = guardAnswer(answer, [...doc.ledger, { label: 'revenue', value:
 ok('NEGATIVE CONTROL: the same answer with $4.2M in the facts gets no note', withFacts.text === answer && withFacts.audit.violations.length === 0, JSON.stringify(withFacts.audit));
 const year = guardAnswer('The report covers 2025.', doc.ledger);
 ok('a plain number from the document may be repeated', year.text === 'The report covers 2025.', year.text);
+
+// The turn's record (src/ai/turnGuidance.ts): ids only, at most 6, a bad id dropped, the browser-only refs never stored.
+const { sanitizeGuidance } = require('../src/ai/turnGuidance') as typeof import('../src/ai/turnGuidance');
+const ids = Array.from({ length: 9 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
+const kept = sanitizeGuidance({ instructions: 1, examples: [], documents: [...ids, 'not-an-id', 'x'], documentRefs: [{ id: ids[0], title: 'Leak' }] });
+ok('TurnGuidance keeps at most 6 document ids, drops bad ones and the browser-only refs', kept?.documents?.length === 6 && kept.documents.every((d) => ids.includes(d)) && !('documentRefs' in (kept ?? {})));
+ok('NEGATIVE CONTROL: a turn with none stores no documents key', !('documents' in (sanitizeGuidance({ instructions: 1, examples: [] }) ?? {})) && !('documents' in (sanitizeGuidance({ instructions: 1, examples: [], documents: ['bad'] }) ?? {})));
 finish();
