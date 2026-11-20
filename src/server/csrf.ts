@@ -26,6 +26,9 @@
 //   - /api/hooks/refresh/<token> (live data L0.5): the token in the path is the
 //     whole credential, and the route looks up no cookie, session or header —
 //     a cross-site page riding the browser has nothing to ride without it.
+//   - /api/slack/events, /interactions and /connect/callback: the request signature (events, interactions) or the
+//     one-time state row and the verified id_token (the callback, a cross-site `form_post` from Slack) is the whole
+//     credential; none looks up a cookie or a session (src/server/slack/routes.ts).
 // Neither is handed a CSRF cookie either: nothing there would ever echo it.
 // Every other mode is checked, dev included: a dev server answers every
 // caller on loopback as an admin, which a page in the same browser can reach.
@@ -44,12 +47,13 @@ import fastifyCookie from '@fastify/cookie';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { hasBearer } from './auth/tokens';
 import { HOOK_ROUTE } from './hooks/store';
+import { SELF_AUTH } from './slack/paths';
 
 export const CSRF_HEADER = 'x-csrf-token';
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 /** Routes that refuse ambient credentials themselves. */
-const BEARER_ONLY = new Set(['/api/mcp', HOOK_ROUTE]);
+const BEARER_ONLY = new Set(['/api/mcp', HOOK_ROUTE, ...SELF_AUTH]);
 /** Probes answer any Host: in-cluster callers use a Service name, and these return no data or identity to rebind for. */
 const HEALTH = new Set(['/healthz', '/readyz']);
 

@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   const did = ds!.id;
 
   // ── 1. The policy file ────────────────────────────────────────────────────
-  ok('policy defaults to mask on every path', JSON.stringify(await store.getPolicy(pid)) === JSON.stringify({ export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask' }));
+  ok('policy defaults to mask on every path', JSON.stringify(await store.getPolicy(pid)) === JSON.stringify({ export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask', slack: 'mask' }));
   const set = await call('privacy:setPolicy', { projectId: pid, policy: { export: 'drop', report: 'nonsense', sneaky: 'include' } });
   ok('setPolicy keeps known paths/actions only', set.ok && set.policy.export === 'drop' && set.policy.report === 'mask' && !('sneaky' in set.policy), JSON.stringify(set));
   const policyFile = path.join(tmpUserData, 'projects', pid, 'privacy', 'policy.json');

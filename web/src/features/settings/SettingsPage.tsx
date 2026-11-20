@@ -21,6 +21,7 @@ import { useCommands } from '../palette/registry';
 import { KeyCaps, ShortcutList } from '../palette/ShortcutsSheet';
 import { PrivacySection } from './PrivacySection';
 import { NotificationsGroup } from './NotificationsGroup';
+import { SlackGroup } from './SlackGroup';
 import { AppearanceGroup } from './AppearanceGroup';
 import { Group } from './Rows';
 import s from './Settings.module.css';
@@ -85,6 +86,7 @@ function You({ me }: { me: Me }) {
       <div className={s.side}>
         <Who me={me} />
         <NotificationsGroup />
+        <SlackGroup />
         <AppearanceGroup />
         <Group
           title="Keyboard"

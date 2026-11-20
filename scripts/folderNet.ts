@@ -59,7 +59,7 @@ const LATER_BY_ID: Readonly<Record<string, string>> = {};
 const UNSWEPT = new Set(['projects:list', 'projects:roles', 'onboarding:status', 'jobs:list', 'jobs:clear',
   'prefs:get', 'numbers:follow', 'tokens:list', 'connectors:catalog', 'connectors:logos', 'key:status', 'captureDataset:status', 'formula:functions', 'branding:logo',
   'calendar:today', 'themes:list', 'ai:status', 'channel:list', 'rebuild:read', 'embed:status', 'mentions:seen', 'mentions:prefs',
-  'mentions:setPrefs']); // setPrefs: the caller's own email switches (#525 made its input a union the sampler does not reach)
+  'mentions:setPrefs', 'slack:myLink', 'slack:unlink']); // slack:*: the caller's own Slack link (no project, no id). setPrefs: the caller's own email switches (#525 made its input a union the sampler does not reach)
 /** Every wholeProject() call site (D14): a security walk, a uniqueness check, or upkeep that is never a reply. */
 const WHOLE_PROJECT: Readonly<Record<string, number>> = {
   'src/analysis/alertStore.ts': 1, // syncWatchRules: every watched dataset, or another folder's rules read as gone

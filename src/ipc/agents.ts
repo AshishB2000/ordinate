@@ -13,6 +13,12 @@ import { agentNotFound, agentNotSaved, agentsNotRead } from '../ai/agentMessages
 import * as copilot from '../ai/copilot';
 import { orgTeams } from '../server/authz/caller';
 import { logger } from '../app/logger';
+import { dbOrNull, dropAgentChannels } from '../server/slack/db';
+import { ctx } from '../server/context';
+
+async function dropSlackChannels(projectId: string, agentId: string): Promise<void> {
+  if (dbOrNull()) await dropAgentChannels(ctx().org.id, projectId, agentId).catch((err: unknown) => logger.error('[agents] slack channels not dropped:', (err as Error).message));
+}
 
 const flagged = (list: Instruction[]) => list.map((i) => (FIGURE_RE.test(i.text) ? { ...i, figure: true as const } : i));
 
@@ -73,6 +79,7 @@ export function register(): void {
 
   ipcMain.handle('agent:delete', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const done = await trash.trashRecord(projectId, 'agent', id);
+    if (done.ok) await dropSlackChannels(projectId, id); // its Slack channels go with it: one agent per channel, and none for a deleted one
     return done.ok ? { ok: true } : { ok: false, error: agentNotFound() };
   });
 

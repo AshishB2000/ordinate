@@ -30,6 +30,7 @@ import { UUID } from './dockRoute';
 import { rememberPageThread } from './dockState';
 import { AgentTag, groupThreads, History, MoreThreads } from './History';
 import { useConversation, type Conversation } from './useConversation';
+import { useSlackLanding } from './useSlackLanding';
 import w from './Wide.module.css';
 
 /** The project's conversations, newest-touched first (the server's order) a page at a time, the open one marked. Titles only are searched. */
@@ -72,6 +73,7 @@ function Conversations({ c }: { c: Conversation }) {
 
 export default function AssistantPage() {
   const [params, setParams] = useSearchParams();
+  useSlackLanding(); // /assistant?slack=<id>: an answer's Open in Ordinate
   const asked = params.get('thread') ?? '';
   const c = useConversation('page', UUID.test(asked) ? { projectId: null, id: asked } : null);
   const me = useMe();

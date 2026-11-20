@@ -55,6 +55,7 @@ import { FOLDER_CODE, folderRaised, isFolderError, tagFolderRefusals } from './a
 import { gateWrite } from './authz/folderWriteGate';
 import { useFolders } from './authz/folderTree';
 import { isRecordChanged } from '../app/editConflict';
+import { SELF_AUTH, CONNECT_ROUTE } from './slack/paths';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -82,6 +83,12 @@ const SECRET_KEYS = [
   // A Slack / Teams channel's webhook URL (src/app/channels.ts): whoever has it can post there.
   'webhookUrl',
   'webhook',
+  // Ordinate in Slack (src/server/slack): the app's keys, and the request signature a replay could reuse.
+  'botToken',
+  'signingSecret',
+  'clientSecret',
+  'appToken',
+  'x-slack-signature',
 ];
 
 // ponytail: pino matches exact names at fixed depths (`*.k` is ONE level), so
@@ -121,7 +128,7 @@ export function appPool(): Pool | null {
  * credential (./hooks/route.ts).
  */
 function routeAccess(method: string, route: string | undefined): 'read' | 'write' | 'self' | null {
-  if (route === HOOK_ROUTE) return 'self';
+  if (route === HOOK_ROUTE || (route !== undefined && SELF_AUTH.has(route))) return 'self';
   if (method === 'POST' && route === '/api/files') return 'write';
   if (route === '/api/files/:token' || route === '/api/events') return 'read';
   return null;
@@ -217,6 +224,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     let jobs: { stop(): Promise<void> } | null = null;
     let bus: { stop(): Promise<void> } | null = null;
     let sweep: { stop(): void } | null = null;
+    let slackWorker: { stop(): Promise<void> } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -253,6 +261,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useAiKeys(pool, cfg.masterKey);
       // Embedding (docs/embed): the org's switch and origins in org_settings, its signing secret in the store — none without a master key.
       useEmbedDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
+      // Ordinate in Slack: its rows, and its four keys in the encrypted store (none without a master key: nothing can be saved).
+      (require('./slack/db') as typeof import('./slack/db')).useSlackDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, { timeoutMs: cfg.limits.rpcTimeoutMs, perMinute: cfg.limits.rpcUserPerMinute });
       // The org's settings document is a row every pod reads, not a file on this pod's disk (0014).
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
@@ -276,12 +286,15 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
       sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
-      bg = { runner: jobs, bus, sweep };
+      slackWorker = (require('./slack/worker') as typeof import('./slack/worker')).startSlackWorker(app.log);
+      const slack = slackWorker;
+      bg = { runner: { stop: async () => { await jobs?.stop(); await slack?.stop(); } }, bus, sweep }; // the shutdown stops the Slack worker with the runner
     });
     // An app closed on its own (the tests) stops its runner and bus here. A
     // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
       if (isDraining()) return;
+      await slackWorker?.stop();
       await jobs?.stop();
       await bus?.stop();
       sweep?.stop();
@@ -301,6 +314,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       useSecretStore(null);
       useEmbedDb(null, null);
+      (require('./slack/db') as typeof import('./slack/db')).useSlackDb(null, null);
       useAiKeys(null, null);
       (require('./subscriptions/job') as typeof import('./subscriptions/job')).unwireSubscriptions();
       orgConfig.useOrgConfig(null);
@@ -347,6 +361,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     }).then(
       (who) => {
         if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
+        // The Connect button (Slack): a person who is not signed in lands on the sign-in page, then back here.
+        if (!who && route === CONNECT_ROUTE) return void reply.redirect(`/sign-in?next=${encodeURIComponent(req.url)}`);
         if (!who) return void reply.code(401).send({ error: 'not signed in' });
         // A temporary password (./auth/password.ts): every page is the change-password page, and
         // every /api/ call but /api/auth/* (exempt above) is refused, until it is changed.
@@ -555,6 +571,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     pool: () => pool, minIntervalSec: cfg.limits.refreshHookMinIntervalSec, devAuth: cfg.auth.mode === 'dev', dbUrl: dbUrl ?? '',
   });
 
+  // Ordinate in Slack (docs/slack): events, interactions and the Connect flow. Each authorizes itself (./slack/routes.ts).
+  (require('./slack/routes') as typeof import('./slack/routes')).registerSlackRoutes(app, { pool: () => pool });
+
   // The maps' bundled boundary GeoJSON (./geo.ts) — org-independent, immutable by content hash.
   registerGeoRoutes(app);
 
@@ -679,4 +698,6 @@ export function registerHandlers(): void {
   (require('../ipc/folders') as typeof import('../ipc/folders')).register();
   // Dashboard requests (docs/team-folders, E9): a viewer asks, an editor approves.
   (require('./requests/rpc') as typeof import('./requests/rpc')).register();
+  // Ordinate in Slack (docs/slack): the admin's setup, each member's own link, an agent's channels.
+  (require('./slack/rpc') as typeof import('./slack/rpc')).register();
 }

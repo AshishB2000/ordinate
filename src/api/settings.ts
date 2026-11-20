@@ -101,7 +101,7 @@ export const settings = {
     access: 'admin',
     input: z.strictObject({
       projectId: Uuid,
-      policy: z.strictObject({ export: Action.optional(), report: Action.optional(), publish: Action.optional(), bundle: Action.optional() }),
+      policy: z.strictObject({ export: Action.optional(), report: Action.optional(), publish: Action.optional(), bundle: Action.optional(), slack: Action.optional() }),
     }),
     project: byProjectId,
   }),
@@ -124,7 +124,7 @@ export const settings = {
     access: 'read',
     input: z.strictObject({
       projectId: Uuid,
-      path: z.enum(['export', 'report', 'publish', 'bundle']),
+      path: z.enum(['export', 'report', 'publish', 'bundle', 'slack']),
       datasetIds: z.array(Uuid).max(1000).nullable(),
     }),
     project: byProjectId,

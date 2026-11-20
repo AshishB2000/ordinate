@@ -161,8 +161,10 @@ export async function onSourceTable<T>(projectId: string, datasetId: unknown, ta
 }
 
 /** The tables a Home question offers (./homeFacts `homePicks`, once per ask): an editor's, or a viewer's given ones. None for anything else. */
-async function homeTables(projectId: string, context: { kind?: string } | undefined, question: string): Promise<SourceTable[]> {
+async function homeTables(projectId: string, context: { kind?: string; noSources?: boolean } | undefined, question: string): Promise<SourceTable[]> {
   if (context?.kind) return [];
+  // A Slack question (src/server/slack/ask.ts): never offered a table, whose answer names a document no folder or rule is recorded for. The contract has no such field; only server code sets it.
+  if (context?.noSources === true) return [];
   const reader = await readerOf(projectId);
   if (givesNothing(reader)) return []; // a viewer given no table: their ask reads nothing more
   return tablesOf(projectId, (await homePicks(projectId, question)).tables, reader);

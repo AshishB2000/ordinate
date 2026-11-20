@@ -152,7 +152,7 @@ describe('My settings', () => {
     const overview = {
       ok: true,
       projectName: 'Retail',
-      policy: { export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask' },
+      policy: { export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask', slack: 'mask' },
       datasets: [{ id: DS, name: 'Customers', sensitive: [], pending: [{ column: 'email', kind: 'email', level: 'personal', reason: '20 of 20 values are email addresses' }] }],
       datasetCount: 1,
     };
@@ -172,7 +172,7 @@ describe('My settings', () => {
     const overview = {
       ok: true,
       projectName: 'Retail',
-      policy: { export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask' },
+      policy: { export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask', slack: 'mask' },
       datasets: [{ id: DS, name: 'Customers', sensitive: [], pending: [{ column: 'email', kind: 'email', level: 'personal', reason: 'r' }] }],
       datasetCount: 1,
     };
