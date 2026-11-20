@@ -161,6 +161,19 @@ const sharePolicy: typeof import('../src/app/privacyStore') = require('../src/ap
     await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'mask' } });
     ok('Share policy: `slack` is a share path, default mask', sharePolicy.SHARE_PATHS.includes('slack') && sharePolicy.DEFAULT_POLICY.slack === 'mask');
 
+    // ── charts (phase 4): a chart that fits is a Slack chart block; a masked one never is ─────────────────
+    const chartCard = (category: string, labels: string[]) => ({
+      ok: true, title: 'Sales', chartType: 'column', caption: '', headline: [], bullets: [],
+      spec: { datasetId: W.plain, category, measures: [{ column: 'sales', aggregation: 'sum' }] }, data: { labels, series: [{ name: 'Sum of sales', values: [5, 9] }] },
+    });
+    S.answer = { text: 'Sales by region.', datasets: [W.plain], card: chartCard('region', ['East', 'West']) };
+    await S.deliver(S.dm('boss', 'sales by region?', { id: 'EvCh1' }));
+    ok('Charts: an answer whose chart fits is posted as a data_visualization block, with the sentence', /"data_visualization"/.test(JSON.stringify(S.updated().at(-1))) && /Sales by region/.test(JSON.stringify(S.updated().at(-1))));
+    S.answer = { text: 'Sales by customer c1.', datasets: [W.plain], card: chartCard('customer', ['c1', 'c2']) };
+    await S.deliver(S.dm('boss', 'sales by customer?', { id: 'EvCh2' }));
+    const maskedChart = JSON.stringify(S.updated().at(-1));
+    ok('Charts: labels from a masked personal column are tokens, never the values, and the sentence is the fixed caption', !/"c1"|"c2"|by customer c1/.test(maskedChart) && maskedChart.includes('hidden by the project'), maskedChart.slice(0, 400));
+
     // ── crash: a lapsed lease is retaken and the thread gets ONE answer ───────
     workerMod.pauseForTest(true);
     S.answer = { text: 'Crash test answer 77.', datasets: [W.plain] };

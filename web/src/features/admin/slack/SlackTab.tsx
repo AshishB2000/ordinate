@@ -67,7 +67,7 @@ function ModeChoice({ mode, onChange, st, disabled }: { mode: SlackMode; onChang
         ]}
       />
       <p className={s.note}>
-        <Icon name="alert" size={12} />
+        <Icon name="info" size={12} />
         <span>
           {mode === 'events'
             ? st.publicUrl
@@ -108,14 +108,14 @@ function CreateApp({ st, mode }: { st: SlackStatus; mode: SlackMode }) {
           </div>
           {mode === 'events' && (
             <p className={s.note}>
-              <Icon name="alert" size={12} />
+              <Icon name="info" size={12} />
               <span>Slack checks the request URL when the app is created, before this server has its signing secret. After saving the keys below, open the app’s Event Subscriptions page and press Retry.</span>
             </p>
           )}
         </>
       ) : (
         <p className={s.note} role="note">
-          <Icon name="alert" size={12} />
+          <Icon name="info" size={12} />
           <span>The manifest for “Slack calls Ordinate” needs this server’s public address. Set ORDINATE_PUBLIC_URL and restart, or choose Socket Mode.</span>
         </p>
       )}
@@ -164,10 +164,14 @@ function Keys({ st, mode }: { st: SlackStatus; mode: SlackMode }) {
             hint={i?.hasBotToken ? 'Paste it again to replace it, or to save other changes.' : 'Starts with xoxb-.'} />
         </div>
         {!needSocket && (
-          <Input label="Signing secret" type="password" value={f.signingSecret} onChange={set('signingSecret')} autoComplete="off" spellCheck={false} hint={stored(i?.hasSigningSecret) ?? 'Verifies that a request really comes from Slack.'} />
+          <div className={s.wide}>
+            <Input label="Signing secret" type="password" value={f.signingSecret} onChange={set('signingSecret')} autoComplete="off" spellCheck={false} hint={stored(i?.hasSigningSecret) ?? 'Verifies that a request really comes from Slack.'} />
+          </div>
         )}
         {needSocket && (
-          <Input label="App-level token" type="password" placeholder="xapp-…" value={f.appToken} onChange={set('appToken')} autoComplete="off" spellCheck={false} hint={stored(i?.hasAppToken) ?? 'Create it with the connections:write scope.'} />
+          <div className={s.wide}>
+            <Input label="App-level token" type="password" placeholder="xapp-…" value={f.appToken} onChange={set('appToken')} autoComplete="off" spellCheck={false} hint={stored(i?.hasAppToken) ?? 'Create it with the connections:write scope.'} />
+          </div>
         )}
         <Input label="Client ID" value={f.clientId} onChange={set('clientId')} autoComplete="off" spellCheck={false} hint="For “Sign in with Slack”, which links a person to their account." />
         <Input label="Client secret" type="password" value={f.clientSecret} onChange={set('clientSecret')} autoComplete="off" spellCheck={false} hint={stored(i?.hasClientSecret)} />
