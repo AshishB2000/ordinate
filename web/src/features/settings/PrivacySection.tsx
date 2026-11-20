@@ -23,6 +23,7 @@ const PATHS: Array<{ key: SharePath; title: string; desc: string }> = [
   { key: 'report', title: 'Reports and stories', desc: 'Generated reports (scheduled ones too) and stories.' },
   { key: 'publish', title: 'Publish', desc: 'Dashboards published as a site or a link.' },
   { key: 'bundle', title: 'Project bundles', desc: '.ordinate files: a dataset with sensitive columns travels masked or without them.' },
+  { key: 'slack', title: 'Slack answers', desc: 'Answers Ordinate posts in Slack, in a channel or a direct message. When something is masked, the sentence is replaced by a fixed caption.' },
 ];
 const ACTIONS: Array<{ value: ShareAction; label: string; hint: string }> = [
   { value: 'mask', label: 'Mask', hint: 'Replace each value with this project’s token for it, so joins still line up.' },

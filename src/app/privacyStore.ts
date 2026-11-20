@@ -40,12 +40,12 @@ import type { MintingSecretStore } from '../server/secrets/store';
 import { logger } from './logger';
 
 export type ShareAction = 'mask' | 'drop' | 'include';
-export type SharePath = 'export' | 'report' | 'publish' | 'bundle';
+export type SharePath = 'export' | 'report' | 'publish' | 'bundle' | 'slack';
 export type SharePolicy = Record<SharePath, ShareAction>;
 
-export const SHARE_PATHS: readonly SharePath[] = ['export', 'report', 'publish', 'bundle'];
+export const SHARE_PATHS: readonly SharePath[] = ['export', 'report', 'publish', 'bundle', 'slack'];
 const ACTIONS: ReadonlySet<string> = new Set(['mask', 'drop', 'include']);
-export const DEFAULT_POLICY: SharePolicy = { export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask' };
+export const DEFAULT_POLICY: SharePolicy = { export: 'mask', report: 'mask', publish: 'mask', bundle: 'mask', slack: 'mask' };
 
 const MAX_COLUMN_NAME = 256;
 const MAX_PROPOSALS = 500;

@@ -166,6 +166,7 @@ Do not set these in a deployment. They are listed because server code reads them
 | `ORDINATE_TODAY` | Pins "today" (`YYYY-MM-DD`) for relative-date filters. Smoke tests use it. | unset: the server's local date | never | no |
 | `ORDINATE_SAAS_FIXTURE_BASE` | Points SaaS connectors at a loopback fixture server (`http://127.0.0.1:<port>` only) for tests. | unset | never | no |
 | `ORDINATE_TEST_LIVE_FAKE` | `1` registers the test harness's fake warehouse (DuckDB, `scripts/liveFakeConnector.ts`) so the e2e can drive a Live dataset. Never offered in the connection picker. Refused with `ORDINATE_ENV=prod`, and the image does not contain it. | unset | never | no |
+| `ORDINATE_TEST_SLACK_BASE` | `http://127.0.0.1:<port>` points every Slack call (Web API, Sign in with Slack) at a local stub of Slack, for the test harness and the e2e. Ignored with anything but a loopback `http://` URL. Refused with `ORDINATE_ENV=prod`. | unset: `https://slack.com` | never | no |
 
 ## Read by libraries, not by Ordinate
 

@@ -14,6 +14,7 @@ import { useLeaseDb } from '../app/runLease';
 import { pruneAudit } from './authz/audit';
 import { pruneUnused } from '../ai/copilotRows';
 import { defineJob } from './jobs/runner';
+import * as slackDb from './slack/db';
 
 /** How often each org's expired tokens, stages, counter windows, plan runs, audit rows and unused conversations are swept. */
 export const SHARED_SWEEP_EVERY_MS = 5 * 60_000;
@@ -32,6 +33,7 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => planStore.prune(),
     () => pruneAudit(p, org, auditDays),
     () => pruneUnused(org),
+    () => (slackDb.dbOrNull() ? slackDb.sweep(org) : Promise.resolve()), // Slack's expired states, events, old questions, orphaned links (0041)
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));
