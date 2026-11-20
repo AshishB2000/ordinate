@@ -17,9 +17,10 @@
 //              - Snowflake: literal defining queries; the role is read-only;
 //              - ClickHouse: MergeTree tables in the container's scratch database;
 //              - the stand-in: DuckDB tables behind the live fake.
-//   cases    a related category, a related split, a related filter, two hops, drill-across. Then THE PICK: the dirty
-//            keys show their smallest row (Object.is joinJs with that row first). It IS a divergence: joinJs in file
-//            order, which is what a copy keeps, shows the other one.
+//   cases    a related category, a related split, a related filter, two hops, drill-across, a related measure (by a
+//            primary and by a two-hop category), and two KPIs across the link (a related filter; a related measure).
+//            Then THE PICK: the dirty keys show their smallest row (Object.is joinJs with that row first). It IS a
+//            divergence: joinJs in file order, which is what a copy keeps, shows the other one.
 //   door     every statement on the wire went through `warehouse()` (wire count = admissions), and each billed at most
 //            `maxBilled` bytes where the warehouse reports billing.
 //
@@ -31,7 +32,7 @@ import type { VizEncoding } from '../src/analysis/visuals';
 import type { FilterStep } from '../src/data/transforms';
 import type { SnowflakeConfig } from './warehouseLiveSnowflake';
 import type { BigqueryConfig } from './warehouseLiveBigquery';
-import { ident, keep, ok as harnessOk, say, secret, summary } from './warehouseLiveHarness';
+import { ident, keep, ok as harnessOk, secret, summary } from './warehouseLiveHarness';
 
 const registry: typeof import('../src/connectors') = require('../src/connectors');
 const budget: typeof import('../src/engine/live/liveBudget') = require('../src/engine/live/liveBudget');
@@ -89,19 +90,6 @@ const stored = (t: Table): StoredColumn[] => t.cols.map(({ name, store }) => ({ 
 
 /** BigQuery bills at least 10 MB per table a statement reads; a join reads up to all three. */
 export const BQ_MAX_BILLED = 3 * 10 * 2 ** 20;
-
-/**
- * TODO: related measures and KPIs across a link on Live. On this base the executor refuses a measure on a related
- * table (`relatedMeasure`, ipc/liveJoin) and asks no KPI across a link, so these are not asked yet. The fixture is
- * ready for them: Customers.credit is the related measure, c2's identical repeat must count once and the dirty keys
- * pick as above. Each compares with joinJs (`joinedVizDataJs` with its fan-in mask; `joinedMetricJs`).
- */
-export const TODO_RELATED_MEASURE_AND_KPI_CASES = [
-  'a related measure: sum(Customers.credit) by Orders.chan, each customer once',
-  'a related measure by a related category: sum(Customers.credit) by Zones.zone, across two hops',
-  'a KPI across a link: sum(Orders.amt) where Customers.region = \'West\'',
-  'a KPI of a related measure: sum(Customers.credit) over the customers Orders reaches',
-] as const;
 
 const M = (column: string, aggregation: 'sum' | 'count', datasetId?: string) => ({ column, aggregation, ...(datasetId ? { datasetId } : {}) });
 const show = (v: unknown): string => JSON.stringify(v, (_k, x) => (Object.is(x, -0) ? '-0' : x));
@@ -184,6 +172,9 @@ export async function runJoins(engine: JoinEngine, conn: JoinConnection, ok: Ok 
       ['two hops, Orders → Customers → Zones (number keys, −0 beside 0)', ids.orders, { category: 'zone', categoryDatasetId: ids.zones, values: [M('amt', 'sum')] }, [], false],
       // A count no case above asks, so its question across the link is its own statement, not the cache's.
       ['drill-across: a measure on the many side', ids.customers, { category: 'region', values: [M('credit', 'sum'), M('oid', 'count', ids.orders)] }, [], false],
+      // Customers.credit counted once per customer per group: c2's identical repeat once, the dirty keys as picked.
+      ['a related measure: sum(Customers.credit) by Orders.chan, each customer once', ids.orders, { category: 'chan', values: [M('credit', 'sum', ids.customers)] }, [], false],
+      ['a related measure by Zones.zone, the zone two links away', ids.orders, { category: 'zone', categoryDatasetId: ids.zones, values: [M('credit', 'sum', ids.customers)] }, [], false],
     ];
     const answers: Reply[] = [];
     for (const [label, d, enc, filters, byName] of cases) {
@@ -200,11 +191,25 @@ export async function runJoins(engine: JoinEngine, conn: JoinConnection, ok: Ok 
     const copy = await reference(ids.orders, category, [], filed);
     ok(`${engine.name} joins, …a pinned divergence: joinJs in file order (a copy's pick) shows 'east' instead`,
       problems(copy, cat, false).length > 0 && copy.data.labels.includes('east'), show(copy.data?.labels));
-    say(`${engine.name} joins: not asked yet (${TODO_RELATED_MEASURE_AND_KPI_CASES.length} TODO cases): ${TODO_RELATED_MEASURE_AND_KPI_CASES.join('; ')}`);
+
+    // ── KPIs across a link, through the KPI door ─
+    const { computeCardMetric }: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+    const kpis: [string, string, FilterStep[]][] = [
+      // West is c3's kept row (a copy's file order keeps 'east'); South is c2, repeated: without the pick its orders count twice.
+      ['a KPI across a link: sum(Orders.amt) where Customers.region is West or South', 'amt', [{ type: 'filter', column: 'region', op: 'in', values: ['West', 'South'] }]],
+      ['a KPI of a related measure: sum(Customers.credit), each customer Orders reaches once', 'credit', []],
+    ];
+    for (const [label, column, filters] of kpis) {
+      const before = wire.length;
+      const got = keep(await computeCardMetric(P, ids.orders, { column, aggregation: 'sum' }, filters)) as Reply;
+      const ref = await referenceKpi(P, ids.orders, column, filters, seeded);
+      ok(`${engine.name} joins, ${label}: Live = joinJs, Object.is, asked of the warehouse`,
+        got?.ok === true && typeof ref === 'number' && Object.is(got.value, ref) && got.asOf?.mode === 'live' && wire.length > before, show({ got, ref }));
+    }
 
     // ── Every statement through the one door, its bytes bounded ─
     ok(`${engine.name} joins: every statement on the wire went through warehouse() (${wire.length} sent, ${door.length} admitted)`,
-      wire.length >= cases.length && wire.length === door.length, show(wire.map((w) => w.sql.slice(0, 120))));
+      wire.length >= cases.length + kpis.length && wire.length === door.length, show(wire.map((w) => w.sql.slice(0, 120))));
     const billed = wire.flatMap((w) => (w.bytes === undefined ? [] : [w.bytes]));
     if (opts.maxBilled !== undefined) {
       ok(`${engine.name} joins: each statement billed at most ${opts.maxBilled} bytes (${billed.join(', ')})`, billed.length > 0 && billed.every((b) => b <= opts.maxBilled!), billed);
@@ -231,6 +236,16 @@ async function referenceChart(P: string, datasetId: string, enc: VizEncoding, fi
   };
   // fanOutVizData is the plan and line-up a drill-across chart takes; each of its questions is joinJs's here.
   return ((await fanOutVizData(P, datasetId, enc, filters, one as Parameters<typeof fanOutVizData>[4])) as Reply | null) ?? one(datasetId, enc, filters);
+}
+
+/** joinJs's KPI over `tables` on the copy's own plan (a related measure masked to one row per related row), or undefined when it does not plan. */
+async function referenceKpi(P: string, datasetId: string, column: string, filters: FilterStep[], tables: Map<string, ReturnType<typeof fixture.importTyped>>): Promise<number | null | undefined> {
+  const relsIpc: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
+  const joinJs: typeof import('../src/analysis/joinJs') = require('../src/analysis/joinJs');
+  const mj = await relsIpc.metricJoin(P, datasetId, column, filters);
+  if (!mj || !mj.planned.ok) return undefined;
+  const { plan, layout, column: merged, table, filters: flt } = mj.planned.value;
+  return joinJs.joinedMetricJs(plan, layout, tables, mj.infos, { column: merged, aggregation: 'sum', table }, flt);
 }
 
 // ── Each warehouse ───────────────────────────────────────────────────────────

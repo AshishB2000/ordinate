@@ -1792,3 +1792,25 @@ follows.)
   (Snowflake `TO_BINARY`, Databricks `BINARY`) or an md5 (Redshift), and ClickHouse's window over a `join_use_nulls`
   join, have run only on the fake warehouse (DuckDB). Cost: one window per related measure; a fold adds a join of the
   rows back onto at most 51 keys.
+
+## 2026-11-19 — The nightly asks related measures and KPIs across a link
+
+(Follows 2026-11-17's two entries: the nightly's join cases, and related measures and KPIs on Live.)
+
+- **What changed.** `scripts/warehouseLiveJoins.ts` no longer keeps them as a TODO list
+  (`TODO_RELATED_MEASURE_AND_KPI_CASES` is gone). Each warehouse in the nightly now also asks:
+  - two charts: sum of `Customers.credit` by `Orders.chan`, and by `Zones.zone`, two links away;
+  - two KPIs through `computeCardMetric`: sum of `Orders.amt` where the customer's region is West or South, and sum of
+    `Customers.credit` over the customers Orders reaches.
+  Each is compared with joinJs (`joinedVizDataJs`, `joinedMetricJs`) over the rows seeded with the kept row first,
+  Object.is.
+- **Why the KPI filters on West or South.** West alone is not changed by dropping the pick: no repeated customer is
+  West on both rows. West is c3's kept row (a copy in file order keeps `'east'`), and South is c2, whose identical
+  repeat would count its orders twice without the cut.
+- **Tests.** `test-warehouseLiveJoins` on the DuckDB fake: 14 checks, up from 10, and the same over literal defining
+  queries. The NEGATIVE CONTROL without the `row_number() = 1` cut now fails all four new cases too.
+- **On real warehouses.** 2026-11-17's five chart cases and the pick have passed on ClickHouse in every warehouse nightly
+  since (the last on 2026-11-19); Snowflake and BigQuery skip, with no secrets set. The four new cases have not run on
+  a real engine yet. The next nightly runs them on ClickHouse (its container needs no secret), which is also the first
+  real run of 2026-11-17's mask there; Snowflake and BigQuery once their secrets are set.
+

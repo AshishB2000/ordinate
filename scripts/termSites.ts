@@ -99,8 +99,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ai/answerSpec.ts': { count: 1, how: 'throws' },
   // joinedLive: a Live joined card's own filters as steps for the chart door (specFilterSteps throws on a term; its
   // terms were expanded by the answer door first and ride beside them, as their steps); answerReads: a related filter's
-  // pinned step, only for the planner to name the tables it reads (no row read; a related term's own table is named by
-  // relatedIds, and the term is left out before specFilterSteps, which would throw on it)
+  // pinned step, only for the planner to name the tables it reads (no row read; a related term is left out before
+  // specFilterSteps, which would throw on it, and expanded by expandAnswerTerms instead, so its path's tables are named)
   'src/ipc/answerJoined.ts': { count: 2, how: 'throws' },
   'src/engine/cohortResident.ts': { count: 1, how: 'throws' },
   'src/engine/datasetPage.ts': { count: 2, how: 'throws' },

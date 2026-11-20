@@ -49,6 +49,7 @@ const msgs: typeof import('../src/ai/answerMessages') = require('../src/ai/answe
 const alertMsgs: typeof import('../src/analysis/answerAlertMessages') = require('../src/analysis/answerAlertMessages');
 const joined: typeof import('../src/ipc/answerJoined') = require('../src/ipc/answerJoined');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const snapshots: typeof import('../src/ipc/answerSnapshots') = require('../src/ipc/answerSnapshots');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const vLookup: typeof import('../src/ipc/verifiedLookup') = require('../src/ipc/verifiedLookup');
 const answerCheck: typeof import('../src/ipc/answerCheck') = require('../src/ipc/answerCheck');
@@ -283,6 +284,25 @@ async function routeCases(b: Bench): Promise<void> {
     ok('snapshot: a join read only by a filter reads Orders and Customers', JSON.stringify(await joined.answerReads(P, filterOnly)) === JSON.stringify([orders, customers]));
     ok('snapshot: NEGATIVE CONTROL: the same filter on Orders reads Orders alone', JSON.stringify(await joined.answerReads(P, { ...filterOnly, filters: [{ column: 'region', op: '=', value: 'West' }] })) === JSON.stringify([orders]));
   });
+  // A related term two links away (Orders → Customers → Zones): the print names Customers, the table between, too.
+  const Q = await b.project('Answer join two-hop term');
+  const far = await inCtx(async () => {
+    const o = (await datasets.saveDataset(Q, { name: 'Orders', sourceKind: 'csv', columns: [T('cust_id'), N('amount')], rows: [['c1', 1], ['c2', 2]] }))!.id;
+    const c = (await datasets.saveDataset(Q, { name: 'Customers', sourceKind: 'csv', columns: [T('cust_id'), T('zone')], rows: [['c1', 'z1'], ['c2', 'z2']] }))!.id;
+    const z = (await datasets.saveDataset(Q, { name: 'Zones', sourceKind: 'csv', columns: [T('zone'), T('band')], rows: [['z1', 'High'], ['z2', 'Low']] }))!.id;
+    for (const [from, to, column] of [[o, c, 'cust_id'], [c, z, 'zone']]) {
+      await rels.saveRelationship(Q, { id: randomUUID(), from: { datasetId: from, column }, to: { datasetId: to, column }, cardinality: 'many_to_one', verified: { matched: 2, unmatchedFrom: 0 } });
+    }
+    const high = (await terms.saveTerm(Q, { name: 'High zones', datasetId: z, filters: [{ type: 'filter', column: 'band', op: '=', value: 'High' }] } as never))!;
+    const sp = A.sanitizeStoredSpec({ datasetId: o, category: 'cust_id', measures: AMOUNT, filters: [{ term: high.id, datasetId: z }], chartType: 'column', title: 'Amount in high zones' })!;
+    const reads = await joined.answerReads(Q, sp);
+    const print = await snapshots.answerAccessPrint(Q, sp);
+    return { o, c, z, sp, reads, print, between: await snapshots.sqlAccessPrint(Q, [o, z, c]), own: await snapshots.sqlAccessPrint(Q, [o, z]) };
+  });
+  const farCard = (await post('answer:card', { projectId: Q, spec: far.sp })).value;
+  ok('snapshot: a related term two links away reads Orders, Zones and Customers, the table between (a row rule there recomputes the kept card)',
+    farCard.ok === true && JSON.stringify(farCard.data.labels) === JSON.stringify(['c1']) && JSON.stringify(far.reads) === JSON.stringify([far.o, far.z, far.c]) && far.print === far.between, show([far.reads, farCard]));
+  ok('snapshot: NEGATIVE CONTROL: the print of Orders and Zones alone (the term\'s own table) is another print', far.own !== far.between);
   const ran = (await post('answer:rerun', { projectId: P, spec: both, label: 'target by status for west customers' })).value;
   await inCtx(async () => {
     const turns = await copilot.loadHistory(P, ran.threadId);

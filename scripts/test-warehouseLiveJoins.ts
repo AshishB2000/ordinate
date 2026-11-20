@@ -6,7 +6,7 @@
 //      table a literal defining query, as Snowflake's run holds them. The BigQuery and ClickHouse runners' table
 //      names are sources their connectors accept.
 //   2. NEGATIVE CONTROLS:
-//      - an executor that drops the `row_number() = 1` pick fails the cases;
+//      - an executor that drops the `row_number() = 1` pick fails the cases, the related measures and KPIs among them;
 //      - a statement billed past the bound fails the bytes check, and only it;
 //      - a statement sent around `warehouse()` fails the door check, and only it.
 //   3. BigQuery's gate: without BIGQUERY_SCRATCH_DATASET, no check and no request; set to no dataset name, it fails
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     const good = await run();
     ok(`the join cases on the DuckDB fake: all ${good.length} checks pass`, good.length >= 10 && failing(good).length === 0, failing(good));
     ok('…the cases, the pick and its divergence, the door and the bytes are all among them',
-      ['a related category', 'a related split', 'a related filter', 'two hops', 'drill-across', 'THE PICK', 'divergence', 'warehouse()', 'billed at most'].every((w) => good.some((c) => c.label.includes(w))), good.map((c) => c.label));
+      ['a related category', 'a related split', 'a related filter', 'two hops', 'drill-across', 'a related measure:', 'two links away', 'a KPI across a link', 'a KPI of a related measure', 'THE PICK', 'divergence', 'warehouse()', 'billed at most'].every((w) => good.some((c) => c.label.includes(w))), good.map((c) => c.label));
 
     // …and Snowflake's shape: each table a literal defining query (`origin.sql`), in DuckDB's types.
     const literal: typeof import('./liveParityLiteral') = require('./liveParityLiteral');
@@ -77,8 +77,8 @@ async function main(): Promise<void> {
       compileJoin.setJoinCutForTest(true);
     }
     const lost = failing(uncut).map((c) => c.label);
-    ok('NEGATIVE CONTROL: an executor that drops the row_number() = 1 pick fails the related category, split, filter, two hops, drill-across and THE PICK',
-      ['a related category', 'a related split', 'a related filter', 'two hops', 'drill-across', 'THE PICK'].every((w) => lost.some((l) => l.includes(w))), lost);
+    ok('NEGATIVE CONTROL: an executor that drops the row_number() = 1 pick fails the related category, split, filter, two hops, drill-across, related measures, KPIs and THE PICK',
+      ['a related category', 'a related split', 'a related filter', 'two hops', 'drill-across', 'a related measure:', 'two links away', 'a KPI across a link', 'a KPI of a related measure', 'THE PICK'].every((w) => lost.some((l) => l.includes(w))), lost);
 
     // NEGATIVE CONTROL: billed past the bound.
     fakeMod.fake.billedBytes = joins.BQ_MAX_BILLED + 1;

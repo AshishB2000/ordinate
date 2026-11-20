@@ -71,7 +71,7 @@ function routeFilters(primary: string, filters: FilterStep[], mine: number[], si
     const give = (s: Routed, step: FilterStep): void => { s.q.filters.push(step); s.q.measures.forEach((i) => reached.add(i)); };
     const p = !f || typeof f.column !== 'string' ? null
       : f.via ? viaPath(primary, f.via, rels)
-      : ((o) => (o ? { ok: true as const, value: pathP(o) as Hop[] } : null))(resolveColumnOwner(primary, f.column, rels, infos));
+      : ((o) => (o ? { ok: true as const, value: pathP(o) as Hop[] } : null))(resolveColumnOwner(primary, f.column, rels, infos, f.datasetId)); // pinned (a term's step, D11): that table, never the primary's same-named column
     if (p && p.ok) {
       ours.push(f);
       mine.forEach((i) => reached.add(i));
@@ -82,8 +82,8 @@ function routeFilters(primary: string, filters: FilterStep[], mine: number[], si
         if (!back.ok || !sameHops(pinned, back.value)) return fanOutOffPath(f.column, nameOf(s.m), nameOf(primary));
         give(s, { ...f, via: last(pinned).relId });
       }
-    } else if (!p && f && typeof f.column === 'string' && sides.some((s) => resolveColumnOwner(s.m, f.column, rels, infos))) {
-      for (const s of sides) if (resolveColumnOwner(s.m, f.column, rels, infos)) give(s, f); // a column only a many side has
+    } else if (!p && f && typeof f.column === 'string' && sides.some((s) => resolveColumnOwner(s.m, f.column, rels, infos, f.datasetId))) {
+      for (const s of sides) if (resolveColumnOwner(s.m, f.column, rels, infos, f.datasetId)) give(s, f); // a column only a many side has (or is pinned to)
     } else {
       ours.push(f); // no table has it (or its via is refused): every question keeps it, and skips or refuses it as today
       for (const s of sides) s.q.filters.push(f);
