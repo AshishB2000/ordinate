@@ -24,16 +24,16 @@ const fail = (error: string) => ({ ok: false as const, error });
 async function mine(p: { projectId: string; runId: string }): Promise<store.Run | null> {
   const { org, user } = ctx();
   const run = await store.getRun(org.id, p.runId);
-  return run && run.startedBy === user.email && run.projectId.toLowerCase() === p.projectId.toLowerCase() && !(await closedToCaller([run])).has(run.id) ? run : null;
+  return run && run.startedBy === user.email && run.projectId.toLowerCase() === p.projectId.toLowerCase() && !(await closedToCaller([{ id: run.id, projectId: run.projectId, datasetIds: run.steps.flatMap((s) => (s.status === 'done' ? s.datasetIds ?? [] : [])) }])).has(run.id) ? run : null;
 }
 
 /** Is a dataset one of the run's computed steps read now closed to the caller (a team folder)? Then the run is gone from their view, as an answer on it is gone from History (src/ipc/turnsOpen.ts). */
-async function closedToCaller(runs: readonly store.Run[]): Promise<Set<string>> {
+async function closedToCaller(runs: ReadonlyArray<{ id: string; projectId: string; datasetIds: readonly string[] }>): Promise<Set<string>> {
   const closed = new Set<string>();
   for (const projectId of new Set(runs.map((r) => r.projectId))) {
     const level = await levelsOf(projectId, 'dataset');
     if (!level) continue; // no folder besides Everyone, or an admin
-    for (const r of runs) if (r.projectId === projectId && r.steps.some((s) => s.status === 'done' && (s.datasetIds ?? []).some((d) => level(d) === 'none'))) closed.add(r.id);
+    for (const r of runs) if (r.projectId === projectId && r.datasetIds.some((d) => level(d) === 'none')) closed.add(r.id);
   }
   return closed;
 }
@@ -125,13 +125,13 @@ export function register(): void {
   ipcMain.handle('research:list', async (_e, p: { projectId: string }) => {
     if (!store.dbOrNull()) return { ok: true as const, runs: [], activeRunId: null, limits: null };
     const { org, user } = ctx();
-    const all = await store.listRuns(org.id, p.projectId, user.email);
+    const all = await store.listRunLines(org.id, p.projectId, user.email); // no steps, no facts: only what the reply carries
     const closed = await closedToCaller(all);
     const runs = all.filter((r) => !closed.has(r.id));
     return {
       ok: true as const, limits: await store.limitsOf(org.id),
       activeRunId: runs.find((r) => store.ACTIVE.includes(r.state))?.id ?? null,
-      runs: runs.map((r) => ({ id: r.id, question: r.question, state: r.state, startedAt: r.startedAt, finishedAt: r.finishedAt, storyId: r.storyId, threadId: r.threadId })),
+      runs: runs.map(({ datasetIds: _d, projectId: _p, ...r }) => r),
     };
   });
 

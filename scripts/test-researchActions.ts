@@ -32,5 +32,6 @@ ok('refused: a figure where a name goes (a dataset, a column, a dimension)',
   && code(j({ kind: 'sql', intent: 'x', datasets: ['12.5'] })) === 'figure_name'
   && code(j({ kind: 'drivers', request: { dataset: 'Sales', dimension: 3 } })) === 'figure_name');
 ok('negative control: a filter VALUE that is a figure is not a name', code(j({ kind: 'answer', intent: 'x', spec: { ...spec, filters: [{ column: 'region', op: '>', value: 900 }] } })) === 'ok');
+ok('a column really named "2024" is a name, not a figure; 40%, 12.5 and 1,200 still are', code(j({ kind: 'answer', intent: 'x', spec: { ...spec, category: '2024' } })) === 'ok' && code(j({ kind: 'answer', intent: 'x', spec: { ...spec, category: '40%' } })) === 'figure_name' && code(j({ kind: 'answer', intent: 'x', spec: { ...spec, category: '12.5' } })) === 'figure_name' && code(j({ kind: 'sql', intent: 'x', datasets: ['2024'] })) === 'ok');
 ok('refused: a request past the size cap', code(j({ kind: 'drivers', request: { note: 'x'.repeat(5000) } })) === 'shape');
 finish();

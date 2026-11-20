@@ -28,18 +28,21 @@ Lightdash's version (docs.lightdash.com/agents/deep-research):
    starter can open it. "Add to project" turns it into an ordinary Story with saved charts.
 4. **Limits: 8 steps, 12 engine queries, 10 minutes.** An org admin can change them in Admin → AI,
    within hard ceilings. Stop works at any time.
-5. **The written findings on "Add to project" are kept only when the data is open to everyone**
-   (decided 2026-11-20). The charts recompute for each viewer, under that viewer's access. The prose
-   does not: it holds figures and statements computed under the *starter's* row rules, hidden columns
-   and folders, and it goes stale beside live charts. This is the same problem as Slack's case A/B.
-   - When no cited step's dataset is restricted, the prose is kept as written. The test is `restricted()`
-     in `src/server/slack/check.ts`: row rules, column rules, or a folder not open to everyone.
-   - Otherwise, the Story gets the headings and the charts. Each section's prose becomes a fixed line
-     (a `t()` sentence, no model text and no digits) saying the full text is in the starter's private
-     report.
-   - The summary and conclusion follow the same rule over all cited steps.
-   - Either way, every section carries "Written on <date> from the data then", the date formatted by
-     the app.
+5. **The written findings on "Add to project" are kept only when the whole run's data is open to everyone**
+   (decided 2026-11-20, tightened the same day after review). The charts recompute for each viewer, under that
+   viewer's access. The prose does not: it holds figures and statements computed under the *starter's* row rules,
+   hidden columns and folders, and it goes stale beside live charts. This is the same problem as Slack's case A/B.
+   The test is `restricted()` in `src/server/slack/check.ts` (row rules, column rules, or a folder not open to
+   everyone), and it is decided **for the whole run**, over every *computed* step, cited or not. A model sentence
+   that quotes an uncited step, or an open step's section that quotes a restricted figure, must not leak.
+   - **No computed step restricted:** everything is kept as written.
+   - **Any computed step restricted:** no model sentence is kept. The summary, the conclusion, every section's
+     text and the caveats each become a fixed line (a `t()` sentence: no model text, no digits) saying the full
+     text is in the starter's private report. A section heading is kept only if it holds no digit (any digit, not
+     only a figure-shaped one), else it becomes "Finding n". The Story's name is the model's title only if it has
+     no digit, else the starter's own question (clipped). Each saved chart is named from that same title and
+     heading, so a digit never reaches a visual's name either.
+   - Either way, every section carries "Written on <date> from the data then", the date formatted by the app.
 
 ## Calls made in the design (shown to the owner as settled unless he objects)
 
@@ -124,7 +127,7 @@ Progress goes out over the existing push channel (SSE, `/api/events`) to the sta
   joined to the lease signal).
 - The claim loop: `src/server/slack/worker.ts`.
 
-**Cost per run:** at most 1 plan call + 8 step calls + 1 write call, and at most 12 engine queries.
+**Cost per run:** at most 1 plan call + 8 step calls + 1 write call, and at most 12 engine queries. An `sql` step makes one more model call, the one that writes the statement (`src/ipc/answerSql.ts`); it is checked against the person's AI budget but is not counted as a step, so a run of all-SQL steps can make up to 8 more calls.
 
 ## The research turn
 
@@ -169,11 +172,14 @@ change them.
      only if one exists. Otherwise the step stays out, with a caveat line.
   2. It creates a Story with `stories.saveStory`. The blocks are a text summary; then, per section, a
      text heading, its visual blocks and a text block for the prose; then the caveats as a `callout`
-     (warning), a divider, and the conclusion. What prose goes in follows the owner's answer to
-     question 5. The test of that rule is whether a viewer with different access can read a figure from
-     the starter's view, never "no figure is stored".
+     (warning), a divider, and the conclusion. What text goes in follows the owner's answer to question 5,
+     decided for the whole run (above). The test of that rule is whether a viewer with different access can
+     read a figure from the starter's view, never "no figure is stored".
   3. It records the story id on the run. A second press opens the same story, and never makes a second
-     copy.
+     copy. The work is done **outside any row lock**: a short lease lets one press work at a time, the visual
+     saved for each step is recorded on the run as it is saved (a retry after a failure reuses it and saves none
+     twice), and the story id is set once, only by the lease's holder. Resuming a run clears its story link (the
+     old Story stays as it is), so the new report can be added.
 
   From then on, the Story is an ordinary Story: folder rules, edits and sharing apply as usual. The run
   and its private report stay with the starter.

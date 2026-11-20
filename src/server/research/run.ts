@@ -147,7 +147,8 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
       push(run, 'running');
     }
 
-    let end: End = 'done';
+    // A run retaken in `writing` ends as its loop did (a step or query limit stays `partial`).
+    let end: End = run.state === 'writing' && (run.errorCode === 'steps' || run.errorCode === 'queries') ? run.errorCode : 'done';
     let fatal: 'model' | 'limited' = 'model';
     if (run.state !== 'writing') {
       const sc: StepScope = { projectId: run.projectId, question: run.question, only: scope.only, model };
@@ -196,8 +197,13 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
         if (end === 'deadline') {
           report = chartsOnly(steps, run.question, now);
         } else {
-          if (!(await store.setWriting(org, run.id, owner))) throw new LeaseLost();
+          if (!(await store.setWriting(org, run.id, owner, end === 'steps' || end === 'queries' ? end : null))) throw new LeaseLost();
           push(run, 'writing');
+          // A stop asked for since the last step is honored before the write call, which costs a model call.
+          if ((await store.flags(org, run.id, owner)).stop) {
+            if (!(await store.finish(org, run.id, owner, 'stopped', null, null))) throw new LeaseLost();
+            return push(run, 'stopped');
+          }
           const w = await call(WRITE_SYSTEM, writeUser({ question: run.question, plan, guidance: guided.text, steps }));
           alive();
           report = w.ok ? buildReport(parseWriteReply(w.raw), steps, guided.ledger, guardAnswer, now) : null;

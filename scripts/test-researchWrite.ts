@@ -41,17 +41,44 @@ ok('failed write: a charts-only report of the done steps, with none of the model
 ok('public step: an SQL step keeps its title only, never its statement', JSON.stringify(W.publicStep({ n: 1, kind: 'sql', title: 'T', status: 'done', spec: { sql: 'SELECT secret FROM x', datasetIds: ['d'], title: 'T' } })) === '{"n":1,"kind":"sql","title":"T","status":"done","spec":{"title":"T"}}');
 ok('public step: never its facts, ledger or dataset ids', !/"facts"|"ledger"|datasetIds/.test(JSON.stringify(W.publicStep({ ...steps[0], datasetIds: ['d'] }))));
 
-// The question-5 rule.
-const words = { fixed: 'The full text is in the private report.', written: 'Written on Nov 20, 2026 from the data then' };
-const r = rep!;
-const open = W.storyBlocks(r, { sections: [false, false], all: false }, words, new Set([1, 2]));
+// The question-5 rule, decided for the whole RUN (the reviewer's q5.js, as a test).
+const words = { fixed: 'The full text is in the private report.', fixedCaveats: 'The caveats are in the private report.', written: 'Written on Nov 20, 2026 from the data then', finding: (n: number) => `Finding ${n}` };
 const text = (bs: ReturnType<typeof W.storyBlocks>) => bs.flatMap((b) => (b.kind === 'text' || b.kind === 'callout' ? [b.text] : []));
-ok('Q5: open data keeps the prose as written, each section dated', text(open).includes(r.sections[0].text) && text(open).includes(r.summary) && text(open).includes(r.conclusion) && text(open).filter((t) => t === words.written).length === 2);
-const closed = W.storyBlocks(r, { sections: [true, true], all: true }, words, new Set([1, 2]));
-const ct = text(closed).join('\n');
-ok('Q5: a restricted section keeps its heading and chart, its prose becomes the fixed line, no model text and no digit', !ct.includes(r.sections[0].text) && ct.includes('## First') && closed.filter((b) => b.kind === 'visual').length === 2 && !/\d/.test(words.fixed));
-ok('Q5: summary and conclusion follow the rule over all cited steps', !ct.includes(r.summary) && !ct.includes(r.conclusion) && text(closed).filter((t) => t === words.fixed).length === 4, JSON.stringify(text(closed)));
-ok('Q5: a section the flags do not cover is treated as restricted (fail closed)', !text(W.storyBlocks(r, { sections: [], all: false }, words, new Set([1]))).includes(r.sections[0].text));
+const L = (v: number, label: string) => ({ label, value: v, unit: 'number' as const, source: 'test' });
+const q5steps: Step[] = [
+  { n: 1, kind: 'answer', title: 'Orders by region', status: 'done', facts: 'x', ledger: [L(500, 'orders')], datasetIds: ['d-open'] },
+  { n: 2, kind: 'answer', title: 'Salaries', status: 'done', facts: 'y', ledger: [L(98765, 'top salary')], datasetIds: ['d-hr'] },
+];
+const reply = {
+  title: 'Top salary is 98765', summary: 'Orders were 500 and the top salary was 98765.',
+  sections: [{ heading: 'Salary 98765 drives it', text: 'We saw 500 orders; the top salary is 98765.', steps: [1] }, { heading: 'HR', text: 'Top salary 98765.', steps: [2] }],
+  caveats: ['Pay bands differ by site.'], conclusion: 'The top salary of 98765 matters.',
+};
+const q5 = W.buildReport(reply, q5steps, [], guardAnswer, '2026-11-20T00:00:00Z')!;
+const QUESTION = 'What do we pay and sell?';
+const run = W.storyBlocks(q5, QUESTION, true, words, new Set([1, 2]));
+const all = JSON.stringify(run);
+ok('Q5 run level: the restricted figure appears nowhere in the Story blocks (summary, section text, heading, title, conclusion)', !all.includes('98765'), all.slice(0, 300));
+ok('Q5 run level: an UNCITED restricted step restricts the whole run (the summary that quotes it is a fixed line)', !text(run).some((t) => /Orders were 500/.test(t)) && text(run).filter((t) => t === words.fixed).length === 4, JSON.stringify(text(run)));
+ok('Q5 run level: a section citing only OPEN steps keeps no quoted figure either (guardAnswer\'s note leaves the figure in place)', q5.sections[0].text.includes('98765') && !text(run).some((t) => /We saw 500/.test(t)));
+ok('Q5 run level: a heading with a figure becomes "Finding n"; a heading without one is kept', text(run).includes('## Finding 1') && text(run).includes('## HR') && !text(run).some((t) => t.includes('Salary 98765')));
+ok('Q5 run level: the title with a figure becomes the starter\'s question; the caveats become the fixed line', text(run)[0] === `# ${QUESTION}` && text(run).some((t) => t === `- ${words.fixedCaveats}`) && !text(run).some((t) => /Pay bands/.test(t)));
+ok('Q5 run level: every section is still dated', text(run).filter((t) => t === words.written).length === 2);
+ok('Q5: a heading with a BARE integer ("West lost 4500 customers") is replaced; FIGURE_RE would have let it through', !W.hasDigit('West lost customers') && W.hasDigit('West lost 4500 customers') && W.sectionHeading('West lost 4500 customers', 0, true, words) === 'Finding 1' && W.storyTitle({ title: 'West lost 4500 customers' }, 'Why did West churn in 2024?', true) === 'Why did West churn in 2024?');
+ok('Q5: the title and heading are the model\'s while there is no digit', W.storyTitle({ title: 'Where sales come from' }, QUESTION, true) === 'Where sales come from' && W.sectionHeading('By region', 0, true, words) === 'By region');
+const open = W.storyBlocks(q5, QUESTION, false, words, new Set([1, 2]));
+ok('Q5 negative control: an all-open run keeps its prose, summary, conclusion, headings and title as written, each section dated', text(open).includes(q5.sections[1].text) && text(open).includes(q5.summary) && text(open).includes(q5.conclusion) && text(open).includes('## HR')
+  && text(open)[0] === '# Top salary is 98765' && text(open).some((t) => t === '- Pay bands differ by site.') && text(open).filter((t) => t === words.written).length === 2);
 ok('Q5: caveats ride as one warning callout, before a divider and the conclusion', open.some((b) => b.kind === 'callout' && b.tone === 'warning') && open.at(-2)?.kind === 'divider');
-ok('Q5: a step that was not saved has no chart block', W.storyBlocks(r, { sections: [false, false], all: false }, words, new Set([1])).filter((b) => b.kind === 'visual').length === 1);
+ok('Q5: a step that was not saved has no chart block', W.storyBlocks(q5, QUESTION, false, words, new Set([1])).filter((b) => b.kind === 'visual').length === 1);
+ok('Q5: the extra caveats (a chart not saved) are the app\'s words and stay in a restricted run', text(W.storyBlocks(q5, QUESTION, true, words, new Set([1]), ['Step 2 could not be saved'])).some((t) => /Step 2 could not be saved/.test(t)));
+
+// An SQL step\'s ledger comes from its ROWS only (the reviewer\'s sqlledger.js).
+const P: typeof import('../src/ai/researchPrompts') = require('../src/ai/researchPrompts');
+const f = P.sqlFacts({ title: 'Churn rose 47 points to 4500', columns: [{ name: 'region' }, { name: 'n_7731' }], rows: [['West', 12]], rowCount: 1, truncated: false });
+ok('SQL ledger: the model-written title and column names put no figure in the ledger', !f.ledger.some((e) => [47, 4500, 7731].includes(e.value)) && f.ledger.some((e) => e.value === 12), f.ledger.map((e) => e.value).join(','));
+const sqlSteps: Step[] = [{ n: 1, kind: 'sql', title: 't', status: 'done', facts: f.text, ledger: f.ledger, datasetIds: ['d'] }];
+const sqlRep = W.buildReport({ title: 'R', summary: '', sections: [{ heading: 'H', text: 'Churn reached 4500, up 47; 7731 too; West had 12.', steps: [1] }], caveats: [], conclusion: '' }, sqlSteps, [], guardAnswer, 'now')!;
+ok('SQL ledger: a section stating the title\'s 4500 and 47 and the column\'s 7731 gets the note; the row\'s 12 is fine', /Contains a figure the app did not compute: 4500, 47, 7731/.test(sqlRep.sections[0].text), sqlRep.sections[0].text);
+ok('SQL ledger (negative control): the row figures still vouch for themselves', !W.buildReport({ title: 'R', summary: '', sections: [{ heading: 'H', text: 'West had 12.', steps: [1] }], caveats: [], conclusion: '' }, sqlSteps, [], guardAnswer, 'now')!.sections[0].text.includes('Contains a figure'));
 finish();

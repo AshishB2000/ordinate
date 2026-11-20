@@ -95,8 +95,14 @@ export function sqlFacts(card: { title: string; columns: Array<{ name: string }>
     lines.push('- ' + row.map((v, i) => `${card.columns[i]?.name ?? ''}=${v === null || v === undefined ? 'n/a' : String(v)}`).join(', '));
     row.forEach((v, i) => { if (typeof v === 'number' && Number.isFinite(v)) ledger.push({ label: card.columns[i]?.name ?? 'value', value: v, unit: 'number', source: 'sql' }); });
   }
-  if (card.rows.length > SQL_ROWS) lines.push(`(${card.rows.length - SQL_ROWS} more rows not shown)`);
+  if (card.rows.length > SQL_ROWS) {
+    lines.push(`(${card.rows.length - SQL_ROWS} more rows not shown)`);
+    ledger.push({ label: 'rows not shown', value: card.rows.length - SQL_ROWS, unit: 'count', source: 'sql' });
+  }
   const text = lines.join('\n');
-  for (const h of harvestAppNumbers(text)) if (!ledger.some((e) => Object.is(e.value, h.value))) ledger.push({ label: 'figure printed in the facts block', value: h.value, unit: h.unit, source: 'sql' });
+  // The ledger is the ROWS' figures and nothing else: the title and the column names were written by the model's SQL call, so a
+  // digit in either must never vouch for a figure a report states (the way ../ipc/copilot `reasonLedger` keeps quoted names out).
+  const cells = card.rows.slice(0, SQL_ROWS).map((r) => r.map((v) => (v === null || v === undefined ? '' : String(v))).join(' ')).join(' ');
+  for (const h of harvestAppNumbers(cells)) if (!ledger.some((e) => Object.is(e.value, h.value))) ledger.push({ label: 'figure printed in the facts block', value: h.value, unit: h.unit, source: 'sql' });
   return { text, ledger };
 }

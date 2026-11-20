@@ -104,33 +104,59 @@ export type Block =
 export interface Words {
   /** A fixed sentence: the full text is in the starter's private report. No model text, no digit. */
   fixed: string;
+  /** The caveats' fixed sentence, in the same case. */
+  fixedCaveats: string;
   /** "Written on <date> from the data then" (the date formatted by the app). */
   written: string;
+  /** A heading that held a digit: "Finding n". */
+  finding: (n: number) => string;
+}
+
+/** Any digit at all: in a restricted run a name keeps no figure, not even a bare integer ("West lost 4500 customers"). */
+export const hasDigit = (s: string): boolean => /\d/.test(s);
+
+/** The Story's (and its visuals') title: the model's, unless the run is restricted and it holds a digit: then the starter's own question, clipped. */
+export function storyTitle(report: Pick<Report, 'title'>, question: string, restricted: boolean): string {
+  const t = report.title.trim();
+  if (t && !(restricted && hasDigit(t))) return t;
+  return tidy(question, 120).replace(/\n+/g, ' '); // the starter's own words, not the model's
+}
+
+/** A section's heading: the model's, unless the run is restricted and it holds a digit: then "Finding n". */
+export function sectionHeading(heading: string, index: number, restricted: boolean, words: Pick<Words, 'finding'>): string {
+  const h = heading.trim();
+  return h && !(restricted && hasDigit(h)) ? h : restricted ? words.finding(index + 1) : h;
 }
 
 /**
- * The Story's blocks, in order: the summary; per section its heading, its charts and its prose; the caveats as a warning
- * callout; a divider; the conclusion. `restricted`: whether the cited steps' data is restricted (`src/server/slack/check.ts`
- * `restricted()`): per section by index, and over every cited step for the summary and conclusion. A restricted part keeps
- * no model text, only the fixed line. Every section carries its "Written on" line.
+ * The Story's blocks, in order: the title; the summary; per section its heading, charts and prose; the caveats as a warning
+ * callout; a divider; the conclusion.
+ *
+ * THE QUESTION-5 RULE, decided for the whole RUN: `restricted` is whether ANY computed step touched data that `restricted()`
+ * (src/server/slack/check.ts: row rules, column rules, or a folder not open to everyone) calls restricted, cited or not. When it
+ * did, no model sentence is kept: the summary, the conclusion, every section's text and the caveats become fixed lines; a heading
+ * with a digit becomes "Finding n"; the title follows `storyTitle`. A run over open data keeps everything as written. Either way
+ * every section says when it was written, from the data then.
  */
-export function storyBlocks(report: Report, restricted: { sections: boolean[]; all: boolean }, words: Words, charted: ReadonlySet<number>, extraCaveats: string[] = []): Block[] {
+export function storyBlocks(report: Report, question: string, restricted: boolean, words: Words, charted: ReadonlySet<number>, extraCaveats: string[] = []): Block[] {
   const out: Block[] = [];
-  const prose = (text: string, closed: boolean): void => {
-    if (closed) out.push({ kind: 'text', text: words.fixed });
+  const prose = (text: string): void => {
+    if (restricted) out.push({ kind: 'text', text: words.fixed });
     else if (text) out.push({ kind: 'text', text });
   };
-  if (report.title) out.push({ kind: 'text', text: `# ${report.title}` });
-  if (report.summary) prose(report.summary, restricted.all);
+  const title = storyTitle(report, question, restricted);
+  if (title) out.push({ kind: 'text', text: `# ${title}` });
+  if (report.summary) prose(report.summary);
   report.sections.forEach((s, i) => {
-    if (s.heading) out.push({ kind: 'text', text: `## ${s.heading}` });
+    const heading = sectionHeading(s.heading, i, restricted, words);
+    if (heading) out.push({ kind: 'text', text: `## ${heading}` });
     for (const n of s.steps) if (charted.has(n)) out.push({ kind: 'visual', stepN: n });
-    if (s.text) prose(s.text, restricted.sections[i] ?? true);
+    if (s.text) prose(s.text);
     out.push({ kind: 'text', text: words.written });
   });
-  const caveats = report.caveats.concat(extraCaveats);
+  const caveats = (restricted && report.caveats.length ? [words.fixedCaveats] : report.caveats).concat(extraCaveats);
   if (caveats.length) out.push({ kind: 'callout', tone: 'warning', text: caveats.map((c) => `- ${c}`).join('\n') });
   out.push({ kind: 'divider' });
-  if (report.conclusion) prose(report.conclusion, restricted.all);
+  if (report.conclusion) prose(report.conclusion);
   return out;
 }

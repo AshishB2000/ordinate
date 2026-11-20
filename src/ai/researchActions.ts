@@ -19,7 +19,8 @@ export type Parsed = { ok: true; action: ResearchAction } | { ok: false; code: P
 
 /** Keys whose value names a dataset or a column: a number there is a figure where a name goes. */
 const NAME_KEYS = new Set(['dataset', 'datasetId', 'category', 'series', 'column', 'dimension', 'categoryDataset', 'seriesDataset']);
-const NUMBERISH = /^\s*[-+]?\d[\d,]*(\.\d+)?\s*%?\s*$/;
+// A STRING is a figure where a name goes when it is figure-shaped (1,200 · 12.5 · 40%); a bare integer string may be a real column ("2024").
+const NUMBERISH = /^\s*[-+]?\d{1,3}(,\d{3})+(\.\d+)?\s*%?\s*$|^\s*[-+]?\d+\.\d+\s*%?\s*$|^\s*[-+]?\d+\s*%\s*$/;
 const MAX_REQUEST_CHARS = 4000;
 
 function figureName(v: unknown, depth = 0): boolean {

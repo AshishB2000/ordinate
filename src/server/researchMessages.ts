@@ -91,3 +91,21 @@ export function chartNotSaved(step: string): string {
 export function sqlNotSaved(step: string): string {
   return t('researchMessages.step_read_the_data_with_sql', { step });
 }
+
+// A step's title when the model's own is not kept (it held a digit) or the step has none.
+export function sqlResultTitle(): string {
+  return t('researchMessages.sql_result');
+}
+export function whyChanged(metric: string): string {
+  return t('researchMessages.why_changed', { metric });
+}
+export function whyItChanged(): string {
+  return t('researchMessages.why_it_changed');
+}
+// The Story where the run touched restricted data.
+export function restrictedCaveats(): string {
+  return t('researchMessages.the_caveats_for_this_research_are');
+}
+export function findingTitle(n: string): string {
+  return t('researchMessages.finding', { n });
+}

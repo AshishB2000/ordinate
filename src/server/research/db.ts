@@ -64,6 +64,8 @@ export const PER_POD = 2;
 export interface NewRun { id: string; orgId: string; projectId: string; startedBy: string; agentId: string | null; threadId: string; question: string }
 /** Queues a run; false when the person already has one queued, running or writing (the unique index decides a race). */
 export async function insertRun(n: NewRun): Promise<boolean> {
+  // A start that died between its insert and its turn left a queued run no worker will claim: it must not hold the person's one slot.
+  await q({ org: n.orgId }, `DELETE FROM research_runs WHERE org_id = $1 AND started_by = $2 AND state = 'queued' AND turn_id IS NULL AND started_at < now() - interval '5 minutes'`, [n.orgId, n.startedBy]);
   try {
     await q({ org: n.orgId }, 'INSERT INTO research_runs (org_id, project_id, id, started_by, agent_id, thread_id, question) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [n.orgId, n.projectId, n.id, n.startedBy, n.agentId, n.threadId, n.question]);
@@ -79,9 +81,12 @@ export async function setTurn(org: string, id: string, turnId: string): Promise<
 export async function getRun(org: string, id: string): Promise<Run | null> {
   return (await q<Run>({ org }, `SELECT ${COLS} FROM research_runs WHERE org_id = $1 AND id = $2`, [org, id])).rows[0] ?? null;
 }
-/** The person's own runs in a project, newest first. */
-export async function listRuns(org: string, projectId: string, by: string, limit = 50): Promise<Run[]> {
-  return (await q<Run>({ org }, `SELECT ${COLS} FROM research_runs WHERE org_id = $1 AND project_id = $2 AND started_by = $3 ORDER BY started_at DESC LIMIT $4`, [org, projectId, by, limit])).rows;
+/** What `research:list` returns: no steps, no report (their facts stay in the row), and the datasets of the computed steps, for the closed-folder check. */
+export interface RunLine { id: string; projectId: string; question: string; state: RunState; startedAt: string; finishedAt: string | null; storyId: string | null; threadId: string; datasetIds: string[] }
+export async function listRunLines(org: string, projectId: string, by: string, limit = 50): Promise<RunLine[]> {
+  return (await q<RunLine>({ org }, `SELECT id::text AS id, project_id::text AS "projectId", question, state, started_at::text AS "startedAt", finished_at::text AS "finishedAt", story_id::text AS "storyId", thread_id::text AS "threadId",
+      ARRAY(SELECT DISTINCT jsonb_array_elements_text(d) FROM jsonb_path_query(steps, '$[*] ? (@.status == "done").datasetIds') AS d) AS "datasetIds"
+    FROM research_runs WHERE org_id = $1 AND project_id = $2 AND started_by = $3 ORDER BY started_at DESC LIMIT $4`, [org, projectId, by, limit])).rows;
 }
 
 /** Claims one due run (queued, or running or writing with a lapsed lease) for `owner`; null when none. One statement, SKIP LOCKED. */
@@ -91,6 +96,7 @@ export async function claim(owner: string, leaseMs = LEASE_MS): Promise<Run | nu
             lease_until = now() + ($2 || ' milliseconds')::interval, attempts = attempts + 1
       WHERE (org_id, id) = (SELECT org_id, id FROM research_runs
                              WHERE (state = 'queued' OR (state IN ('running', 'writing') AND lease_until < now())) AND attempts < ${MAX_ATTEMPTS}
+                               AND turn_id IS NOT NULL -- a run is claimed only once its turn exists (research:start writes it right after the insert)
                              ORDER BY started_at LIMIT 1 FOR UPDATE SKIP LOCKED)
       RETURNING ${COLS}`, [owner, String(leaseMs)]);
   return r.rows[0] ?? null;
@@ -125,12 +131,21 @@ export async function saveSteps(org: string, id: string, owner: string, steps: S
   return !!(await q('system', 'UPDATE research_runs SET steps = $4::jsonb, steps_used = $5, queries_used = $6 WHERE org_id = $1 AND id = $2 AND lease_owner = $3',
     [org, id, owner, JSON.stringify(steps), stepsUsed, queriesUsed])).rowCount;
 }
-export async function setWriting(org: string, id: string, owner: string): Promise<boolean> {
-  return !!(await q('system', `UPDATE research_runs SET state = 'writing' WHERE org_id = $1 AND id = $2 AND lease_owner = $3`, [org, id, owner])).rowCount;
+/** Into the write call; `code` (steps | queries | null) is how the loop ended, kept so a run retaken in `writing` ends as it would have. */
+export async function setWriting(org: string, id: string, owner: string, code: string | null = null): Promise<boolean> {
+  return !!(await q('system', `UPDATE research_runs SET state = 'writing', error_code = $4 WHERE org_id = $1 AND id = $2 AND lease_owner = $3`, [org, id, owner, code])).rowCount;
+}
+/** A stopping pod hands its run back: the lease is lapsed at once and the attempt not counted, so a rolling deploy burns none. */
+export async function release(org: string, id: string, owner: string): Promise<void> {
+  await q('system', `UPDATE research_runs SET lease_until = now() - interval '1 second', attempts = greatest(attempts - 1, 0)
+    WHERE org_id = $1 AND id = $2 AND lease_owner = $3 AND state IN ('running', 'writing')`, [org, id, owner]);
 }
 export async function finish(org: string, id: string, owner: string, state: 'done' | 'partial' | 'failed' | 'stopped', code: string | null, report: Report | null): Promise<boolean> {
   return !!(await q('system',
-    `UPDATE research_runs SET state = $4, error_code = $5, report = COALESCE($6::jsonb, report), finished_at = now(), lease_owner = NULL, lease_until = NULL
+    // A stop asked for while the run was finishing wins over `done` and `partial` (a report already written is kept).
+    `UPDATE research_runs SET state = CASE WHEN stop_requested AND $4::text IN ('done', 'partial') THEN 'stopped' ELSE $4::text END,
+            error_code = CASE WHEN stop_requested AND $4::text IN ('done', 'partial') THEN NULL ELSE $5::text END,
+            report = COALESCE($6::jsonb, report), finished_at = now(), lease_owner = NULL, lease_until = NULL
       WHERE org_id = $1 AND id = $2 AND lease_owner = $3`, [org, id, owner, state, code, report ? JSON.stringify(report) : null])).rowCount;
 }
 
@@ -143,19 +158,39 @@ export async function requestStop(org: string, id: string): Promise<void> {
 /** `research:resume`: a partial or failed run goes back in the queue (a fresh time allowance; the steps and counts stay). False: not resumable, or the person has another run going. */
 export async function requeue(org: string, id: string): Promise<boolean> {
   try {
-    return !!(await q({ org }, `UPDATE research_runs SET state = 'queued', stop_requested = false, error_code = NULL, finished_at = NULL, deadline_at = NULL, attempts = 0, report = NULL
+    return !!(await q({ org }, `UPDATE research_runs SET state = 'queued', stop_requested = false, error_code = NULL, finished_at = NULL, deadline_at = NULL, attempts = 0, report = NULL,
+      story_id = NULL, add_token = NULL, add_until = NULL, add_visuals = '{}'::jsonb -- a resumed run's new report can be added; an old Story stays as it is
       WHERE org_id = $1 AND id = $2 AND state IN ('partial', 'failed') AND error_code IS DISTINCT FROM 'access'`, [org, id])).rowCount;
   } catch (err) {
     if ((err as { code?: string }).code === '23505') return false;
     throw err;
   }
 }
-/** Serializes two presses of "Add to project" for one run: `fn` runs holding the run's row lock, and records the story id through `setStory` on that same transaction (a second press waits, then finds it). */
-export async function withRunLocked<T>(org: string, id: string, fn: (run: Run, setStory: (storyId: string) => Promise<void>) => Promise<T>): Promise<T | null> {
-  return scoped({ org }, async (c) => {
-    const r = (await c.query<Run>(`SELECT ${COLS} FROM research_runs WHERE org_id = $1 AND id = $2 FOR UPDATE`, [org, id])).rows[0];
-    return r ? fn(r, async (storyId) => { await c.query('UPDATE research_runs SET story_id = $3 WHERE org_id = $1 AND id = $2', [org, id, storyId]); }) : null;
-  });
+// ── "Add to project": a short lease on the work, never a row lock held across it ─────────────────────────────────────────────
+
+export const ADD_LEASE_S = 60;
+export type AddState = { story: string } | { token: string; visuals: Record<string, string> } | { busy: true } | null;
+
+/** Takes the add lease (one holder at a time, a lapsed one retaken). The run's story when it already has one; `busy` when another press holds it; null: no such run. */
+export async function claimAdd(org: string, id: string, token: string): Promise<AddState> {
+  const r = await q<{ visuals: Record<string, string> }>({ org }, `UPDATE research_runs SET add_token = $3, add_until = now() + ($4 || ' seconds')::interval
+    WHERE org_id = $1 AND id = $2 AND story_id IS NULL AND (add_token IS NULL OR add_until < now()) RETURNING add_visuals AS visuals`, [org, id, token, String(ADD_LEASE_S)]);
+  if (r.rows[0]) return { token, visuals: r.rows[0].visuals };
+  const now = (await q<{ story: string | null; held: boolean }>({ org }, 'SELECT story_id::text AS story, add_token IS NOT NULL AS held FROM research_runs WHERE org_id = $1 AND id = $2', [org, id])).rows[0];
+  return !now ? null : now.story ? { story: now.story } : { busy: true };
+}
+/** The visual saved for a step, kept on the run as it is saved (a retry reuses it). False: the lease is no longer this token's. */
+export async function recordVisual(org: string, id: string, token: string, step: number, visualId: string): Promise<boolean> {
+  return !!(await q({ org }, `UPDATE research_runs SET add_visuals = add_visuals || jsonb_build_object($4::text, $5::text) WHERE org_id = $1 AND id = $2 AND add_token = $3`, [org, id, token, String(step), visualId])).rowCount;
+}
+/** Records the story, once: only the holder of the lease, and only while there is none. The story id the run has afterwards. */
+export async function finalizeStory(org: string, id: string, token: string, storyId: string): Promise<string | null> {
+  const r = await q<{ story: string }>({ org }, `UPDATE research_runs SET story_id = $4, add_token = NULL, add_until = NULL WHERE org_id = $1 AND id = $2 AND add_token = $3 AND story_id IS NULL RETURNING story_id::text AS story`, [org, id, token, storyId]);
+  if (r.rows[0]) return r.rows[0].story;
+  return (await q<{ story: string | null }>({ org }, 'SELECT story_id::text AS story FROM research_runs WHERE org_id = $1 AND id = $2', [org, id])).rows[0]?.story ?? null;
+}
+export async function releaseAdd(org: string, id: string, token: string): Promise<void> {
+  await q({ org }, 'UPDATE research_runs SET add_token = NULL, add_until = NULL WHERE org_id = $1 AND id = $2 AND add_token = $3', [org, id, token]);
 }
 
 /** Deletes the runs of people no longer in the org, and runs never added to a project in 90 days. Returns how many. */

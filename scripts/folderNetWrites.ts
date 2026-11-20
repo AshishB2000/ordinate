@@ -28,7 +28,7 @@ const writes: typeof import('../src/server/authz/folderWrites') = require('../sr
 const writeGate: typeof import('../src/server/authz/folderWriteGate') = require('../src/server/authz/folderWriteGate');
 const subscriptions: typeof import('../src/analysis/subscriptions') = require('../src/analysis/subscriptions');
 type Person = H.Person;
-type Set = H.Items & { ds2: string; folder: string; trashed: string; key: string; rel: string; sub: string; qrule: string; input: string; sql: string; sqlTrashed: string; tag: string };
+type Set = H.Items & { ds2: string; folder: string; trashed: string; key: string; rel: string; sub: string; qrule: string; input: string; sql: string; sqlTrashed: string; tag: string; runLead: string; runView: string };
 
 /** EDIT and CREATE channels the route's gate does not hold: the store seam that does (src/server/authz/folderWrites.ts). */
 export const IN_STORES: Readonly<Record<string, string>> = {
@@ -62,7 +62,6 @@ export const IN_STORES: Readonly<Record<string, string>> = {
 export const OUT_OF_SCOPE: Readonly<Record<string, string>> = { 'analysis:publish': 'E5 (D16)', 'publish:access': 'E5', 'publish:run': 'E5', 'publish:unpublish': 'E5' };
 /** No effective payload here: why. Edit only to remove a line (the net reports one that lands now). */
 const UNEXERCISED: Readonly<Record<string, string>> = {
-  'research:addToProject': 'needs a finished research run with a report (a scripted model provider: test-researchRun); its stores are the gate, as story:create\'s',
   'captureDataset:delete': 'needs a screenshot capture',
   'captureDataset:draft': 'needs a screenshot upload',
   'catalog:dismissSuggestion': "needs a connection's source table suggestion",
@@ -100,6 +99,7 @@ const UNEXERCISED: Readonly<Record<string, string>> = {
 
 /** Writes Can view on Ops allows (B): what they make lands where its maker edits, naming only what they open. */
 const VIEW_ALLOWED: Readonly<Record<string, string>> = {
+  'research:addToProject': 'a chart its maker cannot save is dropped with a caveat line (the Story keeps no chart of Ops): `researchAdd` asserts the refusal happened and nothing of Ops landed',
   'analysis:create': 'a new dashboard in Everyone with a card on an Ops chart: a card needs its dataset open, not Edit (D18)',
 };
 
@@ -154,6 +154,7 @@ function callsOn(P: string, t: Set): Array<[string, string, unknown]> {
     ['answer:addToDashboard', 'answer:addToDashboard', { projectId: P, spec: spec(t.ds), analysisId: t.board }],
     ['story:create', 'story:create', { projectId: P, name: n('story'), blocks: [{ kind: 'visual', visualId: t.visual }] }],
     ['story:build', 'story:build', { projectId: P, plan: { name: n('built story'), sheets: [{ name: 'One', visuals: [{ visual: t.visual }], metrics: [] }] } }],
+    ['research:addToProject', 'research:addToProject', { projectId: P, runId: t.runLead }], // as opsEditorView: its own run (`run` swaps it)
     ['story:update', 'story:update', { projectId: P, id: t.story, name: n('updated story') }],
     ['scorecard:create', 'scorecard:create', { projectId: P, name: n('scorecard'), rows: [{ metricId: t.metric }] }],
     ['scorecard:update', 'scorecard:update', { projectId: P, id: t.scorecard, patch: { name: n('updated scorecard') } }],
@@ -212,7 +213,7 @@ function callsOn(P: string, t: Set): Array<[string, string, unknown]> {
 }
 
 /** `t`'s ids, every one a payload may name. */
-const idsOf = (t: Set): string[] => [t.ds, t.ds2, t.visual, t.metric, t.term, t.verified, t.rule, t.board, t.story, t.scorecard, t.scenario, t.report, t.trashed, t.rel, t.sub, t.qrule, t.input, t.sql, t.sqlTrashed, t.folder].filter(Boolean).map((x) => x.toLowerCase());
+const idsOf = (t: Set): string[] => [t.ds, t.ds2, t.visual, t.metric, t.term, t.verified, t.rule, t.board, t.story, t.scorecard, t.scenario, t.report, t.trashed, t.rel, t.sub, t.qrule, t.input, t.sql, t.sqlTrashed, t.folder, t.runLead, t.runView].filter(Boolean).map((x) => x.toLowerCase());
 
 /**
  * What a write on `t` could change: each record that names one of its ids — whole when its path does, else the parts of
@@ -253,7 +254,8 @@ const diff = (a: Map<string, string>, b: Map<string, string>): string[] =>
 type Ran = Map<string, { r: H.Reply; changed: string[] }>;
 async function run(W: H.World, who: Person, t: Set, list: Array<[string, string, unknown]>): Promise<Ran> {
   const out: Ran = new Map();
-  for (const [label, ch, payload] of list) {
+  for (const [label, ch, payload0] of list) {
+    const payload = ch === 'research:addToProject' && who === 'opsEditorView' ? { ...(payload0 as object), runId: t.runView } : payload0; // a run is its starter's alone
     const before = await stateOf(W, t);
     const r = await W.call(who, ch, payload);
     out.set(label, { r, changed: diff(before, await stateOf(W, t)) });
@@ -303,7 +305,40 @@ async function setIn(W: H.World, where: 'hr' | 'ops', tag: string): Promise<Set>
   const folder = W.folders[where];
   const inp = await W.call('boss', 'input:create', { projectId: P, name: `${tag} input`, columns: [{ name: 'a', type: 'text' }], folderId: folder });
   const input = must(`input ${inp.text.slice(0, 200)}`, String(inp.body?.id ?? ''));
-  return { ...it, folder, trashed, key, rel, sub, qrule, input, sql, sqlTrashed, tag };
+  const runLead = await plantRun(W, 'opsLead', it.ds);
+  const runView = await plantRun(W, 'opsEditorView', it.ds);
+  return { ...it, folder, trashed, key, rel, sub, qrule, input, sql, sqlTrashed, tag, runLead, runView };
+}
+
+/** A finished deep-research run of `who`'s (an INSERT, as test-columnAccessSafetyNet plants one): a chart and a drivers step on `ds`, a report citing both. */
+async function plantRun(W: H.World, who: Person, ds: string): Promise<string> {
+  const id = randomUUID();
+  const answer = { datasetId: ds, category: 'dept', measures: [{ column: 'salary', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Salary by dept' };
+  const drivers = { datasetId: ds, metric: { column: 'salary', aggregation: 'sum' }, filters: [], compare: { mode: 'previous_period' }, path: [], dimension: 'dept' };
+  const steps = [{ n: 1, kind: 'answer', title: 'Salary by dept', status: 'done', spec: answer, facts: 'f', ledger: [], datasetIds: [ds] }, { n: 2, kind: 'drivers', title: 'Why salary changed', status: 'done', spec: drivers, facts: 'f', ledger: [], datasetIds: [ds] }];
+  const report = { title: 'Pay report', summary: '', sections: [{ heading: 'By dept', text: '', steps: [1] }, { heading: 'Why', text: '', steps: [2] }], caveats: [], conclusion: '', writtenAt: '2026-11-20T00:00:00Z' };
+  await W.pool.query(`INSERT INTO research_runs (org_id, project_id, id, started_by, thread_id, question, state, steps, report) VALUES ('acme', $1, $2, $3, $4, 'pay?', 'done', $5::jsonb, $6::jsonb)`,
+    [W.P, id, `${who.toLowerCase()}@acme.test`, randomUUID(), JSON.stringify(steps), JSON.stringify(report)]);
+  return id;
+}
+
+/** Add to project writes through the stores, so each holds it: a chart its maker cannot save is refused (and dropped with a caveat, never the report), and nothing of the closed folder lands. */
+async function researchAdd(W: H.World): Promise<void> {
+  const { P, ops } = W;
+  const onOps = async () => ((await W.call('padmin', 'visual:list', { projectId: P })).body as Array<{ datasetId: string }>).filter((v) => v.datasetId === ops.ds).length;
+  const before = await onOps();
+  const view = await W.call('opsEditorView', 'research:addToProject', { projectId: P, runId: await plantRun(W, 'opsEditorView', ops.ds) });
+  const story = view.body?.ok ? ((await W.call('opsEditorView', 'story:get', { projectId: P, id: view.body.storyId })).body as { rec?: { blocks: Array<{ kind: string; text?: string }> }; blocks?: Array<{ kind: string; text?: string }> }) : null;
+  const blocks = story?.rec?.blocks ?? story?.blocks ?? [];
+  ok('research add: opsEditorView (Can view on Ops) is refused saving either chart (`edit`): nothing of Ops landed', (await onOps()) === before, `${before} -> ${await onOps()}`);
+  ok('research add: the refusals really happened: each chart is dropped with its caveat line, so the Story holds no chart', view.body?.ok === true && blocks.filter((b) => b.kind === 'visual').length === 0 && blocks.filter((b) => b.kind === 'callout' && /could not be saved/.test(b.text ?? '')).length === 1 && (blocks.find((b) => b.kind === 'callout')?.text ?? '').split('\n').length === 2, short(view));
+  const lead = await W.call('opsLead', 'research:addToProject', { projectId: P, runId: await plantRun(W, 'opsLead', ops.ds) });
+  ok('NEGATIVE CONTROL: opsLead (edits Ops) adds the same report: both charts land', lead.body?.ok === true && (await onOps()) === before + 2, `${await onOps()} ${short(lead)}`);
+  const hrRun = await plantRun(W, 'opsLead', W.hr.ds);
+  const hrBefore = ((await W.call('padmin', 'visual:list', { projectId: P })).body as unknown[]).length;
+  const closed = await W.call('opsLead', 'research:addToProject', { projectId: P, runId: hrRun });
+  const missing = await W.call('opsLead', 'research:addToProject', { projectId: P, runId: randomUUID() });
+  ok('research add: a run over HR\'s closed folder is, to opsLead, as a missing one, and nothing lands', masked(closed) === masked(missing) && ((await W.call('padmin', 'visual:list', { projectId: P })).body as unknown[]).length === hrBefore, `${short(closed)} | ${short(missing)}`);
 }
 
 export async function writeSections(W: H.World): Promise<void> {
@@ -382,6 +417,7 @@ export async function writeSections(W: H.World): Promise<void> {
   await pipelines(W);
   await mcpWrites(W);
   await sqlQuestions(W);
+  await researchAdd(W);
 }
 
 /** A verified SQL question follows EVERY dataset its SQL reads: writing it needs Edit on all of them; one closed hides it. */

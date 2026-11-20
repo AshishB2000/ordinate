@@ -21,12 +21,14 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     const R = await S.ordinary();
     store.useResearchDb(R);
     const P = W.P;
+    /** A started run: the row, then its turn (research:start's two steps). */
+    async function ins(n: { id: string; orgId: string; projectId: string; startedBy: string; agentId: string | null; threadId: string; question: string }): Promise<boolean> { const done = await store.insertRun(n); if (done) await store.setTurn(n.orgId, n.id, randomUUID()); return done; }
     const mk = (org: string, by: string) => ({ id: randomUUID(), orgId: org, projectId: P, startedBy: by, agentId: null, threadId: randomUUID(), question: 'why?' });
 
     // ── forced RLS ──────────────────────────────────────────────────────────────────────────────────────────────
     const a = mk('acme', 'ed@acme.test');
     const b = mk('other', 'o@other.test');
-    ok('insert: a run is queued', (await store.insertRun(a)) === true);
+    ok('insert: a run is queued', (await ins(a)) === true);
     await W.pool.query(`INSERT INTO research_runs (org_id, project_id, id, started_by, thread_id, question) VALUES ($1, $2, $3, $4, $5, 'theirs')`, [b.orgId, P, b.id, b.startedBy, b.threadId]);
     const count = async (settings: Record<string, string>): Promise<number> => {
       const c = await R.connect();
@@ -54,9 +56,9 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     await W.pool.query(`DELETE FROM research_runs WHERE org_id = 'other'`);
 
     // ── one active run per person ────────────────────────────────────────────────────────────────────────────────
-    ok('one per person: a second queued run for the same person is refused', (await store.insertRun(mk('acme', 'ed@acme.test'))) === false);
+    ok('one per person: a second queued run for the same person is refused', (await ins(mk('acme', 'ed@acme.test'))) === false);
     const boss = mk('acme', 'boss@acme.test');
-    ok('one per person: another person may have one', (await store.insertRun(boss)) === true);
+    ok('one per person: another person may have one', (await ins(boss)) === true);
     ok('one per person: the first run is untouched', (await store.getRun('acme', a.id))?.state === 'queued');
 
     // ── the lease, the heartbeat and the fence ───────────────────────────────────────────────────────────────────────────
@@ -77,13 +79,13 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     const left = await store.setDeadline('acme', a.id, 'podC', 600_000);
     ok('deadline: set once, ~10 minutes left; a retake keeps it (never extended)', left > 590_000 && left <= 600_000 && (await store.setDeadline('acme', a.id, 'podC', 1_000)) > 500_000);
     ok('finish: the owner ends it, the lease is cleared', (await store.finish('acme', a.id, 'podC', 'partial', 'steps', null)) && (await store.getRun('acme', a.id))?.state === 'partial');
-    ok('one per person: the person may start another once the first ended', (await store.insertRun(mk('acme', 'ed@acme.test'))) === true);
+    ok('one per person: the person may start another once the first ended', (await ins(mk('acme', 'ed@acme.test'))) === true);
 
     // ── attempts, stop, resume ────────────────────────────────────────────────────────────────────────────────────────
     await store.finish('acme', boss.id, 'podB', 'failed', 'model', null);
     await W.pool.query(`DELETE FROM research_runs WHERE id <> $1`, [boss.id]); // only the run under test is claimable below
     const live = mk('acme', 'east@acme.test');
-    await store.insertRun(live);
+    await ins(live);
     for (let i = 0; i < store.MAX_ATTEMPTS; i += 1) { await store.claim(`pod${i}`, 50); await sleep(120); }
     ok('attempts: a run whose pods kept dying is not claimed a 4th time', (await store.claim('podX', 50)) === null);
     const gone = await store.failExhausted();
@@ -93,13 +95,13 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     ok('stop: a queued run stops at once', (await store.getRun('acme', live.id))?.state === 'stopped');
     ok('resume (negative control): a stopped run is not resumable', !(await store.requeue('acme', live.id)));
     const run2 = mk('acme', 'west@acme.test');
-    await store.insertRun(run2);
+    await ins(run2);
     const got = await store.claim('podS', 5000);
     await store.requestStop('acme', run2.id);
     ok('stop: a running run gets the flag, its worker reads it, the state is the worker\'s to set', got?.id === run2.id && (await store.flags('acme', run2.id, 'podS')).stop && (await store.getRun('acme', run2.id))?.state === 'running');
     await store.finish('acme', run2.id, 'podS', 'stopped', null, null);
     const dup = mk('acme', 'boss@acme.test');
-    await store.insertRun(dup);
+    await ins(dup);
     ok('resume: refused while the person has another run going (one active)', !(await store.requeue('acme', boss.id)));
     await W.pool.query(`UPDATE research_runs SET error_code = 'access', state = 'failed' WHERE id = $1`, [dup.id]);
     ok('resume: a run that failed on access is never resumable', !(await store.requeue('acme', dup.id)));
@@ -130,6 +132,61 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     ok('sweep (negative control): an active run is never aged out', await have(oldRunning));
     ok('sweep: only the org it was asked for', (await store.sweep('other')) === 0);
 
+    // ── a run is claimed only once its turn exists (the race between research:start's insert and its setTurn) ──────────────────
+    await W.pool.query('DELETE FROM research_runs');
+    const raw = mk('acme', 'ed@acme.test');
+    ok('turn race: a run inserted but with no turn yet is queued', (await store.insertRun(raw)) === true);
+    ok('turn race: no pod can claim it before its turn is written (it would never write factsFrom)', (await store.claim('podR', 5000)) === null);
+    await store.setTurn('acme', raw.id, randomUUID());
+    ok('turn race (negative control): once the turn exists it is claimed', (await store.claim('podR', 5000))?.id === raw.id);
+    await store.finish('acme', raw.id, 'podR', 'failed', 'model', null);
+    const orphan = mk('acme', 'boss@acme.test');
+    await store.insertRun(orphan); // a start that died here
+    await W.pool.query(`UPDATE research_runs SET started_at = now() - interval '6 minutes' WHERE id = $1`, [orphan.id]);
+    ok('turn race: an orphan with no turn does not hold the person\'s one slot for ever (the next start clears a stale one)', (await store.insertRun(mk('acme', 'boss@acme.test'))) === true && (await store.getRun('acme', orphan.id)) === null);
+
+    // ── the write phase: the end code is kept, a stop wins, a stopping pod hands its run back ──────────────────────────────
+    await W.pool.query('DELETE FROM research_runs');
+    const wr = mk('acme', 'ed@acme.test');
+    await ins(wr);
+    await store.claim('podW', 5000);
+    await store.setWriting('acme', wr.id, 'podW', 'steps');
+    ok('writing: the loop\'s end code is stored with the state, so a run retaken in writing ends as it would have', (await store.getRun('acme', wr.id))?.state === 'writing' && (await store.getRun('acme', wr.id))?.errorCode === 'steps');
+    await store.requestStop('acme', wr.id);
+    await store.finish('acme', wr.id, 'podW', 'partial', 'steps', { title: 't', summary: '', sections: [], caveats: [], conclusion: '', writtenAt: 'now' });
+    const stopped = await store.getRun('acme', wr.id);
+    ok('stop: a stop asked for while the run was writing wins over its done/partial; the report written is kept', stopped?.state === 'stopped' && stopped.errorCode === null && stopped.report?.title === 't');
+    const rel = mk('acme', 'boss@acme.test');
+    await ins(rel);
+    await store.claim('podX', 600000);
+    const held = await store.getRun('acme', rel.id);
+    await store.release('acme', rel.id, 'podX');
+    await store.release('acme', rel.id, 'podOther'); // not its owner: nothing
+    const back = await store.claim('podY', 5000);
+    ok('release: a stopping pod\'s run is claimable AT ONCE by another pod and the attempt is not burned', held?.attempts === 1 && back?.id === rel.id && back.attempts === 1, JSON.stringify([held?.attempts, back?.attempts]));
+    await store.finish('acme', rel.id, 'podY', 'done', null, null);
+
+    // ── resume clears the story link; the add lease ───────────────────────────────────────────────────────────────────────
+    const rs = mk('acme', 'ed@acme.test');
+    await ins(rs);
+    await store.claim('podS2', 5000);
+    await store.finish('acme', rs.id, 'podS2', 'partial', 'steps', { title: 't', summary: '', sections: [], caveats: [], conclusion: '', writtenAt: 'now' });
+    const t1 = randomUUID();
+    const addA = await store.claimAdd('acme', rs.id, t1);
+    const addB = await store.claimAdd('acme', rs.id, randomUUID());
+    ok('add lease: one holder at a time; a second press is told it is busy', !!addA && 'token' in addA && !!addB && 'busy' in addB, JSON.stringify([addA, addB]));
+    ok('add lease: a visual is recorded per step, only by the holder', (await store.recordVisual('acme', rs.id, t1, 1, 'v-1')) && !(await store.recordVisual('acme', rs.id, 'not-the-holder', 2, 'v-2')));
+    await store.releaseAdd('acme', rs.id, t1);
+    const retry = await store.claimAdd('acme', rs.id, randomUUID());
+    ok('add lease: after a failure and a release a retry gets the visuals already saved (it saves none twice)', !!retry && 'token' in retry && retry.visuals['1'] === 'v-1' && Object.keys(retry.visuals).length === 1);
+    const story1 = randomUUID();
+    ok('add lease: story_id is set once, by the holder; a stale token and a late second finalize get the first story', !!retry && 'token' in retry && (await store.finalizeStory('acme', rs.id, 'stale', randomUUID())) === null && (await store.finalizeStory('acme', rs.id, retry.token, story1)) === story1 && (await store.finalizeStory('acme', rs.id, retry.token, randomUUID())) === story1);
+    ok('add lease: with a story recorded, a claim returns it', JSON.stringify(await store.claimAdd('acme', rs.id, randomUUID())) === JSON.stringify({ story: story1 }));
+    ok('resume: the story link is cleared (the old Story stays as it is) so the new report can be added', (await store.requeue('acme', rs.id)) && (await store.getRun('acme', rs.id))?.storyId === null && (await store.claimAdd('acme', rs.id, randomUUID())) !== null);
+    const lines = await store.listRunLines('acme', W.P, 'ed@acme.test');
+    ok('list: a run line carries no steps, report or facts', lines.length >= 1 && lines.every((l) => !('steps' in l) && !('report' in l)));
+    await W.pool.query('DELETE FROM research_runs');
+
     // ── 2 runs per pod, through the worker ───────────────────────────────────────────────────────────────────────────────
     store.useResearchDb(W.pool);
     await W.pool.query(`DELETE FROM research_runs`);
@@ -144,7 +201,7 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
       if (r.status !== 200 || !r.body?.ok) throw new Error('start failed: ' + r.text);
     }
     const third = mk('acme', 'east@acme.test');
-    await store.insertRun(third);
+    await ins(third);
     const w = worker.latestForTest();
     worker.pauseForTest(false);
     const started = (await w?.tick()) ?? 0;

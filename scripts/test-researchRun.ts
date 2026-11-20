@@ -10,6 +10,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { researchWorld, sleep, until, answerStep, PLAN } from './researchHarness';
+import * as H from './rowPolicyHarness';
 
 const store: typeof import('../src/server/research/db') = require('../src/server/research/db');
 const worker: typeof import('../src/server/research/worker') = require('../src/server/research/worker');
@@ -31,7 +32,7 @@ const WRITE = JSON.stringify({
   summary: 'Sales were 6252 in total.',
   sections: [
     { heading: 'By region', text: 'Total sales were 6252 and West led at 1784. SECTION_ONE_CANARY.', steps: [1] },
-    { heading: 'Why it moved', text: 'Sales rose by 13 but 999999 was claimed. SECTION_TWO_CANARY.', steps: [3] },
+    { heading: 'Why it moved', text: 'Sales rose by 13 but 999999 was claimed, and 6252 belongs to step 1. SECTION_TWO_CANARY.', steps: [3] },
   ],
   caveats: ['The data is monthly.', 'Sales rose 12.5% somewhere'],
   conclusion: 'West leads at 1784.',
@@ -65,7 +66,7 @@ const WRITE = JSON.stringify({
     ok('the step call is shown every earlier step\'s facts with its status', /STEP 1 \(answer\) — DONE/.test(stub.seen.step) && /STEP 2 \(answer\) — REFUSED/.test(stub.seen.step) && /STEP 4 \(sql\) — DONE/.test(stub.seen.step));
     const rep = run?.report;
     ok('audit: section 1\'s figures are its cited step\'s: no note', !!rep && !rep.sections[0].text.includes('Contains a figure the app did not compute'));
-    ok('audit: section 2\'s invented 999999 gets the guard\'s note, and 6252 (step 1, not cited) too', !!rep && rep.sections[1].text.includes('999999') && rep.sections[1].text.includes('Contains a figure the app did not compute'));
+    ok('audit: section 2\'s invented 999999 and 6252 (step 1\'s, NOT cited by this section) both get the guard\'s note', !!rep && /Contains a figure the app did not compute: [^]*999999[^]*6252|Contains a figure the app did not compute: [^]*6252[^]*999999/.test(rep.sections[1].text) && !/Contains a figure the app did not compute: [^]*\b13\b/.test(rep.sections[1].text), rep?.sections[1].text);
     ok('caveats: the one with a figure is dropped', JSON.stringify(rep?.caveats) === '["The data is monthly."]');
 
     const got = await get('ed', id);
@@ -109,26 +110,106 @@ const WRITE = JSON.stringify({
     ok('add: a second press (and two at once) open the SAME story and make no copy', again.body?.storyId === add.body.storyId && again.body.created === false && both.every((r) => r.body?.storyId === add.body.storyId) && n === 1 && (await store.getRun('acme', id))?.storyId === add.body.storyId, `${n} ${again.text}`);
     ok('add: the run and its private report stay with the starter', (await get('ed', id)).body.run.storyId === add.body.storyId && (await get('boss', id)).body?.ok === false);
 
-    // ── The question-5 rule: a restricted dataset's prose never reaches the Story ──────────────────────────────────────────
+    // ── The question-5 rule, decided for the whole RUN: restricted data anywhere means no model sentence in the Story ───────
+    const FIG = String(H.only('West').reduce((a, r) => a + (r[4] as number), 0)); // a figure only the Orders step (row rules) computes: West's quantity
     stub.reset();
-    stub.steps = [answerStep({ datasetId: W.orders, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }] }), byRegion('Plain'), DONE]; // Orders is named three times in this world: by id
+    stub.steps = [answerStep({ datasetId: W.orders, category: 'region', measures: [{ column: 'qty', aggregation: 'sum' }], filters: [{ column: 'region', op: '=', value: 'West' }] }), byRegion('Plain'), DONE]; // Orders is named three times here: by id
     stub.write = JSON.stringify({
-      title: 'Orders and plain', summary: 'SUMMARY_CANARY about both.',
-      sections: [{ heading: 'Restricted section', text: 'RESTRICTED_CANARY west customers drive it.', steps: [1] }, { heading: 'Open section', text: 'OPEN_CANARY plain data.', steps: [2] }],
-      caveats: [], conclusion: 'CONCLUSION_CANARY overall.',
+      title: `Quantity ${FIG} in the West`, summary: `Plain sales were 6252 and the West quantity was ${FIG}. SUMMARY_CANARY.`, // cites nothing: quotes the restricted step
+      sections: [
+        { heading: `West lost ${FIG} units`, text: `Plain sales: 6252. Also ${FIG}. OPEN_STEP_CANARY.`, steps: [2] }, // cites only the open step, quotes the restricted figure
+        { heading: 'West lost 4500 customers', text: 'RESTRICTED_CANARY.', steps: [1] }, // a bare-integer heading
+        { heading: 'Plain data', text: 'PLAIN_CANARY.', steps: [2] },
+      ],
+      caveats: ['CAVEAT_CANARY about the sites.'], conclusion: `Overall ${FIG}. CONCLUSION_CANARY.`,
     });
     const id2 = await go('boss', 'Orders versus plain');
     const run2 = await S.drive(id2);
-    ok('q5: both steps computed as the admin', run2?.state === 'done' && run2.steps.every((s) => s.status === 'done'), JSON.stringify(run2?.steps.map((s) => [s.status, s.reason])));
+    ok('q5: both steps computed as the admin, one of them over row-ruled data', run2?.state === 'done' && run2.steps.every((s) => s.status === 'done') && (run2.steps[0].facts ?? '').includes(FIG), JSON.stringify(run2?.steps.map((s) => [s.status, s.reason])));
     const add2 = await W.call('boss', 'research:addToProject', { projectId: W.P, runId: id2 });
     const story2 = await W.as('boss', async () => (await stories.readStory(W.P, add2.body.storyId))?.rec);
     const t2 = (story2?.blocks ?? []).flatMap((b) => (b.kind === 'text' || b.kind === 'callout' ? [b.text] : []));
-    const all2 = JSON.stringify(story2);
-    ok('q5: the restricted section keeps its heading and chart; its prose is the fixed line, with no model text', t2.includes('## Restricted section') && !all2.includes('RESTRICTED_CANARY') && t2.includes(say.restrictedProse()));
-    ok('q5: the summary and conclusion follow the rule over ALL cited steps (one is restricted): fixed lines', !all2.includes('SUMMARY_CANARY') && !all2.includes('CONCLUSION_CANARY'));
-    ok('q5 (negative control): the section on the unrestricted dataset keeps its prose, dated', t2.some((t) => t.includes('OPEN_CANARY')) && t2.filter((t) => /^Written on /.test(t)).length === 2);
-    ok('q5: the fixed sentence has no digit and no data name', !/\d/.test(say.restrictedProse()) && !/Orders|Plain|sales/i.test(say.restrictedProse()));
+    const savedNames = await W.as('boss', async () => Promise.all((story2?.blocks ?? []).flatMap((b) => (b.kind === 'visual' ? [visuals.getVisual(W.P, (b as { visualId: string }).visualId).then((v) => v?.name ?? '')] : []))));
+    const everything = JSON.stringify([story2, savedNames]);
+    ok('q5: the restricted figure appears NOWHERE in the Story (blocks, name) or in any saved visual\'s name', !everything.includes(FIG) && !everything.includes('4500'), everything.slice(0, 300));
+    ok('q5: no model sentence is kept: summary (it cites nothing), every section\'s text (even the one citing only the open step) and the conclusion are the fixed line', ['SUMMARY_CANARY', 'OPEN_STEP_CANARY', 'RESTRICTED_CANARY', 'PLAIN_CANARY', 'CONCLUSION_CANARY'].every((c) => !everything.includes(c)) && t2.filter((t) => t === say.restrictedProse()).length === 5, JSON.stringify(t2));
+    ok('q5: the caveats are the fixed line; the headings with a digit are "Finding n", the Story is named by the starter\'s question', !everything.includes('CAVEAT_CANARY') && t2.includes(say.restrictedCaveats().replace(/^/, '- ')) && t2.includes('## Finding 1') && t2.includes('## Finding 2') && t2.includes('## Plain data') && story2?.name === 'Orders versus plain', JSON.stringify([story2?.name, t2]));
+    ok('q5: the saved visuals are named from the safe title and headings (Finding n)', savedNames.length >= 2 && savedNames.every((n) => n.startsWith('Orders versus plain · ')), JSON.stringify(savedNames));
+    ok('q5: the fixed sentences have no digit and no data name; each section is dated', !/\d/.test(say.restrictedProse() + say.restrictedCaveats()) && !/Orders|Plain|sales/i.test(say.restrictedProse()) && t2.filter((t) => /^Written on /.test(t)).length === 3);
     ok('q5: the private report still holds the full text for its starter', (await get('boss', id2)).text.includes('RESTRICTED_CANARY'));
+
+    // ── Add to project: a failed save leaves nothing to duplicate; two presses at once make one story; no connection is held ──
+    stub.reset();
+    stub.steps = [byRegion('Plain'), DRIVERS, DONE];
+    stub.write = JSON.stringify({ title: 'Sales and why', summary: 'S.', sections: [{ heading: 'By region', text: 'West led.', steps: [1] }, { heading: 'Why it moved', text: 'It rose.', steps: [2] }], caveats: [], conclusion: 'C.' });
+    const countVisuals = async () => (await W.as('ed', () => visuals.listVisuals(W.P))).length;
+    const countStories = async () => (await W.as('ed', () => stories.listStories(W.P))).length;
+    const ra = await go('ed', 'add with a failing save');
+    await S.drive(ra);
+    const v0 = await countVisuals();
+    const s0 = await countStories();
+    const realSave = stories.saveStory;
+    stories.saveStory = (async () => { throw new Error('disk full'); }) as typeof stories.saveStory;
+    const failedAdd = await W.call('ed', 'research:addToProject', { projectId: W.P, runId: ra });
+    stories.saveStory = realSave;
+    const v1 = await countVisuals();
+    ok('add: a story save that throws fails the press and leaves the run unlinked, its two visuals recorded on the run', failedAdd.body?.ok === false && v1 === v0 + 2 && (await store.getRun('acme', ra))?.storyId === null && Object.keys((await W.pool.query(`SELECT add_visuals FROM research_runs WHERE id = $1`, [ra])).rows[0].add_visuals).length === 2, JSON.stringify([failedAdd.body, v0, v1]));
+    const retried = await W.call('ed', 'research:addToProject', { projectId: W.P, runId: ra });
+    ok('add: the retry reuses the saved visuals (none twice) and makes ONE story', retried.body?.ok === true && (await countVisuals()) === v1 && (await countStories()) === s0 + 1, JSON.stringify([retried.body, v1, await countVisuals()]));
+    stub.reset();
+    stub.steps = [byRegion('Plain'), DRIVERS, DONE];
+    stub.write = JSON.stringify({ title: 'Twice at once', summary: 'S.', sections: [{ heading: 'By region', text: 'West led.', steps: [1] }, { heading: 'Why', text: 'It rose.', steps: [2] }], caveats: [], conclusion: 'C.' });
+    const rb = await go('ed', 'two presses');
+    await S.drive(rb);
+    const v2 = await countVisuals();
+    const s2 = await countStories();
+    let idleInTx = -1;
+    stories.saveStory = (async (...a: Parameters<typeof realSave>) => {
+      idleInTx = Number((await W.pool.query(`SELECT count(*) AS n FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle in transaction' AND pid <> pg_backend_pid()`)).rows[0].n);
+      return realSave(...a);
+    }) as typeof stories.saveStory;
+    const pair = await Promise.all([W.call('ed', 'research:addToProject', { projectId: W.P, runId: rb }), W.call('ed', 'research:addToProject', { projectId: W.P, runId: rb })]);
+    stories.saveStory = realSave;
+    ok('add: two presses at once make ONE story and ONE set of visuals', pair.every((r) => r.body?.ok === true) && pair[0].body.storyId === pair[1].body.storyId && [pair[0].body.created, pair[1].body.created].filter(Boolean).length === 1 && (await countStories()) === s2 + 1 && (await countVisuals()) === v2 + 2, JSON.stringify(pair.map((r) => r.body)));
+    ok('add: no connection is held in a transaction while the story is saved (a pool is not starved by concurrent adds)', idleInTx === 0, String(idleInTx));
+
+    // ── Stop in the write phase; a run retaken while writing keeps its limit code ────────────────────────────────────────────
+    stub.reset();
+    let rs1 = '';
+    stub.steps = [byRegion('Plain'), async () => { await store.requestStop('acme', rs1); return DONE; }];
+    stub.write = WRITE;
+    rs1 = await go('ed', 'stop before the write');
+    const rr1 = await S.drive(rs1);
+    ok('stop: a stop asked for just before the write call is honored: stopped, and the write call (a model call) is never made', rr1?.state === 'stopped' && stub.calls.write === 0, `${rr1?.state} ${stub.calls.write}`);
+    stub.reset();
+    let rs2 = '';
+    stub.steps = [byRegion('Plain'), DONE];
+    stub.write = async () => { await store.requestStop('acme', rs2); return WRITE; };
+    rs2 = await go('ed', 'stop during the write');
+    const rr2 = await S.drive(rs2);
+    ok('stop: a stop asked for during the write call wins: stopped (the report written is kept, not resumable)', rr2?.state === 'stopped' && rr2.errorCode === null && !!rr2.report && !(await W.call('ed', 'research:resume', { projectId: W.P, runId: rs2 })).body?.ok, `${rr2?.state} ${rr2?.errorCode}`);
+    stub.reset();
+    stub.write = WRITE;
+    const rw = await go('ed', 'retaken while writing');
+    await store.claim('podW0', 80); // a pod that reached the write phase after a step limit, then died
+    await store.setDeadline('acme', rw, 'podW0', 600_000);
+    await store.savePlan('acme', rw, 'podW0', ['a', 'b', 'c']);
+    await store.saveSteps('acme', rw, 'podW0', [{ n: 1, kind: 'answer', title: 'Sales by region', status: 'done', spec: { datasetId: W.plain, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Sales by region' }, facts: 'f', ledger: [], datasetIds: [W.plain] }], 8, 1);
+    await store.setWriting('acme', rw, 'podW0', 'steps');
+    await sleep(200);
+    const rrw = await S.drive(rw);
+    ok('retake in writing: the run keeps its step-limit end: partial (steps), not done; no step or plan call, one write call', rrw?.state === 'partial' && rrw.errorCode === 'steps' && !!rrw.report && stub.calls.step === 0 && stub.calls.plan === 0 && stub.calls.write === 1, `${rrw?.state} ${rrw?.errorCode} ${JSON.stringify(stub.calls)}`);
+
+    // ── An SQL step never reaches the project's source tables ──────────────────────────────────────────────────────────────
+    const sourceAnswers: any = require('../src/ipc/sourceAnswers'); // any: spied
+    const realVocab = sourceAnswers.sourceVocabulary;
+    const seenContexts: unknown[] = [];
+    sourceAnswers.sourceVocabulary = async (...a: unknown[]) => { seenContexts.push(a[1]); return realVocab(...a); };
+    stub.reset();
+    stub.steps = [JSON.stringify({ kind: 'sql', intent: 'a table that is no dataset', datasets: ['no_such_dataset'] }), DONE];
+    await S.drive(await go('ed', 'sql by name'));
+    sourceAnswers.sourceVocabulary = realVocab;
+    ok('sql: the step asks for NO source tables (noSources), so a name that matches no dataset cannot fall through to one', seenContexts.length >= 1 && seenContexts.every((c) => (c as { noSources?: boolean } | undefined)?.noSources === true), JSON.stringify(seenContexts));
 
     // ── Failures ───────────────────────────────────────────────────────────────────────────────────────────────────────
     // A model error at the plan: failed (model); resume plans again and the run completes.
@@ -242,12 +323,12 @@ const WRITE = JSON.stringify({
     const podB = worker.startResearchWorker({ error: () => undefined, warn: () => undefined });
     const stepJson = JSON.stringify(before?.steps[0]);
     const planCalls = stub.calls.plan;
-    await sleep(700);
+    ok('release: the stopping pod handed the run back at once (its lease already lapsed, the attempt not burned)', ((await W.pool.query(`SELECT lease_until < now() AS lapsed, attempts FROM research_runs WHERE id = $1`, [crash])).rows[0] ?? {}).lapsed === true);
     worker.pauseForTest(false);
     await until(async () => { await podB.tick(); const r = await store.getRun('acme', crash); return !!r && !store.ACTIVE.includes(r.state); });
     worker.pauseForTest(true);
     const retaken = await store.getRun('acme', crash);
-    ok('retake: another pod finishes it (attempt 2) to done', retaken?.state === 'done' && retaken.attempts === 2, `${retaken?.state} ${retaken?.attempts}`);
+    ok('retake: another pod takes it AT ONCE (no lease to wait out) and finishes it: attempt 1, since the stopping pod\'s was returned', retaken?.state === 'done' && retaken.attempts === 1, `${retaken?.state} ${retaken?.attempts}`);
     ok('retake: step 1 was NOT run again (the stored step is identical) and the plan was not asked again', JSON.stringify(retaken?.steps[0]) === stepJson && stub.calls.plan === planCalls && retaken?.steps.length === 1);
     ok('retake: B made ONE step call (the model\'s `done`): 3 calls in all, 2 counted (the held call of the dead pod was never saved)', stub.calls.step === 3 && retaken?.stepsUsed === 2, `${stub.calls.step} ${retaken?.stepsUsed}`);
     await podB.stop();

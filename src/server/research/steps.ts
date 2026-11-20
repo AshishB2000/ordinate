@@ -17,17 +17,16 @@ import { specDatasets } from '../../ipc/specVocabulary';
 import { driversFacts } from '../../ai/driversFacts';
 import { sqlFacts } from '../../ai/researchPrompts';
 import { relatedIds } from '../../ai/answerJoin';
-import { tidy } from '../../ai/researchWrite';
-import { FIGURE_RE } from '../../app/instructions';
+import { hasDigit, tidy } from '../../ai/researchWrite';
 import { isRowPolicyError } from '../../data/rowPolicyError';
 import * as say from '../researchMessages';
 
 export interface StepScope { projectId: string; question: string; only: ReadonlySet<string> | null; model: { provider: string; model: string } | null }
 
-/** A title the browser may show: one line, no model figure. */
+/** A title the browser may show: one line and no digit at all (a model-written title never carries a figure, not even a bare integer). */
 const titled = (raw: string, fallback: string): string => {
   const s = tidy(raw, 120).replace(/\n+/g, ' ');
-  return s && !FIGURE_RE.test(s) ? s : fallback;
+  return s && !hasDigit(s) ? s : fallback;
 };
 
 const failure = (err: unknown): Computed => (isRowPolicyError(err) ? { status: 'refused', reason: say.notAllowed() } : { status: 'failed', reason: say.stepFailed() });
@@ -56,10 +55,11 @@ async function answerStep(action: Extract<ResearchAction, { kind: 'answer' }>, s
 }
 
 async function sqlStep(action: Extract<ResearchAction, { kind: 'sql' }>, sc: StepScope): Promise<Computed> {
-  const res = await sqlAnswer(sc.projectId, { kind: 'sql', intent: action.intent, datasets: action.datasets }, sc.question, sc.only ?? undefined, sc.model);
+  // `noSources`: never the project's source tables (a name that matches no dataset must not fall through to one), as the answer step and Slack.
+  const res = await sqlAnswer(sc.projectId, { kind: 'sql', intent: action.intent, datasets: action.datasets }, sc.question, sc.only ?? undefined, sc.model, { kind: '', noSources: true } as { kind: string });
   if (!res.ok) return { status: 'failed', reason: res.reason };
   const facts = sqlFacts(res.card);
-  const title = titled(res.sql.title, 'SQL result');
+  const title = titled(res.sql.title, say.sqlResultTitle());
   return { status: 'done', title, spec: { sql: res.sql.text, datasetIds: res.sql.datasetIds, title }, facts: facts.text, ledger: facts.ledger, datasetIds: res.sql.datasetIds };
 }
 
@@ -76,5 +76,5 @@ async function driversStep(action: Extract<ResearchAction, { kind: 'drivers' }>,
   if (!r.ok) return { status: 'failed', reason: say.stepFailed() };
   const facts = driversFacts(r);
   const spec = { ...got.spec, ...(r.selected ? { dimension: r.selected.column } : {}) };
-  return { status: 'done', title: titled(`Why ${r.metric.name} changed`, 'Why it changed'), spec: spec as unknown as Record<string, unknown>, facts: facts.text, ledger: facts.ledger, datasetIds: [ds.id] };
+  return { status: 'done', title: titled(say.whyChanged(r.metric.name), say.whyItChanged()), spec: spec as unknown as Record<string, unknown>, facts: facts.text, ledger: facts.ledger, datasetIds: [ds.id] };
 }

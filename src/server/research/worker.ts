@@ -27,6 +27,14 @@ export function pauseForTest(on: boolean): void {
 type Log = Pick<FastifyBaseLogger, 'error' | 'warn'>;
 
 /** Runs `run` under a heartbeat. A throw is the run's failure: ids and a code in the log, never a fact or a model word. */
+/** Why a worker's leases were aborted: the pod is stopping, so its runs are handed back (not failed, not counted as an attempt). */
+export class Stopping extends Error {
+  constructor() {
+    super('the research worker is stopping');
+    this.name = 'Stopping';
+  }
+}
+
 /** `leases`: the controllers of the runs this worker is serving; a stopping worker aborts them, so another pod retakes each run once its lease lapses. */
 export async function work(run: store.Run, owner: string, log: Log, leases: Set<AbortController> = new Set()): Promise<void> {
   const pool = store.db();
@@ -39,7 +47,8 @@ export async function work(run: store.Run, owner: string, log: Log, leases: Set<
     await execute(pool, run, owner, lease.signal);
   } catch (err) {
     if (err instanceof LeaseLost || lease.signal.aborted) {
-      log.warn({ run: run.id }, 'research run stopped: its lease was lost');
+      if (lease.signal.reason instanceof Stopping) await store.release(run.orgId, run.id, owner).catch(() => undefined); // handed back: another pod takes it at once
+      else log.warn({ run: run.id }, 'research run stopped: its lease was lost');
       return;
     }
     log.error({ err: scrubbed(err, ''), run: run.id }, 'research run failed');
@@ -91,7 +100,7 @@ export function startResearchWorker(log: Log): ResearchWorker {
     async stop() {
       stopped = true;
       if (timer) clearTimeout(timer);
-      for (const l of leases) l.abort(new LeaseLost());
+      for (const l of leases) l.abort(new Stopping());
       await Promise.allSettled(running);
     },
   };

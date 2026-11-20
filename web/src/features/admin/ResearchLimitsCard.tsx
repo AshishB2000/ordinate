@@ -2,7 +2,6 @@
 // and minutes — each within a ceiling the server holds. A run stops at the first it reaches. Org admins only (`research:setLimits`).
 
 import { useState } from 'react';
-import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { SkeletonRows } from '../../ui/Skeleton';
@@ -75,10 +74,9 @@ export function ResearchLimitsCard() {
     <div className={s.group}>
       <div className={s.aiHead}>
         <h3 className={s.groupTitle}>Deep research limits</h3>
-        <Badge>Editors and admins</Badge>
       </div>
       <p className={s.lead}>
-        A deep-research run plans, then computes one step at a time with the engine, and writes a report. It stops at whichever limit it reaches first; Stop works at any time.
+        Editors and admins can start a deep-research run. It plans, then computes one step at a time with the engine, and writes a report. It stops at whichever limit it reaches first; Stop works at any time. Only an org admin changes these limits.
         One person can have one run going, and each server runs two at once.
       </p>
       {q.isPending && <SkeletonRows rows={2} label="Loading the limits" />}

@@ -654,6 +654,52 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ok('listDatasets does not throw and lists all six (the semantic one too)', summaries.length === 6);
   });
 
+  // ── 8. Deep research's step card (research:card): a new channel that reads rows for a run's starter ────────────────────────
+  // A finished run is PLANTED (an INSERT, as the column-access net does): a chart step on the Live dataset must ANSWER from the
+  // warehouse (a routed door, dated live), a drivers step on it and a chart on the gone one refuse TYPED (never a generic
+  // "could not compute"), and the same chart on the extract (negative control) answers without a refusal. Needs Postgres.
+  if (!process.env.DATABASE_URL) {
+    console.log('skip 8: research:card over a Live dataset needs DATABASE_URL (the run is a Postgres row)');
+  } else {
+    const { Client, Pool } = require('pg') as typeof import('pg');
+    const researchDb: typeof import('../src/server/research/db') = require('../src/server/research/db');
+    const dbName = `ordinate_livenet_research_${process.pid}_${Date.now()}`;
+    const scratch = new URL(process.env.DATABASE_URL);
+    scratch.pathname = '/' + dbName;
+    const root = new Client({ connectionString: process.env.DATABASE_URL });
+    await root.connect();
+    await root.query(`CREATE DATABASE ${dbName}`);
+    const rpool = new Pool({ connectionString: scratch.toString(), max: 2 });
+    rpool.on('error', () => undefined);
+    try {
+      await rpool.query(fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'db', 'migrations', '0043_research.sql'), 'utf8'));
+      researchDb.useResearchDb(rpool);
+      const answerOn = (d: string) => ({ datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Sales by region' });
+      const drivers = { datasetId: seed.live, metric: { column: 'sales', aggregation: 'sum' }, filters: [], compare: { mode: 'bucket', column: 'day', label: '2024-02', prev: '2024-01', grain: 'month' }, path: [], dimension: 'region' };
+      const steps = [
+        { n: 1, kind: 'answer', title: 'live', status: 'done', spec: answerOn(seed.live), datasetIds: [seed.live] },
+        { n: 2, kind: 'answer', title: 'extract', status: 'done', spec: answerOn(seed.extract), datasetIds: [seed.extract] },
+        { n: 3, kind: 'answer', title: 'gone', status: 'done', spec: answerOn(seed.gone), datasetIds: [seed.gone] },
+        { n: 4, kind: 'drivers', title: 'drivers on live', status: 'done', spec: drivers, datasetIds: [seed.live] },
+      ];
+      const runId = '8a8a8a8a-8a8a-48a8-8a8a-8a8a8a8a8a8a';
+      await rpool.query(`INSERT INTO research_runs (org_id, project_id, id, started_by, thread_id, question, state, steps) VALUES ($1, $2, $3, $4, $5, 'q', 'done', $6::jsonb)`,
+        [ADMIN.org.id, P, runId, ADMIN.user.email, '8b8b8b8b-8b8b-48b8-8b8b-8b8b8b8b8b8b', JSON.stringify(steps)]);
+      const card = (step: number) => post('research:card', { projectId: P, runId, step });
+      const [live, extract, gone, why] = [await card(1), await card(2), await card(3), await card(4)];
+      ok('8. Live → research:card (a chart step) ANSWERS from the warehouse, dated live', live.status === 200 && answered(live.value) && (live.value as { asOf?: { mode?: string } } | null)?.asOf?.mode === 'live', `${live.status} ${live.body.slice(0, 240)}`);
+      ok('8. NEGATIVE CONTROL: the extract\'s step answers without a refusal', extract.status === 200 && (extract.value as { ok?: boolean } | null)?.ok !== false && !('code' in ((extract.value as object) ?? {})), `${extract.status} ${extract.body.slice(0, 240)}`);
+      ok('8. a Live dataset\'s connection gone → research:card refuses TYPED (not a generic failure)', isRefusal(gone) && !/could not compute/i.test(gone.body), `${gone.status} ${gone.body.slice(0, 240)}`);
+      ok('8. a drivers step on a Live dataset → research:card refuses TYPED, never a figure', isRefusal(why) && !/could not compute/i.test(why.body), `${why.status} ${why.body.slice(0, 240)}`);
+      ok('8. no reply carries a SQL text, an address or a dataset id', ![live, extract, gone, why].some((r) => r.body.includes(SQL_CANARY)));
+    } finally {
+      researchDb.useResearchDb(null);
+      await rpool.end().catch(() => undefined);
+      await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+      await root.end();
+    }
+  }
+
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });
   finish();
