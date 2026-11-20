@@ -53,6 +53,7 @@ import { onDashboard } from './answerDashboard';
 import { viewHook } from '../data/sourceView';
 import { isJoined } from '../ai/answerJoin';
 import { answerReads } from './answerJoined';
+import { withDocumentTitles } from '../knowledge/retrieve';
 
 /** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
 export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot' | 'factsFrom' | 'dashboardsFrom'> & { card?: Record<string, unknown> };
@@ -203,7 +204,7 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
         : turn;
     }));
   }
-  return out;
+  return withDocumentTitles(projectId, out); // the documents an answer used, by title (a removed one as gone)
 }
 
 /** Refresh of an SQL answer: its SQL run again for the caller (the gate, or the warehouse for Live), kept in place of its snapshot (firstAsked stays). */

@@ -1,7 +1,7 @@
 // The ONE place an ask's guidance is assembled (semantic layer part 3, D2/D15): the project's instructions and,
 // for the contexts that open a dataset, its editor-written guide. MAIN PROCESS ONLY.
 //
-// One catalog read and record metadata: never a row, a connection, a source-table note or SQL. Instructions and
+// One catalog read and record metadata (and, with a database, the knowledge passages that match the question: ../knowledge): never a row, a connection, a source-table note or SQL. Instructions and
 // guides are editor prose every reader of the project sees (D5), so a caller row access rules restrict reads the
 // same block; the facts beside it are what the lock shapes. Never throws: guidance must never cost an answer.
 
@@ -13,6 +13,7 @@ import { logger } from '../app/logger';
 import { verifiedExamples } from './verifiedLookup';
 import { readTopic, topicForReaders } from '../analysis/topics';
 import { HOME_DATASETS, homeDatasets } from './homeFacts';
+import { passagesFor } from '../knowledge/retrieve';
 
 const NONE: Guided = { text: '', ledger: [], used: { instructions: 0, examples: [] } };
 /** Home's datasets (./homeFacts: the ones `buildFacts`' fallback shows, picked once per ask), or a topic's first 12. */
@@ -20,7 +21,7 @@ const INVENTORY = HOME_DATASETS;
 
 function guided(input: GuidanceInput, examples: string[] = []): Guided {
   const b = guidanceBlock(input);
-  return { text: b.text, ledger: b.ledger, used: { instructions: b.instructions, examples } };
+  return { text: b.text, ledger: b.ledger, used: { instructions: b.instructions, examples, ...(b.documents.length ? { documents: b.documents } : {}) } };
 }
 
 /** The verified questions worth showing for `question` (D10), as lines and ids (./verifiedLookup: ranked by the index with a database). Metadata only; the caller's row lock hides what it hides. */
@@ -46,7 +47,7 @@ export async function topicDatasets(projectId: string, id: string): Promise<{ id
  */
 export async function askGuidance(
   projectId: string, context: { kind?: string; id?: string }, factsKind: string, question?: string,
-  opts: { exclude?: string; agent?: { name: string; instructions: string[]; datasets: ReadonlySet<string> | null } } = {},
+  opts: { exclude?: string; agent?: { id?: string; name: string; instructions: string[]; datasets: ReadonlySet<string> | null } } = {},
 ): Promise<Guided> {
   try {
     const file = await load(projectId);
@@ -68,7 +69,9 @@ export async function askGuidance(
     // Verified questions as examples, only for an ask (a question to answer); a failure there costs the examples, not the block.
     const ex = question ? await exampleLines(projectId, question, factsKind === 'dataset' ? id : undefined, opts.exclude, opts.agent?.datasets ?? undefined).catch(() => ({ lines: [], ids: [] })) : { lines: [], ids: [] };
     const agent = opts.agent ? { name: opts.agent.name, instructions: opts.agent.instructions } : undefined;
-    return guided({ instructions, guides, examples: ex.lines, ...(agent ? { agent } : {}) }, ex.ids);
+    // Knowledge passages that match the question (docs/knowledge-docs rule 9); a failure costs the passages, never the answer (rule 8).
+    const documents = question ? await passagesFor(projectId, opts.agent?.id ?? null, question).catch((err: any) => { logger.error('[guidance] documents left out of the ask:', err && err.code); return []; }) : [];
+    return guided({ instructions, guides, examples: ex.lines, ...(agent ? { agent } : {}), ...(documents.length ? { documents } : {}) }, ex.ids);
   } catch (err: any) {
     logger.error('[guidance] left out of the ask:', err && err.message);
     return NONE;

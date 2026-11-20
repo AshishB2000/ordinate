@@ -12,6 +12,7 @@ import type { LedgerEntry } from './numberAudit';
 import { oneLine as cut } from './columnNotes';
 import { oneLine } from './promptText';
 import { sealLedger } from './copilotFacts';
+import { DOCUMENTS_HEADER, passageLines, withoutFigures, type BlockPassage } from '../knowledge/passageBlock';
 
 /** Characters of instruction lines a block holds, then "(more not shown)". */
 export const INSTRUCTIONS_BLOCK_MAX = 4000;
@@ -23,8 +24,9 @@ export const GUIDE_INVENTORY_MAX = 200;
  * `examples`: verified question lines already written (../ai/verifiedPick), printed after the instructions and guides.
  * `agent`: the Assistant agent answering (docs/assistant-agents rule 4): its own instructions come after the project's,
  * under a line saying they win where the two disagree, and they are kept first when the block runs out of room.
+ * `documents`: the knowledge passages that matched the question (src/knowledge), after the guides and before the examples.
  */
-export interface GuidanceInput { instructions: string[]; guides?: { dataset: string; text: string; max: number }[]; examples?: string[]; agent?: { name: string; instructions: string[] } }
+export interface GuidanceInput { instructions: string[]; guides?: { dataset: string; text: string; max: number }[]; examples?: string[]; agent?: { name: string; instructions: string[] }; documents?: BlockPassage[] }
 /** The block as one ask uses it: its text, its digits for the number audit, and what it counted (kept on the turn later). */
 export interface Guided { text: string; ledger: LedgerEntry[]; used: TurnGuidance }
 
@@ -56,7 +58,7 @@ function instructionLines(raw: readonly string[], room: number): { lines: string
   return { lines, used, count: lines.filter((l) => l !== '- (more not shown)').length };
 }
 
-export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerEntry[]; instructions: number } {
+export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerEntry[]; instructions: number; documents: string[] } {
   // Both lists share the one limit. When both need more than it, each keeps at least half (the project's apply to every
   // agent, rule 4; the agent's are the ones that win); what one leaves, the other uses.
   const half = INSTRUCTIONS_BLOCK_MAX / 2;
@@ -73,12 +75,17 @@ export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerE
     const line = `Guide for "${oneLine(guide.dataset)}" (written by an editor): ${text}`;
     if (text && !FENCE_RE.test(line)) items.push(line);
   }
+  const docs = passageLines(g.documents ?? []);
+  if (docs.lines.length) items.push(DOCUMENTS_HEADER, ...docs.lines);
   const examples = (g.examples ?? []).filter((l) => !FENCE_RE.test(l));
   if (examples.length) items.push(EXAMPLES_LINE, ...examples);
-  if (!items.length) return { text: '', ledger: [], instructions: 0 };
+  if (!items.length) return { text: '', ledger: [], instructions: 0, documents: [] };
   const text = [GUIDANCE_FRAMING, '<<<GUIDANCE', ...items, 'GUIDANCE'].join('\n');
   // Like a column note's: a digit an editor wrote ("the last 90 days") is one the model may repeat.
+  // The passages are the exception (rule 6): their plain digits are sealed, their figures are not.
   const ledger: LedgerEntry[] = [];
-  sealLedger(ledger, text, 'guidance');
-  return { text, ledger, instructions };
+  const passages = new Set(docs.lines);
+  sealLedger(ledger, [GUIDANCE_FRAMING, ...items.filter((i) => !passages.has(i))].join('\n'), 'guidance');
+  sealLedger(ledger, docs.lines.map(withoutFigures).join('\n'), 'guidance');
+  return { text, ledger, instructions, documents: docs.docs };
 }

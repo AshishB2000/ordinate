@@ -412,6 +412,7 @@ export const MAIN_FILES = [
   'src/engine/liveSqlMessages.ts',
   'src/server/teamTableMessages.ts',
   'src/server/requestMessages.ts',
+  'src/knowledge/knowledgeMessages.ts',
   'src/server/slackMessages.ts',
 ];
 

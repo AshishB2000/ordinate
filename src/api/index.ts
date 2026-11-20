@@ -58,6 +58,7 @@ import { agents } from './agents';
 import { folders } from './folders';
 import { teamTables } from './teamTables';
 import { requests } from './requests';
+import { knowledge } from './knowledge';
 import { slack } from './slack';
 
 export const contracts = {
@@ -118,6 +119,7 @@ export const contracts = {
   ...folders,
   ...teamTables,
   ...requests,
+  ...knowledge,
   ...slack,
 } as const;
 

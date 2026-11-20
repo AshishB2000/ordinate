@@ -48,6 +48,7 @@ import { logger } from '../app/logger';
 import { isKeptStep } from '../data/filterList';
 import { termFactsFor } from './terms';
 import { askGuidance } from './guidance';
+import { withDocumentTitles } from '../knowledge/retrieve';
 import { askDatasets, askTableFacts } from './askTableFacts';
 import { askLinkedFacts } from './askLinks';
 import { relatedIds } from '../ai/answerJoin';
@@ -539,7 +540,7 @@ export function register() {
       const turns = withoutAnswer(await openTurns(projectId, stored ?? await copilot.loadHistory(projectId, tid)), passed?.id); // replayed: never an answer on a closed folder's dataset
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, asked, emit, q, sharing);
-      const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
+      const agent = scope.agent ? { id: scope.agent.id, name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
       // What the facts are about, the datasets linked to it (./askLinks; none for an agent, which answers from its topic
       // alone) and the Live ones' source table facts (./askTableFacts); none on a share path, whose words leave the app.
       const about = sharing ? [] : await askDatasets(projectId, asked, facts.provenance.kind, q);
@@ -576,7 +577,7 @@ export function register() {
           const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, outside: outside.outside, guidance: guided.used }, target);
           return {
             ok: true, answer: outside.text, provenance: facts.provenance, turns: await turnsForBrowser(projectId, stored || []), threadId: target || null, suggestedAction: NO_ACTION,
-            ledger, numberAudit: { ok: true, violations: [] }, guidance: guided.used, agent: await agentRef(projectId, kept),
+            ledger, numberAudit: { ok: true, violations: [] }, guidance: (await withDocumentTitles(projectId, [{ guidance: guided.used }]))[0].guidance, agent: await agentRef(projectId, kept),
           };
         }
 
@@ -647,7 +648,7 @@ export function register() {
           // in `answer`. Nothing new reaches a user in this PR.
           ledger: audited,
           numberAudit: guarded.audit,
-          guidance: guided.used,
+          guidance: (await withDocumentTitles(projectId, [{ guidance: guided.used }]))[0].guidance,
           agent: await agentRef(projectId, kept),
         };
       }

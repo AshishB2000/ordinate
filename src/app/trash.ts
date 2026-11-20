@@ -36,6 +36,7 @@ import { keyClash } from '../analysis/verifiedRules';
 import { verifiedRestoreTaken } from '../analysis/verifiedMessages';
 import { wholeProject } from '../server/authz/folders';
 import { forgetPlacements } from '../server/authz/folderWrites';
+import { forgetAgents } from '../knowledge/lifecycle';
 // Shared folders (D18): a delete or restore needs Edit on what the record follows — its live record, else its Trash
 // copy (a dataset or dashboard keeps its placement there). Closed to the caller: as missing; below Edit: refused.
 import { mayChangeRecord as mayChange, mayChangeStored } from './recordOpen';
@@ -219,6 +220,7 @@ export async function purge(projectId: string, type: RecordType, id: string): Pr
   await store.removeEntry(projectId, type, id);
   if (type !== 'alert') await versions.forget(projectId, type, id);
   await forgetPlacements(projectId, [{ kind: type, id }]); // a dataset's or dashboard's, gone for good
+  if (type === 'agent') await forgetAgents(projectId, [id]); // its knowledge documents (docs/knowledge-docs)
   changed(projectId);
   return true;
 }
@@ -230,6 +232,7 @@ export async function empty(projectId: string): Promise<number> {
     if (e.type !== 'alert') await versions.forget(projectId, e.type, e.id);
   }
   await forgetPlacements(projectId, all.map((e) => ({ kind: e.type, id: e.id })));
+  await forgetAgents(projectId, all.filter((e) => e.type === 'agent').map((e) => e.id));
   if (all.length) changed(projectId);
   return all.length;
 }
@@ -262,6 +265,7 @@ export async function purgeExpired(now = Date.now()): Promise<number> {
       here++;
     }
     await forgetPlacements(pid, gone);
+    await forgetAgents(pid, gone.filter((g) => g.kind === 'agent').map((g) => g.id));
     if (here) changed(pid);
     n += here;
   }
