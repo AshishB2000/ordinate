@@ -97,6 +97,18 @@ async function main(): Promise<void> {
   ok('a column only Orders has goes to Orders bare; one no table has stays on every question (each skips it as today)',
     show(onlyMany.questions[0].filters) === show([F('nope', '=', 1)]) && show(onlyMany.questions[1].filters) === show([F('ship_region', '=', 'East'), F('nope', '=', 1)])
     && show(onlyMany.notes) === show([{ kind: 'ownRows', measures: [1] }, { kind: 'narrows', column: 'ship_region', measures: [1] }]), show(onlyMany));
+  // A filter pinned to a table (a term's step, D11) means that table's column, though Customers has a `region` too.
+  const pinEnc: VizEncoding = { category: 'segment', values: [M('id', 'count'), M('amount', 'sum', O)] };
+  const pinG = { ...F('region', '=', 'West'), datasetId: G };
+  const toRegions = plan(pinEnc, [pinG]);
+  ok('a filter pinned to Regions: Customers keeps it pinned, Orders reaches Regions through Customers (R_CR), never Customers\' own region',
+    show(toRegions.questions[0].filters) === show([pinG]) && show(toRegions.questions[1].filters) === show([{ ...pinG, via: R_CR }]), show(toRegions));
+  const pinO = { ...F('region', '=', 'West'), datasetId: O };
+  const toOrders = plan(pinEnc, [pinO]);
+  ok('…a filter pinned to Orders narrows Orders alone, though Customers has the same column',
+    show(toOrders.questions[0].filters) === show([]) && show(toOrders.questions[1].filters) === show([pinO]) && show(toOrders.notes) === show([{ kind: 'ownRows', measures: [1] }, { kind: 'narrows', column: 'region', measures: [1] }]), show(toOrders));
+  ok('NEGATIVE CONTROL: the same filter unpinned is Customers\' region, reached by Orders through R_OC',
+    show(plan(pinEnc, [F('region', '=', 'West')]).questions[1].filters) === show([{ ...F('region', '=', 'West'), via: R_OC }]));
 
   ok('NEGATIVE CONTROL: a chart with only forward measures is not planned', fp.planFanOut(O, { category: 'zone', categoryDatasetId: G, values: [M('amount', 'sum')] }, [], RELS, infos) === null);
   ok('NEGATIVE CONTROL: a chart on Customers with no measure from another table is not planned', fp.planFanOut(C, { category: 'zone', categoryDatasetId: G, values: [M('id', 'count')] }, [], RELS, infos) === null);

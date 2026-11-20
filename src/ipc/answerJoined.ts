@@ -31,6 +31,7 @@ import type { AnswerSpec, SpecDataset } from '../ai/answerSpec';
 import { chartReads, projectModel } from './relationships';
 import { findPath } from '../analysis/joinPlan';
 import { vizDataFor } from './visuals';
+import { expandAnswerTerms } from '../analysis/termExpand';
 import type { Failure } from './answers';
 
 /** A related side as the card reads it: its record, and its columns as the caller sees them (a hidden one is no chip). */
@@ -138,11 +139,12 @@ export async function joinedLive(projectId: string, spec: AnswerSpec, filters: A
 
 /**
  * Every dataset a joined answer reads, its own first: the related ones and its join plan's tables (./relationships
- * chartReads), a related filter's path too. A related term's own table is in `relatedIds`.
+ * chartReads), a related filter's and a related term's path too (a term two links away reads the table between).
  */
 export async function answerReads(projectId: string, spec: AnswerSpec): Promise<string[]> {
   const pinned = specFilterSteps({ filters: spec.filters.filter((f) => !('term' in f) && filterOn(f)) }, [], []).steps;
-  return [...new Set([spec.datasetId, ...relatedIds(spec), ...(await chartReads(projectId, spec.datasetId, specEncoding(spec), pinned))])];
+  const terms = spec.filters.some((f) => 'term' in f && filterOn(f)) ? (await expandAnswerTerms(projectId, spec)).steps.filter((s) => s.datasetId) : [];
+  return [...new Set([spec.datasetId, ...relatedIds(spec), ...(await chartReads(projectId, spec.datasetId, specEncoding(spec), [...pinned, ...terms]))])];
 }
 
 /**

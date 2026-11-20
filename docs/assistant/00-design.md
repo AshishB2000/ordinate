@@ -519,7 +519,8 @@ was SQL (two calls, Not checked).
     a column its dataset marks personal or financial is withheld from the model, as an own one is.
   - *Every consumer* keys off `relatedIds` / `ownNames` / `relatedRefs`, which now cover them: `factsFrom` (so 0039's
     count), the verified index's `reads` and env, a dashboard request's anchors, an agent's topic, the snapshot's print
-    (`answerReads` passes the pinned steps to `chartReads`, so a table read only by a filter is in it), the previous
+    (`answerReads` passes the pinned steps to `chartReads`, a related term's expanded ones too, so a table read only by a
+    filter, or one between a term's table and the asked one, is in it), the previous
     answer (*sum(target) from "Customers"*, a filter's *from*), `describeAnswer`, `usesOf`; `sameChart` (`CHART_KEYS`
     gains `via`), refine (a related measure carried with its dataset; a patch restating a related filter replaces it),
     "Did you mean" on the related dataset (its option keeps the dataset), verified prompt examples (named by `dataset`,
@@ -551,8 +552,7 @@ door's sentence) and a related measure, filter or term in Alert me; a split thro
 no `seriesVia` either), and a model naming a labelled one for its category or measure (the block lists each dataset by its
 default path; a stored or explained spec keeps its `categoryVia` or measure `via`); a filter through a relationship (a
 spec's filter has no `via`); a bare linked name repaired to its dataset (rejection, not repair); a Live join beside a copy
-or across two connections (the door's sentence, above); a related term's intermediate hop tables in the snapshot's print
-(its own table is in it; a two-hop term path adds a table the print does not name). A caller whom
+or across two connections (the door's sentence, above). A caller whom
 row rules lock on the asked dataset is still shown its LINKED DATASETS (a linked dataset can be answered on its own),
 though the door refuses them a join (`related`); the block does not say so for them. On Live the door itself is no
 longer what leaves a related measure out: since 2026-11-17 (docs/live-data/log.md) a Live chart counts a related
