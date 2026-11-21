@@ -118,7 +118,5 @@ export async function embedAsk(question: string, history: unknown, signal?: Abor
   } catch (err) {
     // Typed refusals say nothing about data; anything else is not echoed.
     return isRowPolicyError(err) ? fail('no_data', embedAskNoData()) : fail('failed', embedAskFailed());
-  } finally {
-    void signal;
   }
 }
