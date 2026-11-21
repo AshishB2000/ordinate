@@ -64,8 +64,9 @@ writes a number (AGENTS.md core principle).
    metric and term names (so it cannot make a name ambiguous), and on approval a metric gets them as a closing sentence of
    its description ("Also called: margin, GM."), which the Assistant already reads. Terms keep real aliases.
 3. **A formula metric cannot be a chart measure** (`SpecMetric`: "Formula metrics cannot chart"). After approval the
-   Assistant reads the metric in its facts ("Defined metrics", with the engine's value) and answers in words with the
-   overall figure; it cannot chart "gross margin by region" from a formula metric. A column-and-aggregation metric charts.
+   Assistant is told the metric in its facts ("Metrics that match the question": its name and formula) and answers in words;
+   it cannot chart "gross margin by region" from a formula metric. A column-and-aggregation metric charts.
+   The e2e's last step shows exactly that: the question is no longer refused.
    The draft may be either kind; the card says which.
 4. **A name clash is checked for what the proposer can see.** `nameRefusal` looks at the whole project (`wholeProject`).
    For a proposer that would tell a viewer a name exists in a folder closed to them. At proposal the clash is checked

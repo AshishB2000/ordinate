@@ -49,7 +49,7 @@ const isFormat = (v: unknown): v is FormatKind => typeof v === 'string' && (FORM
 const isOp = (v: unknown): v is TermOp => typeof v === 'string' && (TERM_OPS as readonly string[]).includes(v);
 const isAgg = (v: unknown): v is (typeof AGGREGATIONS)[number] => typeof v === 'string' && (AGGREGATIONS as readonly string[]).includes(v);
 
-function filtersOf(raw: unknown): DraftFilter[] | null {
+function draftFilters(raw: unknown): DraftFilter[] | null {
   if (!Array.isArray(raw) || !raw.length || raw.length > MAX_FILTERS) return null;
   const out: DraftFilter[] = [];
   for (const f of raw) {
@@ -100,7 +100,7 @@ export function parseDraft(raw: string | null | undefined): Parsed {
   if (!p) return { ok: false, code: 'shape' };
   if ([p.name, p.description, ...p.aliases].some((s) => FIGURE_RE.test(s))) return { ok: false, code: 'figure_text' };
   if (o.kind === 'term') {
-    const filters = filtersOf(o.filters);
+    const filters = draftFilters(o.filters);
     return filters ? { ok: true, draft: { kind: 'term', ...p, filters } } : { ok: false, code: 'shape' };
   }
   const format = isFormat(o.format) ? { format: o.format } : {};
