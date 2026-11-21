@@ -166,8 +166,10 @@ Additive only.
   `src/ai/feedback.ts` (the turn key's sanitizer).
 - `src/server/evals/db.ts` (rows, lease, results), `suites.ts` (suites and cases), `feedback.ts`, `ask.ts` (one case's ask),
   `run.ts`, `worker.ts`, `sweep.ts`, `rpc.ts`, `version.ts`; `src/server/evalMessages.ts` (every server sentence, `t()`).
-- Web: `web/src/features/assistant/Thumbs.tsx`, `web/src/features/model/assistant/tests/*` (suites section, inbox, add-to-tests
-  dialog), `web/src/features/evals/ResultsPage.tsx`, `web/src/features/admin/JudgeModelCard.tsx`.
+- Web: `web/src/features/assistant/Thumbs.tsx` (the thumbs and the panel a thumbs-down opens first), `web/src/features/evals/*`
+  (`api.ts`, `TestsSection.tsx`, `SuiteCases.tsx`, `RunCard.tsx`, `Inbox.tsx`, `AddToTests.tsx`, `ResultsPage.tsx`), and
+  `web/src/features/admin/JudgeModelCard.tsx`. The Tests section is on Model → Assistant (the Project assistant's suites, and the
+  inbox) and on each agent's page (that agent's suites); "Add to tests" is on an answer and on a verified question.
 
 ## Contracts (`src/api/evals.ts`)
 

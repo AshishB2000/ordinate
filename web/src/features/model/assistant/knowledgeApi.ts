@@ -74,6 +74,7 @@ export function useSaveDoc(projectId: string, agentId?: string) {
       }
       if (!r.ok) return { ok: false, error: r.error || 'The document could not be saved.' };
       await client.invalidateQueries({ queryKey: ['knowledge:list', projectId] });
+      void client.invalidateQueries({ queryKey: ['eval:suites', projectId] }); // a changed document makes the last run's tests out of date
       return r;
     },
   });
@@ -90,6 +91,7 @@ export function useDeleteDoc(projectId: string) {
         return 'The document could not be removed.';
       }
       await client.invalidateQueries({ queryKey: ['knowledge:list', projectId] });
+      void client.invalidateQueries({ queryKey: ['eval:suites', projectId] }); // a changed document makes the last run's tests out of date
       return null;
     },
   });
@@ -108,6 +110,7 @@ export function useUploadDoc(projectId: string, agentId?: string) {
         return err instanceof RpcError ? err.message : 'This file could not be uploaded.';
       }
       await client.invalidateQueries({ queryKey: ['knowledge:list', projectId] });
+      void client.invalidateQueries({ queryKey: ['eval:suites', projectId] }); // a changed document makes the last run's tests out of date
       return null;
     },
   });

@@ -182,6 +182,23 @@ const WEST = [{ column: 'region', op: '=', value: 'West' }];
     ok('crash: another pod retakes it and asks only the two cases with no result', crashed?.state === 'done' && crashed.casesDone === 3 && stub.calls.ask === 2 && stub.seen.questions.join() === 'p2?,p3?', `${crashed?.state} ${stub.calls.ask} ${stub.seen.questions}`);
     ok('NEGATIVE CONTROL (the fence): a late result from the pod that died applies nothing', (await store.recordResult('acme', idCrash, 'pod-a/1/aaaa', mkResult(ids[1], 2))) === false && (await results(idCrash)).length === 3);
 
+    // ── A dataset that is gone, a provider that fails ───────────────────────────────────────────────────────────────────────
+    stub.reset();
+    const temp = await W.as('boss', async () => (await datasets.saveDataset(W.P, { name: 'Temp', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
+    const sg = await S.suite('ed', 'Gone data');
+    stub.asks['Temp by region?'] = { text: 'West leads.', action: BY_REGION('Temp') };
+    const cg = await fromAnswer(sg, 'Temp by region?');
+    await W.as('boss', () => datasets.deleteDataset(W.P, temp));
+    const rg = await results((await S.drive(await runOf('ed', sg)))!.id);
+    ok('NEGATIVE CONTROL: a case whose dataset was deleted FAILS (never an empty comparison that passes)', rg[0].caseId === cg && rg[0].outcome === 'fail' && rg[0].checks.some((k) => k.id === 'answered' && !k.ok), JSON.stringify(rg[0]));
+    stub.asks['Temp by region?'] = { text: 'x', fail: true };
+    const sf = await S.suite('ed', 'Provider fails');
+    await W.call('ed', 'eval:caseSave', { projectId: W.P, suiteId: sf, question: 'Temp by region?', refuse: true });
+    await W.call('ed', 'eval:caseSave', { projectId: W.P, suiteId: sf, question: 'Fine?', refuse: true });
+    const runF = await S.drive(await runOf('ed', sf));
+    const rf = await results(runF!.id);
+    ok('a model error on one case is an `error` result, counted as failed, and the run goes on to the next', runF?.state === 'done' && rf.length === 2 && rf[0].outcome === 'error' && rf[0].errorCode === 'failed' && runF.failed >= 1 && rf[1].outcome === 'fail', `${runF?.state} ${JSON.stringify(rf.map((r) => [r.outcome, r.errorCode]))}`);
+
     // ── An agent that is gone cannot be tested ───────────────────────────────────────────────────────────────────────────────
     const agent = await S.agent('Finance');
     const sa = await S.suite('ed', 'Finance tests', agent);
