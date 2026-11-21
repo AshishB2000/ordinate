@@ -61,12 +61,16 @@ and the app compares the computed answer itself.
   `expect = { compute?: AnswerSpec, refuse?: true, say?: string }`, at least one, `compute` and `refuse` exclusive, `say` ≤ 500 chars.
   **At most 100 cases per suite** (counted under the suite row's lock; a 101st is refused with a sentence).
 - Where cases come from:
-  - a **verified question** (one click; its spec is the answer; its question and phrasings stay as they are);
+  - a **verified question** (one click; its spec is the answer). A verified *SQL* question has no chart spec: `eval:caseFrom` refuses it with a sentence ("A SQL question cannot be a test yet");
   - **any answer you can see** ("Add to tests" on an answer card: the stored answer spec of the caller's own turn, with the question
     before it). Refused when the spec's dataset is in a folder closed to the caller;
   - the **thumbs-down inbox** (a typed-shape case: the question, plus what the editor says it should say or that it should refuse);
   - **typed**: a question and expected words, or "should refuse".
   A hand-typed *compute spec* has no UI in this version (see Open points).
+- **Folders.** A case's spec names datasets and filter values, so `eval:cases`, `eval:suites` (counts), `eval:runGet` and
+  `eval:caseFrom` hide a case whose spec dataset (or a related one) is closed to the caller (`levelsOf`, as
+  `verifiedQuestions.listBoth` does for verified questions), results included; the run's counts are then recounted from the cases
+  the caller may see. A run's `startedBy` reads cases through their own access the same way.
 - Access: every `eval:*` channel except the judge setting is `write` (editors and admins) on the project. An agent the caller may
   not use cannot own a suite they create. Suites are project-wide to its editors (like verified questions).
 - Contracts in `src/api/evals.ts`, appended to `src/api/index.ts`. The reads are classified in `scripts/rowPolicyReaders.ts`,
@@ -85,19 +89,24 @@ For each case, as the runner (`runInContext`, identity loaded fresh, `mayRun` re
 1. wait for the per-person model-call cap (`underBudget`, the one deep research uses: poll up to 60 s, then the run ends `partial`
    with code `limited`, resumable);
 2. create a **throwaway conversation** with the suite's agent, marked hidden (below), and call the registered `copilot:ask`
-   handler in it with `context.noSources` (as Slack and research do), under the Slack ask time limit joined to the lease;
+   handler in it with `context.noSources` (as Slack and research do), under the Slack ask time limit joined to the lease. Before every case `askScope(project, agent).agent?.id === agentId` is re-checked (the handler falls back to the Project assistant silently);
 3. read the stored turn, run the **checks**, call the judge when the case has words, store the result, **delete the conversation**
    (in a `finally`; the sweep deletes any left by a crash).
 
-**Hidden conversation.** `copilot.createThread(projectId, agentId, { hidden: true })` titles the thread with a reserved marker
-(`EVAL_THREAD_TITLE`); `copilotRows` leaves it out of `listThreads`, `listPage` and out of "the caller's latest" (`target()`),
-unless it is named by id. So it is never in History, and a question the runner asks in another tab never lands in it.
+**Hidden conversation.** 0045 adds a boolean `hidden` to `assistant_threads` (additive, as 0024 added `agent_id`): a reserved
+title would let a person's own first question collide with the marker and have their conversation hidden or swept. A hidden
+thread is left out of every reader that picks a conversation for a person: `target()` (the caller's latest, unless named by id),
+`listThreads`, `listPage`, and `slack/ask.ts` `directTarget`'s raw SQL. `loadThreads` (every member's, for the file move) and
+`pruneUnused` keep seeing it (retention may delete it). The sweep deletes hidden threads older than an hour. So it is never in
+History, and a question the runner asks in another tab never lands in it. The creation, the ask and the delete live in
+`src/server/evals/thread.ts` and `copilotHidden.ts`: `src/ai/copilot.ts` is at 787 of 800 lines and gets only the `feedback` key
+(its type and its line in `normalizeTurns`) and `export` on `changeThreads`, `mine` and `writeThreads`.
 
 **The checks** (pure, `src/ai/evalChecks.ts`; each is `{ id, ok, code? }`):
 
 | Check | When | Passes when |
 |---|---|---|
-| `answered` | compute or refuse | compute: the turn has a computed answer (chart spec or SQL). refuse: it has none (a refusal, a "needs", a prose reply) |
+| `answered` | compute or refuse | compute: the turn has a computed answer (chart spec or SQL). refuse: it has none **and the app refused** (the reply says a chart was refused, or the turn stores `needs`, `outside`, `suggest` or `link`); a prose-only reply is not a refusal (code `prose`) |
 | `question` | compute | the answer's spec is the expected spec's question: `sameChart` with chart type and title set equal (dataset, category, measures, split, filters, period, top, grain) |
 | `figure` | compute | `computeCard(expected)` and `computeCard(answer)` both computed now, and their chart data are equal by `Object.is` leaf by leaf |
 | `audit` | every case | the ask's number audit found no figure the engine did not compute |
@@ -109,9 +118,14 @@ A case passes only when every check that applies passes **and**, when it has wor
 returns `{"score":1..5,"why":"..."}`. The parser is strict; a missing, non-integer, out-of-range or unreadable reply is `not_scored`,
 **never a pass**. A case whose exact checks pass but whose judge is not scored is `not_scored` (neither pass nor fail). Outcomes:
 `pass | fail | not_scored | error`. The judge model is the org's `Judge model` setting (`org_eval_settings`, Admin → AI), else the
-agent's own model, else the runner's: its effective `provider/model` is recorded on the run, with a flag saying whether it was the
+agent's own model, else the runner's: its effective `provider/model` (what `memberView(prefer).mine` resolves to now, not the saved pick: `chooseModel` falls back when a pick is no longer enabled) is recorded on the run, with a flag saying whether it was the
 Assistant's own, and the results page says so. The judge call uses `analyze.dispatch` with `prose: true`, counts against the cap,
 and sees reply text only (never a ledger or a figure beyond what the reply says).
+
+**Live queries, shown before you start.** With both sides computed now, a compute case on a Live dataset is up to **3** warehouse
+queries (the ask's own answer, the expected spec, the answer's spec), not 1. `eval:suites` returns `liveQueries` (3 × the cases whose
+spec reads a Live dataset) and the run card shows it before Run, with the plan's "one query" corrected in Open points. A case with
+no spec (words, refusal) may still reach a Live dataset through the ask; that is not countable before the run.
 
 **Model calls counted:** a case's ask is 1 call, 2 when it wrote SQL, 0 when a verified question answered it with no model; plus 1
 for the judge. The run row holds the total (the "cost in model calls"). Live datasets: the ask and both `computeCard` calls go
@@ -141,7 +155,7 @@ time allowance, by the runner only. A retaken lease is handled as in research.
 
 ## Storage (migration 0045)
 
-`assistant_feedback`, `eval_suites`, `eval_cases`, `eval_runs`, `eval_results`, `org_eval_settings`; forced RLS through
+`assistant_feedback` (`turn_id` is text, as in `research_runs`; the contract's `turnId` is `z.string().min(1).max(100)`), `eval_suites`, `eval_cases`, `eval_runs`, `eval_results`, `org_eval_settings`; forced RLS through
 `current_setting('ordinate.org')`, plus `ordinate.evals_scope = 'system'` for the worker's claim and the sweeps (the shape of 0043).
 `eval_results` keeps `reply` and `why` (runner-only on read) and the dataset ids the answer used; no ledger, no card, no row.
 Additive only.
@@ -159,7 +173,7 @@ Additive only.
 
 `feedback:rate` (read), `feedback:inbox`, `feedback:dismiss`, `eval:suites`, `eval:suiteSave`, `eval:suiteDelete`, `eval:cases`,
 `eval:caseSave`, `eval:caseDelete`, `eval:caseFrom`, `eval:runStart`, `eval:runGet`, `eval:runStop`, `eval:runResume`, `eval:runList`
-(all `write`, scoped by project), `eval:judge` and `eval:setJudge` (admin, org). Every input a strict zod schema.
+(all `write`, scoped by project; the lists and `eval:runGet`, which the page polls, are `audit: 'denials'` so a poll writes no audit row), `eval:judge` and `eval:setJudge` (admin, org). Every input a strict zod schema.
 
 ## Tests (each guard has a negative control)
 
@@ -183,3 +197,12 @@ Additive only.
 2. **A verified question answers with no model**, word for word. A case made from one tests that path (the real ask), which is what
    people get; it costs no model call. Say so on the case ("Answered by a verified question").
 3. **The cap's window is per minute per pod** (`underBudget`), so a 100-case run is paced, not refused.
+4. **A prose-only reply is not a refusal.** "Should refuse" passes only when the app itself refused (a refused chart, `needs`,
+   `outside`, "Did you mean", a checked link). A model that answers in words with figures from the facts fails it (code `prose`).
+5. **Live queries per case are up to 3, not 1** (the ask, the expected spec, the answer's spec). The plan said "up to 100 warehouse
+   queries"; a 100-case suite on Live data is up to 300. The run card shows the number before Run.
+6. **A verified-question case passes by construction** while that question exists, and once `question` passes, `figure` can hardly
+   fail (same spec, same engine, same moment). Both checks are kept, as the plan says; they earn their place when an agent or its
+   documents steer the model to another spec, and as the guard that a refresh changes nothing about the comparison.
+7. **Nulling a thumbs-down question when its conversation is deleted is a proposal**, not in the plan: it keeps the plan's "the
+   inbox follows the conversation's life" and the counts for #8. Easy to drop (one UPDATE in the sweep).
