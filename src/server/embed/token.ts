@@ -82,7 +82,7 @@ export function readHeader(token: unknown): { org: string } | null {
 
 const own = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
 
-function lockValues(v: unknown): LockValue[] | null {
+export function lockValues(v: unknown): LockValue[] | null {
   const list = Array.isArray(v) ? v : [v];
   if (list.length < 1 || list.length > MAX_LOCK_VALUES) return null;
   const out: LockValue[] = [];
@@ -148,20 +148,25 @@ export function parseClaims(raw: unknown, now: number): EmbedClaims | TokenRefus
  * compared in constant time BEFORE the payload is decoded; `now` is seconds.
  */
 export function verifyToken(token: string, secret: string, now: number): Verified {
+  const m = verifyMac(token, secret);
+  if (!m.ok) return m;
+  const claims = parseClaims(m.raw, now);
+  return typeof claims === 'string' ? { ok: false, reason: claims } : { ok: true, claims };
+}
+
+/** The MAC half of every token kind: the payload JSON when the header's shape and the MAC (constant time) hold. */
+export function verifyMac(token: string, secret: string): { ok: true; raw: unknown } | { ok: false; reason: 'bad' | 'signature' | 'claims' } {
   if (!readHeader(token)) return { ok: false, reason: 'bad' };
   const [h, p, s] = token.split('.');
   const given = Buffer.from(s, 'base64url');
   const want = mac(secret, `${h}.${p}`);
   // Canonical encoding only, so one MAC has one spelling (the rate limit keys on it).
   if (given.length !== want.length || b64(given) !== s || !timingSafeEqual(given, want)) return { ok: false, reason: 'signature' };
-  let raw: unknown;
   try {
-    raw = JSON.parse(Buffer.from(p, 'base64url').toString('utf8'));
+    return { ok: true, raw: JSON.parse(Buffer.from(p, 'base64url').toString('utf8')) };
   } catch {
     return { ok: false, reason: 'claims' };
   }
-  const claims = parseClaims(raw, now);
-  return typeof claims === 'string' ? { ok: false, reason: claims } : { ok: true, claims };
 }
 
 /**

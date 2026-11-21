@@ -46,12 +46,12 @@ const SELF = "'self'";
 
 /** The request log's URL with an embed token masked — a token is a credential while it lives. */
 export function maskEmbedUrl(url: string): string {
-  return url.replace(/^(\/embed\/)[^/?#]+/, '$1[redacted]');
+  return url.replace(/^(\/embed\/(?:ask\/)?)[^/?#]+/, (m, p: string) => (m === '/embed/ask' ? m : p + '[redacted]'));
 }
 
 /** Any embed token inside a log message (Fastify's own "Route GET:/embed/… not found"). */
 export function maskEmbedTokens(s: string): string {
-  return s.replace(/\/embed\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '/embed/[redacted]');
+  return s.replace(/\/embed\/(ask\/)?[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, (_m, a?: string) => `/embed/${a ?? ''}[redacted]`);
 }
 
 export interface EmbedRouteOptions {

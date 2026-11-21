@@ -23,7 +23,7 @@
 // which swap in a snapshot's metadata), once per request per dataset.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { ctx } from '../server/context';
+import { ctx, type EmbedAsker } from '../server/context';
 import { callerOn } from '../server/authz/caller';
 import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
@@ -35,7 +35,8 @@ import { asOfIso } from './asOf';
 import { isTermStep } from './termStep';
 import type { FilterStep } from './transforms';
 import { makeLock, type Lock } from './rowLock';
-import { entitlement, policyFromRecord, ruleState, type RowPolicy } from './rowPolicy';
+import { entitlement, policyFromRecord, ruleState, writersHash, type RowPolicy } from './rowPolicy';
+import { sanitizeSteps } from './transforms';
 import { parentsOfRecord, upstreamIds } from './upstream';
 
 export { ROW_POLICY_CODE, RowPolicyError, isRowPolicyError, rowPolicyRaised, rowPolicyRefusal, tagRowPolicyRefusals } from './rowPolicyError';
@@ -236,6 +237,8 @@ function lockValuesOf(raw: Raw, policy: RowPolicy, userId: string | null, teamId
  * gate (ipc/columnDoors) first.
  */
 export async function rowLockFor(projectId: string, datasetId: string): Promise<Lock | null> {
+  const embed = ctx().embed;
+  if (embed) return embedLock(embed, projectId, datasetId); // never null: an embed asker is locked on every dataset
   if (!isValidId(projectId) || !isValidId(datasetId)) return null;
   const out = scopes.getStore()?.out;
   const caller = await callerOn(projectId);
@@ -251,11 +254,50 @@ export async function rowLockFor(projectId: string, datasetId: string): Promise<
   return lockValuesOf(eff.raw, eff.policy, caller.userId, caller.teamIds);
 }
 
+/**
+ * An embedded Assistant's lock on `datasetId` (docs/embedded-assistant): the token's values on the dataset's required
+ * column, or a THROWN RowPolicyError. FAIL CLOSED: a dataset the agent is not marked for, one with row rules of its own
+ * or built from one, a required column that is missing, not text or gone, a pipeline that stores a cross-row value or
+ * reads a parameter, as-of, an export and a fan-out all refuse. Never null.
+ */
+async function embedLock(embed: EmbedAsker, projectId: string, datasetId: string): Promise<Lock> {
+  const out = scopes.getStore()?.out;
+  if (out) {
+    if (isValidId(datasetId)) out.datasets.add(datasetId);
+    refuse(out.kind === 'fanout' ? 'fanout' : 'export');
+  }
+  if (!isValidId(projectId) || !isValidId(datasetId) || projectId.toLowerCase() !== embed.projectId.toLowerCase()) refuse('none');
+  const id = datasetId.toLowerCase();
+  const entry = Object.prototype.hasOwnProperty.call(embed.datasets, id) ? embed.datasets[id] : undefined;
+  if (!entry || entry.values.length === 0) refuse('none');
+  if (asOfIso()) refuse('asOf');
+  const eff = await effectiveOrRefuse(projectId, datasetId);
+  if (eff.kind !== 'none') refuse('derived'); // rules of its own, or built from a dataset that has them
+  const raw = await readRaw(projectId, datasetId);
+  if (!raw) refuse('unreadable');
+  const state = ruleState(raw, { column: entry.column, rules: [], stepsHash: writersHash(sanitizeSteps(raw.steps), entry.column) });
+  if (state === 'column') refuse('column');
+  if (state !== 'ok') refuse('pipeline');
+  let lock: Lock | null = null;
+  try {
+    lock = makeLock({ [entry.column]: entry.values });
+  } catch {
+    refuse('none'); // a parameter reference or an empty list: never a widened lock
+  }
+  if (!lock) refuse('none');
+  return lock;
+}
+
 /** Why the caller may not read `id`'s rows here, or null — the check only: nothing recorded, nothing thrown. `rowsOnly`: the row rules alone. */
 async function closedReason(projectId: string, id: string, rowsOnly = false): Promise<RowPolicyReason | null> {
-  if (!isValidId(projectId) || !isValidId(id)) return null;
   const scope = scopes.getStore();
   const out = scope?.out;
+  // An embed asker: EVERY dataset is closed outside the lock scope of exactly that dataset, rules or none (docs/embedded-assistant).
+  if (ctx().embed) {
+    if (out) return out.kind === 'fanout' ? 'fanout' : 'export';
+    return isValidId(id) && scope?.locked === id ? (rowsOnly ? null : columnReason(projectId, id, scope.checked, undefined)) : 'reader';
+  }
+  if (!isValidId(projectId) || !isValidId(id)) return null;
   const columns = (): Promise<RowPolicyReason | null> => (rowsOnly ? Promise.resolve(null) : columnReason(projectId, id, scope?.checked, out?.kind));
   if (scope?.locked === id && out?.kind !== 'fanout') return columns(); // its door gated the question
   const caller = await callerOn(projectId);

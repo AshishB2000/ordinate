@@ -28,6 +28,11 @@ export function useEmbedDb(pool: Pool | null, secrets: SecretStore | null): void
   store = secrets;
 }
 
+/** The pool the embed stores read through (null without a database). */
+export function embedPool(): Pool | null {
+  return db;
+}
+
 /** Can this server keep an embed secret (and so embed at all)? */
 export function canStore(): boolean {
   return db !== null && store !== null;

@@ -344,6 +344,7 @@ export function referencedKeys(srcs: string[]): Set<string> {
 
 /** Main-process files whose sentences go through the same catalog (src/app/i18n.ts). */
 export const MAIN_FILES = [
+  'src/server/embedAskMessages.ts',
   'src/analysis/captions.ts',
   'src/analysis/insights.ts',
   'src/analysis/alerts.ts',

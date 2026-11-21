@@ -98,6 +98,7 @@ export async function rankOn(projectId: string): Promise<number> {
 
 /** Every team the caller is in, whatever their rank (ids, lowercase). None without Postgres (the dev admin's only). */
 export async function callerTeamIds(): Promise<string[]> {
+  if (ctx().embed) return [];
   const pool = poolOf();
   if (!pool) return [];
   const who = ctx();
@@ -123,6 +124,8 @@ export async function orgTeams(ids?: readonly string[]): Promise<{ id: string; n
 /** The caller on `projectId`: unrestricted (org admin, project editor or admin), or restricted with their ids. */
 export function callerOn(projectId: string): Promise<Caller> {
   const who = ctx();
+  // An embed asker is always restricted, with no user id and no team: its lock is the token's (data/rowAccess.ts).
+  if (who.embed) return Promise.resolve({ restricted: true, userId: null, teamIds: [] });
   if (who.user.role === 'admin') return Promise.resolve(UNRESTRICTED); // org admins, the jobs' system identity, desktop
   const memo = perRequest(callers);
   const key = projectId.toLowerCase();
