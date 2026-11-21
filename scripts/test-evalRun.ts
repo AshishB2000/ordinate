@@ -15,9 +15,7 @@ import * as H from './rowPolicyHarness';
 const store: typeof import('../src/server/evals/db') = require('../src/server/evals/db');
 const worker: typeof import('../src/server/evals/worker') = require('../src/server/evals/worker');
 const runMod: typeof import('../src/server/evals/run') = require('../src/server/evals/run');
-const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-const verified: typeof import('../src/ipc/verified') = require('../src/ipc/verified');
 const slackDb: typeof import('../src/server/slack/db') = require('../src/server/slack/db');
 const budget = { clear: (): void => require('../src/server/slack/ask')._clearBudgetForTest() };
 
@@ -29,7 +27,7 @@ const WEST = [{ column: 'region', op: '=', value: 'West' }];
   if (!S) return;
   const { W, stub } = S;
   try {
-    const other = await W.as('boss', async () => (await datasets.saveDataset(W.P, { name: 'Other', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
+    await W.as('boss', async () => (await datasets.saveDataset(W.P, { name: 'Other', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
     const results = async (runId: string) => store.resultsOf('acme', runId);
     /** ed asks `question` (the model answers as scripted), and makes that answer a test in `suiteId`. */
     async function fromAnswer(suiteId: string, question: string, say?: string): Promise<string> {
@@ -118,7 +116,7 @@ const WEST = [{ column: 'region', op: '=', value: 'West' }];
     stub.reset();
     const sj = await S.suite('ed', 'Words');
     stub.asks['Why is revenue net?'] = { text: 'Revenue is net of refunds.' };
-    const w1 = (await W.call('ed', 'eval:caseSave', { projectId: W.P, suiteId: sj, question: 'Why is revenue net?', say: 'says revenue is net of refunds' })).body.id as string;
+    await W.call('ed', 'eval:caseSave', { projectId: W.P, suiteId: sj, question: 'Why is revenue net?', say: 'says revenue is net of refunds' });
     const wRun = async (...replies: string[]) => { stub.calls.judge = 0; stub.judge = replies; return (await results(await S.drive(await runOf('ed', sj)).then((r) => r!.id)))[0]; };
     const j5 = await wRun('{"score":5,"why":"says it"}');
     ok('judge: a 5 passes; the model call count is the ask and the judge', j5.outcome === 'pass' && j5.score === 5 && j5.judged === 'scored' && j5.calls === 2 && stub.calls.judge === 1, JSON.stringify(j5));

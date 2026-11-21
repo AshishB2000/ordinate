@@ -64,7 +64,7 @@ export interface Answered {
   auditOk: boolean;
 }
 /** The chart data of one side, computed now; null when it could not be computed. */
-export interface Sides { expected: unknown | null; answer: unknown | null }
+export interface Sides { expected: unknown; answer: unknown } // null: that side could not be computed
 
 /** Every exact check that applies to the case, in a fixed order. `sides`: needed (and read) only for a compute case whose two specs agree on a chart. */
 export function exactChecks(expect: Expect, got: Answered, sides: Sides | null): Check[] {

@@ -22,6 +22,7 @@ import { useEditGuard } from '../../editConflicts/useEditGuard';
 import { useShareTargets } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { useNavigation } from '../navigation';
+import { TestsSection } from '../../evals/TestsSection';
 import { InstructionsEditor } from './InstructionsList';
 import { KnowledgeSection } from './KnowledgeSection';
 import { SlackChannels } from './SlackChannels';
@@ -333,6 +334,8 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
       )}
 
       {row && <KnowledgeSection projectId={projectId} agentId={row.id} canEdit={canInstruct} instructionsId="agent-instructions-h" />}
+
+      {row && canInstruct && <TestsSection projectId={projectId} agentId={row.id} />}
 
       {asking && row && (
         <ConfirmDelete

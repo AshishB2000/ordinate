@@ -1,0 +1,88 @@
+/* The thumbs under an answer and the panel a thumbs-down opens first. Tokens only; both themes follow them. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--muted);
+}
+.on {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.onDown {
+  color: var(--error-text, var(--error));
+  background: var(--error-soft, var(--surface-2));
+}
+.said {
+  margin-left: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  max-width: 28rem;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.chip {
+  padding: var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.chip:hover {
+  background: var(--surface-1);
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.chipOn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text);
+}
+.notice > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  gap: var(--sp-8);
+}
+.problem {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--error-text, var(--error));
+}

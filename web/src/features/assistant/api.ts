@@ -87,6 +87,8 @@ export interface Turn {
   link?: AnswerLink;
   /** A deep-research run's turn: the run id (src/ai/researchTurn.ts). Its text is a fixed sentence; the run card reads the rest from `research:get`. */
   research?: { runId: string };
+  /** The asker's thumbs up or down on this answer (src/ai/feedback.ts): a value and a reason code, never words of the answer. */
+  feedback?: { value: 'up' | 'down'; reason?: string };
 }
 
 /** A link the server checked between two datasets (src/ai/answerNeeds.ts `AnswerLink`): every check is the engine's. */

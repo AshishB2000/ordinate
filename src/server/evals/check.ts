@@ -7,7 +7,7 @@ import type { AnswerSpec } from '../../ai/answerSpec';
 import { computeCard } from '../../ipc/answers';
 import type { Sides } from '../../ai/evalChecks';
 
-async function dataOf(projectId: string, spec: AnswerSpec): Promise<unknown | null> {
+async function dataOf(projectId: string, spec: AnswerSpec): Promise<unknown> {
   try {
     const built = await computeCard(projectId, spec);
     return 'card' in built ? built.card.data : null;

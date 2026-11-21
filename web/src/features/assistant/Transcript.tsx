@@ -17,6 +17,8 @@ import type { ActivityStep, Provenance, Turn } from './api';
 import { DidYouMean, type Learn } from './DidYouMean';
 import { LinkCard } from './LinkCard';
 import { ResearchCard } from './research/ResearchCard';
+import { Thumbs } from './Thumbs';
+import { AddToTestsButton } from '../evals/AddToTests';
 import type { ChartAnswer } from './RequestDashboard';
 import s from './Dock.module.css';
 
@@ -155,6 +157,12 @@ export function Transcript({
             <LinkCard projectId={projectId} link={t.link} question={turns[i - 1]?.role === 'user' ? turns[i - 1].text : ''} onAsk={onAsk} busy={!!pending} />
           )}
           {t.role === 'assistant' && t.provenance && <div className={s.provenance}>{provenanceLine(t.provenance)}</div>}
+          {t.role === 'assistant' && !t.research && !t.outside && threadId && (
+            <div className={s.rate}>
+              <Thumbs projectId={projectId} threadId={threadId} turn={t} />
+              {t.answer && <AddToTestsButton projectId={projectId} source={{ kind: 'turn', threadId, turnId: t.id }} />}
+            </div>
+          )}
           {aside && t.role === 'assistant' && aside(t, turns[i - 1])}
         </div>
       ))}
