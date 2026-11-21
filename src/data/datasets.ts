@@ -20,6 +20,7 @@ import * as jobs from '../app/jobs';
 import { saltForSteps } from '../app/privacyStore';
 import * as transforms from './transforms';
 import { resolveColumnEdit } from './columnEdit';
+import { logRenames } from '../server/autopilot/renames';
 import { runResidentPipeline } from '../engine/pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
 import { applyPipelineAsync } from './regexOffThread';
@@ -678,7 +679,7 @@ export async function updateDataset(
   // column's rename becomes a rename_column step; its retype is refused.
   const base: TableData = existing.source ?? { columns: existing.columns, rows: existing.rows };
   const width = base.columns.length;
-  const { columns: newColumns, addSteps } = resolveColumnEdit(existing.columns, base.columns, incoming, existing.source !== undefined ? existing.steps ?? [] : null);
+  const { columns: newColumns, addSteps, renames } = resolveColumnEdit(existing.columns, base.columns, incoming, existing.source !== undefined ? existing.steps ?? [] : null);
   const steps = addSteps.length ? transforms.sanitizeSteps([...(existing.steps ?? []), ...addSteps]) : existing.steps;
 
   // Re-coerce only the columns whose type actually changed (cheap; a pure rename
@@ -710,7 +711,7 @@ export async function updateDataset(
     updated = { ...existing, columns: newColumns, rows: baseRows, rowCount: baseRows.length, updatedAt: now };
   }
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
-  await persist(projectId, updated);
+  await persist(projectId, updated); logRenames(projectId, id, renames); // after it landed: a logged rename that did not would repair wrongly
   return updated;
 }
 

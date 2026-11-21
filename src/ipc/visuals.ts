@@ -63,6 +63,7 @@ import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
 import { withFigures } from '../analysis/chartShapes';
 import { withValueLabels } from './valueLabelReplies';
 import { onSourceTable } from './sourceAnswers';
+import * as usage from '../server/autopilot/usage';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -554,7 +555,7 @@ export async function saveNewVisual(projectId: string, input: Parameters<typeof 
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
-  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualReplyForCaller(projectId, recordReply(await visuals.readVisual(projectId, id))));
+  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => usage.opened('visual', projectId, id, await visualReplyForCaller(projectId, recordReply(await visuals.readVisual(projectId, id)))));
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {
@@ -608,7 +609,7 @@ export function register() {
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
   // A dataset the caller only reaches answers in its figure scope (docs/team-folders D9): its periods, compare and overlays too.
-  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency, ...drawnAs }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, () => inReach(projectId, datasetId, async () => {
+  const vizDataRaw = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency, ...drawnAs }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, () => inReach(projectId, datasetId, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -647,6 +648,7 @@ export function register() {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
   })));
+  const vizData = usage.timedViz(vizDataRaw); // Autopilot: a named saved visual is an open and a timed compute, recorded off the request path
   // `table`: a source table's question (Explore, phase D), asked inside its Live view (./sourceAnswers onSourceTable).
   ipcMain.handle('visual:data', (_e, { table, ...args }: any = {}) => onSourceTable(args.projectId, args.datasetId, table, () => vizData(args)));
   // Server: several charts of ONE project in one round trip (a page of tiles —

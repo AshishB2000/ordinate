@@ -103,6 +103,15 @@ const names = (cols: { name: string }[]) => cols.map((c) => c.name).join(',');
   ok('a source column no step reads is renamed in the source itself', names(free.source!.columns) === 'id,secret,region,total'.replace('id,', 'order_id,') && free.steps!.length === afterRpc.steps!.length);
   const refusedRpc = (await h(null, { projectId: proj.id, datasetId: ds.id, columns: cur.map((c) => (c.name === 'label' ? { ...c, type: 'date' } : c)) })) as Record<string, any>; // any: the handler's reply
   ok('dataset:update answers a refused retype with ok:false and the reason', refusedRpc.ok === false && /made by a prepare step/.test(refusedRpc.error), JSON.stringify(refusedRpc));
+  // Autopilot's rename log: every rename comes back with both names and its kind.
+  const cc = (...n: string[]) => n.map((name) => ({ name, type: 'text' as const }));
+  const rPlain = edit.resolveColumnEdit(cc('a', 'b'), cc('a', 'b'), cc('a', 'z'), null);
+  ok('renames: a plain rename is kind "source" with both names', JSON.stringify(rPlain.renames) === JSON.stringify([{ from: 'b', to: 'z', kind: 'source' }]), JSON.stringify(rPlain.renames));
+  const rStepped = edit.resolveColumnEdit(cc('a', 'b'), cc('a', 'b'), cc('q', 'b'), [{ type: 'filter', column: 'a' }]);
+  ok('renames: a rename a step reads is kind "step", beside the appended step', JSON.stringify(rStepped.renames) === JSON.stringify([{ from: 'a', to: 'q', kind: 'step' }]) && rStepped.addSteps.length === 1, JSON.stringify(rStepped.renames));
+  const rMade = edit.resolveColumnEdit(cc('a', 'm'), cc('a'), cc('a', 'n'), []);
+  ok('renames: a step-made column\'s rename is kind "step"', JSON.stringify(rMade.renames) === JSON.stringify([{ from: 'm', to: 'n', kind: 'step' }]), JSON.stringify(rMade.renames));
+  ok('renames (negative control): an unchanged patch renames nothing', edit.resolveColumnEdit(cc('a', 'b'), cc('a', 'b'), cc('a', 'b'), null).renames.length === 0);
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
   .finally(() => {

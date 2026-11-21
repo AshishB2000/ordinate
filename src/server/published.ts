@@ -32,6 +32,7 @@ import type { Pool } from 'pg';
 import { runAsPublished, type Identify, type Identity } from './context';
 import { getPage, getSite, PAGE_RE, servable, type HostedSite } from '../publish/hosted';
 import { isValidId } from '../app/ids';
+import { noteSiteOpen } from './autopilot/usage';
 
 /** The policy a page pinned in its <meta>, or null. */
 export function pageCsp(html: string): string | null {
@@ -56,7 +57,7 @@ export async function orgAllowsLinks(pool: Pool | null, org: string): Promise<bo
 const anonymous = (org: string): Identity => ({ user: { email: 'anonymous', role: 'viewer' }, org: { id: org } });
 
 /** The site and page as `who` (or, when null, the public) may see them. */
-async function find(pool: Pool | null, who: Identity | null, id: string, file: string, reqId: string): Promise<{ html: string; site: HostedSite } | null> {
+async function find(pool: Pool | null, who: Identity | null, id: string, file: string, reqId: string): Promise<{ html: string; site: HostedSite; org: string } | null> {
   // As a published page's request: the Live cache floor (header) holds below it.
   const read = (as: Identity, allow: (s: HostedSite) => boolean | Promise<boolean>) =>
     runAsPublished(as, reqId, async () => {
@@ -66,7 +67,7 @@ async function find(pool: Pool | null, who: Identity | null, id: string, file: s
       if (!(await projects.getProject(site.projectId))) return null;
       if (!(await servable(site))) return null; // a snapshot built over rows that now have access rules (row-policy D10)
       const html = await getPage(id, file);
-      return html === null ? null : { html, site };
+      return html === null ? null : { html, site, org: as.org.id };
     });
   if (who) {
     const own = await read(who, () => true);
@@ -99,6 +100,7 @@ export function registerPublishedRoutes(app: FastifyInstance, identify: Identify
     const { html } = found;
     const csp = pageCsp(html);
     if (!csp) return reply.code(500).type('text/html').send(NOT_FOUND); // not a page we built
+    noteSiteOpen(found.site, file, found.org);
     return reply.header('content-security-policy', `${csp}; frame-ancestors 'none'`).type('text/html; charset=utf-8').send(html);
   };
   // The bare link gets a trailing slash, so the site's relative links (index → page → index) resolve under it.

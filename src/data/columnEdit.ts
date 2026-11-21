@@ -31,7 +31,7 @@ export function resolveColumnEdit(
   incoming: readonly unknown[],
   /** The pipeline, or null when there is none (then shown === base, by position). */
   steps: readonly unknown[] | null,
-): { columns: ParsedColumn[]; addSteps: TransformStep[] } {
+): { columns: ParsedColumn[]; addSteps: TransformStep[]; renames: Array<{ from: string; to: string; kind: 'source' | 'step' }> } {
   const stepped = steps !== null;
   // Does any step mention the name — a field value or inside a formula ([col] or a bare col)?
   // ponytail: a whole-word match over the steps' JSON; a false hit only costs a rename step instead of a source rename.
@@ -40,6 +40,7 @@ export function resolveColumnEdit(
     new RegExp(`(^|[^A-Za-z0-9_])${col.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_])`).test(text);
   const columns = base.map((c) => ({ ...c }));
   const addSteps: TransformStep[] = [];
+  const renames: Array<{ from: string; to: string; kind: 'source' | 'step' }> = []; // every rename, for the log (Autopilot)
   shown.forEach((cur, i) => {
     const next = incoming[i] as Partial<ParsedColumn> | undefined;
     if (!next || typeof next !== 'object') return;
@@ -52,12 +53,14 @@ export function resolveColumnEdit(
       const keepName = stepped && name !== cur.name && named(cur.name);
       columns[at] = { ...columns[at], name: keepName ? cur.name : name, type }; // keeps an input table's required/lookup
       if (keepName) addSteps.push({ type: 'rename_column', from: cur.name, to: name } as TransformStep);
+      if (name !== cur.name) renames.push({ from: cur.name, to: name, kind: keepName ? 'step' : 'source' });
       return;
     }
     if (type !== cur.type) {
       throw new ColumnEditError(`"${cur.name}" is made by a prepare step, so its type comes from that step. Change the step instead.`);
     }
     addSteps.push({ type: 'rename_column', from: cur.name, to: name } as TransformStep);
+    renames.push({ from: cur.name, to: name, kind: 'step' });
   });
-  return { columns, addSteps };
+  return { columns, addSteps, renames };
 }
