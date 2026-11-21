@@ -64,6 +64,13 @@ function Row({ v, current, selected, type, onPick }: { v: VersionMeta; current: 
           {v.by && <span className={s.by}>{v.by}</span>}
         </span>
         <span className={s.summary}>{v.summary}</span>
+        {v.proposal && (
+          <span className={s.restored}>
+            <Icon name="sparkles" size={12} />
+            Proposed by the Assistant from {v.proposal.asks === 1 ? '1 question' : `${v.proposal.asks} questions`}
+            {v.by ? `, approved by ${v.by}` : ''}
+          </span>
+        )}
         {v.restoredFrom && (
           <span className={s.restored}>
             <Icon name="rotate-ccw" size={12} />

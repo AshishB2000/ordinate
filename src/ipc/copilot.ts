@@ -629,6 +629,8 @@ export function register() {
           suggest: answer && !answer.ok && 'suggest' in answer ? answer.suggest : undefined,
           // What an editor must add first (outcome E's checked link, a table to copy): kept so a reload still offers it.
           ...(answer && !answer.ok && 'needs' in answer ? { needs: answer.needs, link: answer.link } : {}),
+          // A name nobody defined (docs/metric-proposals): the turn offers "Propose a definition".
+          ...(answer && !answer.ok && 'define' in answer && answer.define ? { define: true as const } : {}),
           guidance: guided.used,
           factsFrom,
           dashboardsFrom: asked.kind === 'analysis' && facts.provenance.kind === 'analysis' && asked.id ? [asked.id] : undefined, // the dashboard page it was read off (./turnsOpen)

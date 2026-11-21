@@ -87,12 +87,12 @@ export async function termFactsFor(projectId: string, datasetId: string, questio
 }
 
 /** `term:save`'s body, the reply (a model import writes a new term through it too: src/app/modelApply.ts). */
-export async function saveTermChecked(projectId: string, input: terms.TermInput) { // the reply as it always was
+export async function saveTermChecked(projectId: string, input: terms.TermInput, recordOpts: versions.RecordOpts = {}) { // the reply as it always was
   const problem = await terms.termProblem(projectId, input);
   if (problem) return { ok: false, ...problem };
   const t = await terms.saveTerm(projectId, input);
   if (!t) return { ok: false, error: msg.termNotSaved(), field: 'datasetId' };
-  await versions.record(projectId, 'term', t);
+  await versions.record(projectId, 'term', t, recordOpts);
   return { ok: true, term: t };
 }
 

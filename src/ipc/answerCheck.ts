@@ -104,9 +104,11 @@ export async function checkAction(
     // candidates are what step 3 finds for the name said (`nearDatasets`), with the vocabulary's.
     if (v.miss?.part === 'dataset') ({ datasets: all, metrics: defined, terms } = await withViews({ ...want, datasetIds: [...want.datasetIds, ...await nearDatasets(projectId, v.miss.said, only)] }));
     const options = v.miss ? suggestFixes(raw, v.miss, all, defined, { ...opts, terms }).filter((o) => !base || !sameChart(base, o.spec)) : [];
+    // A measure or filter name nobody defined (never a related dataset's, a dataset's or a category's): a metric or term may be missing.
+    const define = !related && (v.miss?.part === 'measure' || v.miss?.part === 'filter') ? { define: true as const } : {};
     return v.miss && options.length
-      ? { ok: false, reason: v.reason, suggest: { part: v.miss.part, said: v.miss.said, options } }
-      : { ok: false, reason: v.reason };
+      ? { ok: false, reason: v.reason, suggest: { part: v.miss.part, said: v.miss.said, options }, ...define }
+      : { ok: false, reason: v.reason, ...define };
   }
   if (base && sameChart(base, v.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
   return { ok: true, spec: withTable(v.spec, tables), base };

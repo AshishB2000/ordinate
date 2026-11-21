@@ -221,6 +221,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'slack:myLink': 'META', // the caller's own Slack link: ids and a workspace name
   'slack:openQuestion': 'META', // where a Slack question lives (ids) and, for another member, the question's own words
   'slack:unlink': 'META', // removes the caller's own link; returns a count
+  'proposal:propose': 'META', // the caller's own refused question's words to the model, with the names and types of columns they may use (a hidden one is left out); returns an id, never a cell, label or figure
   'research:card': 'GATE', // answer:card's handler, the SQL gate (hidden columns refused before any SQL is written) or driversVizData: each hides what the caller's column rules hide
   'research:get': 'META', // the starter's own run: the words written under the column rules in force when it ran (a hidden column's values never entered: the doors refused them); a later hiding is not re-checked here, a step's chart is (research:card); never a step's facts
   'research:list': 'META', // the caller's own runs: ids, state, the question they typed

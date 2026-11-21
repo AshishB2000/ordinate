@@ -712,4 +712,6 @@ export function registerHandlers(): void {
   (require('./slack/rpc') as typeof import('./slack/rpc')).register();
   // Deep research (docs/deep-research): start, watch, stop, resume and add a run to the project; the org's limits.
   (require('./research/rpc') as typeof import('./research/rpc')).register();
+  // Metric proposals (docs/metric-proposals): a refused answer's missing metric or term, drafted, reviewed by an editor.
+  (require('./proposals/rpc') as typeof import('./proposals/rpc')).register();
 }
