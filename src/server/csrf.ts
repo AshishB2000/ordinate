@@ -111,13 +111,15 @@ export function registerCsrf(app: FastifyInstance, o: CsrfOptions): void {
     const bearerOnly = BEARER_ONLY.has(req.routeOptions.url ?? '');
     // Issue one to whatever page or API call arrives without it. Not to
     // static files: an immutable asset must not carry a Set-Cookie into a cache.
-    if (!token && !bearer && !bearerOnly && (path.startsWith('/api/') || (req.headers.accept ?? '').includes('text/html'))) {
+    if (!token && !bearer && !bearerOnly && req.routeOptions.url !== '/embed/ask' && (path.startsWith('/api/') || (req.headers.accept ?? '').includes('text/html'))) {
       reply.header(
         'set-cookie',
         fastifyCookie.serialize(o.cookie, newCsrfToken(), { path: '/', sameSite: 'lax', secure: o.secure, httpOnly: false }),
       );
     }
-    if (SAFE.has(req.method) || bearer || bearerOnly) return done();
+    // The embedded Assistant's ask (src/server/embed/askRoute.ts): its signed token in the body is the credential; no cookie is read or
+    // set (a third-party iframe has none), so there is no session for a forged request to ride.
+    if (SAFE.has(req.method) || bearer || bearerOnly || req.routeOptions.url === '/embed/ask') return done();
 
     const origin = req.headers.origin;
     const crossSite = origin !== undefined ? !sameOrigin(origin, req.headers.host) : req.headers['sec-fetch-site'] === 'cross-site';

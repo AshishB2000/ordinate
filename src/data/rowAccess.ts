@@ -238,7 +238,7 @@ function lockValuesOf(raw: Raw, policy: RowPolicy, userId: string | null, teamId
  */
 export async function rowLockFor(projectId: string, datasetId: string): Promise<Lock | null> {
   const embed = ctx().embed;
-  if (embed) return embedLock(embed, projectId, datasetId); // never null: an embed asker is locked on every dataset
+  if (embed && embedGate.lock) return embedLock(embed, projectId, datasetId); // never null: an embed asker is locked on every dataset
   if (!isValidId(projectId) || !isValidId(datasetId)) return null;
   const out = scopes.getStore()?.out;
   const caller = await callerOn(projectId);
@@ -252,6 +252,12 @@ export async function rowLockFor(projectId: string, datasetId: string): Promise<
   if (asOfIso()) refuse('asOf');
   if (eff.kind === 'derived') refuse('derived');
   return lockValuesOf(eff.raw, eff.policy, caller.userId, caller.teamIds);
+}
+
+// Test seam (scripts/test-embedLeakNet): the embed branches of the two choke points, each switched off for its NEGATIVE CONTROL.
+const embedGate = { lock: true, net: true };
+export function setEmbedGateForTest(g: Partial<typeof embedGate>): void {
+  Object.assign(embedGate, { lock: true, net: true }, g);
 }
 
 /**
@@ -293,7 +299,7 @@ async function closedReason(projectId: string, id: string, rowsOnly = false): Pr
   const scope = scopes.getStore();
   const out = scope?.out;
   // An embed asker: EVERY dataset is closed outside the lock scope of exactly that dataset, rules or none (docs/embedded-assistant).
-  if (ctx().embed) {
+  if (ctx().embed && embedGate.net) {
     if (out) return out.kind === 'fanout' ? 'fanout' : 'export';
     return isValidId(id) && scope?.locked === id ? (rowsOnly ? null : columnReason(projectId, id, scope.checked, undefined)) : 'reader';
   }

@@ -1,0 +1,159 @@
+// POST /embed/ask end to end on Postgres (docs/embedded-assistant/00-design.md): the real secrets store, real HTTP, the model
+// scripted. Every refusal is ONE bare answer (no probe tells an unknown org, a bad MAC, an expired token, a dashboard token and an
+// unmarked agent apart), framable nowhere, no cookie; a valid token is answered from the customer's rows only; one audit row per
+// question after the MAC held (customer id, agent, outcome; never the question); the token, the secret and the customer id are in
+// no log line.
+//
+//   npm run build:ts && DATABASE_URL=… node scripts/test-embedAskRoute.js
+
+export {}; // module scope — sibling test scripts share top-level names
+import { ok, finish } from './selfcheck';
+import { createHmac, randomBytes } from 'crypto';
+import { Writable } from 'stream';
+import { Client, Pool } from 'pg';
+import * as B from './subscriptionHarness';
+
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const path: typeof import('path') = require('path');
+const appMod: typeof import('../src/server/app') = require('../src/server/app');
+const envMod: typeof import('../src/server/env') = require('../src/server/env');
+const analyze: any = require('../src/ai/analyze'); // any: the stub replaces its exports
+const execConfig: any = require('../src/app/execConfig'); // any: the stub replaces its exports
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const agents: typeof import('../src/ai/agents') = require('../src/ai/agents');
+const assistants: typeof import('../src/server/embed/assistants') = require('../src/server/embed/assistants');
+
+const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-embed-ask-'));
+const PORTAL = 'https://portal.acme.test';
+const b64 = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
+const now = (): number => Math.floor(Date.now() / 1000);
+function hostSign(secret: string, payload: Record<string, unknown>, header: Record<string, unknown> = { alg: 'HS256', typ: 'JWT', kid: 'acme' }): string {
+  const input = `${b64(header)}.${b64(payload)}`;
+  return `${input}.${createHmac('sha256', secret).update(input).digest('base64url')}`;
+}
+
+async function suite(adminUrl: string): Promise<void> {
+  const dbName = `ordinate_embedask_${process.pid}_${Date.now()}`;
+  const scratch = new URL(adminUrl);
+  scratch.pathname = '/' + dbName;
+  const root = new Client({ connectionString: adminUrl });
+  await root.connect();
+  await root.query(`CREATE DATABASE ${dbName}`);
+  const pool = new Pool({ connectionString: scratch.toString(), max: 3 });
+  pool.on('error', () => undefined);
+  const logLines: string[] = [];
+  const logStream = new Writable({ write(chunk, _enc, done) { logLines.push(String(chunk)); done(); } });
+  const cfg = envMod.parseEnv({
+    LOG_LEVEL: 'info', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', ORDINATE_MASTER_KEY: randomBytes(32).toString('base64'),
+    TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test',
+  });
+  const app = appMod.buildApp(cfg, logStream);
+  const real = { ask: analyze.askCopilot, on: execConfig.assistantOn };
+  const asked: string[] = [];
+  analyze.askCopilot = async (_p: unknown, facts: string, q: string) => {
+    asked.push(facts + q);
+    return { ok: true, text: 'Here it is.', suggestedAction: { kind: 'answer', intent: 'by city', spec: { datasetId: DS, category: 'city', measures: [{ column: 'qty', aggregation: 'sum' }], filters: [] } } };
+  };
+  execConfig.assistantOn = () => true;
+  let DS = '';
+  try {
+    const base = await B.listen(app);
+    const boss = B.client(base, { 'x-forwarded-email': 'boss@acme.test' }, []);
+    const pid: string = (await boss.call('projects:create', { name: 'Portal' })).body.id;
+    const BOSS: B.Identity = { user: { email: 'boss@acme.test', role: 'admin' }, org: { id: 'acme' } };
+    const inBoss = <T>(fn: () => Promise<T>) => B.context.runInContext(BOSS, 'setup', fn);
+    const rows = [...Array.from({ length: 6 }, (_, i) => ['CV_ONE', `MINE_${i % 2}`, 1 + i]), ...Array.from({ length: 9 }, (_, i) => ['CV_TWO', `OTHERS_${i % 3}`, 100 + i])];
+    DS = (await inBoss(() => datasets.saveDataset(pid, { name: 'Shipments', sourceKind: 'csv', columns: [{ name: 'customer_id', type: 'text' }, { name: 'city', type: 'text' }, { name: 'qty', type: 'number' }], rows })))!.id;
+    const agent = await inBoss(async () => (await agents.saveAgent(pid, { name: 'Helper', teamIds: [] }))!);
+    const SECRET: string = (await boss.call('embed:rotate')).body.secret;
+    ok('setup: a secret exists', /^ord_embed_/.test(SECRET));
+    const post = async (token: unknown, extra: Record<string, unknown> = { question: 'How many?' }) => {
+      const r = await fetch(`${base}/embed/ask`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, ...extra }) });
+      const text = await r.text();
+      return { status: r.status, text, json: (() => { try { return JSON.parse(text); } catch { return null; } })(), r };
+    };
+    const claims = (over: Record<string, unknown> = {}) => ({ agent: agent.id, sub: 'cust-secret-id-9', exp: now() + 600, params: { customer_id: 'CV_ONE' }, ...over });
+    const rowsOfAudit = async () => (await pool.query<{ customer: string; outcome: string; agent_id: string | null }>('SELECT customer, outcome, agent_id::text FROM embed_asks ORDER BY at')).rows;
+
+    // Nothing marked, embedding off: the bare refusal; nothing is asked.
+    const t0 = hostSign(SECRET, claims());
+    const r0 = await post(t0);
+    ok('embedding off and nothing marked: one bare 403, nothing asked', r0.status === 403 && r0.json?.ok === false && asked.length === 0, r0.text);
+    ok('the refusal is no cookie, no wide CSP', !r0.r.headers.get('set-cookie') && r0.r.headers.get('cache-control') === 'no-store');
+    ok('a refused-after-MAC token (embedding off) writes one audit row', (await rowsOfAudit()).length === 1 && (await rowsOfAudit())[0].outcome === 'denied');
+
+    await boss.call('embed:save', { enabled: true, origins: [PORTAL] });
+    const noMark = await post(t0);
+    ok('embedding on, agent not marked: the same bare answer', noMark.status === 403 && noMark.text === r0.text && asked.length === 0);
+    await assistants.setEmbedAgent('acme', 'boss@acme.test', { agentId: agent.id, projectId: pid, datasets: [{ id: DS, column: 'customer_id' }] });
+
+    const good = await post(t0, { question: 'How many shipments by city? SECRET_QUESTION_TEXT' });
+    ok('a valid token is answered, with the customer\'s own chart', good.status === 200 && good.json?.ok === true && JSON.stringify(good.json.card?.data).includes('MINE_0'), good.text.slice(0, 300));
+    ok('…and nothing of the other customer', !good.text.includes('OTHERS_') && !good.text.includes('CV_TWO') && !asked.join().includes('OTHERS_'));
+    ok('…the reply carries no spec steps, chips or customer id', !/"steps"|"chips"|cust-secret-id-9/.test(good.text));
+    const refusals: Array<[string, string]> = [
+      ['an expired token', hostSign(SECRET, claims({ exp: now() - 600 }))],
+      ['24 hours ahead (a dashboard length)', hostSign(SECRET, claims({ exp: now() + 86_400 }))],
+      ['no lock', hostSign(SECRET, claims({ params: {} }))],
+      ['a lock on a column nothing requires', hostSign(SECRET, claims({ params: { customer_id: 'CV_ONE', region: 'x' } }))],
+      ['a lock on the wrong column only', hostSign(SECRET, claims({ params: { region: 'x' } }))],
+      ['an unknown claim', hostSign(SECRET, claims({ admin: true }))],
+      ['a dashboard token', hostSign(SECRET, { pub: agent.id, exp: now() + 600, params: { customer_id: 'CV_ONE' } })],
+      ['another agent', hostSign(SECRET, claims({ agent: DS }))],
+      ['the wrong secret', hostSign('ord_embed_' + 'z'.repeat(43), claims())],
+      ['another org\'s kid', hostSign(SECRET, claims(), { alg: 'HS256', typ: 'JWT', kid: 'globex' })],
+      ['alg none', hostSign(SECRET, claims(), { alg: 'none', typ: 'JWT', kid: 'acme' })],
+    ];
+    const before = asked.length;
+    for (const [label, tok] of refusals) {
+      const r = await post(tok);
+      ok(`refused: ${label} (403, bare)`, r.status === 403 && r.json?.ok === false && !r.text.includes('CV_ONE') && !r.text.includes(DS), `${r.status} ${r.text}`);
+    }
+    ok('…and none of them reached the model', asked.length === before);
+    for (const bad of [undefined, 5, '', 'a.b', 'x'.repeat(9000)]) ok(`a malformed token ${typeof bad}: 403`, (await post(bad)).status === 403);
+    const blank = await post(t0, { question: '   ' });
+    ok('a blank question: refused with a sentence, not asked', blank.status === 400 && blank.json?.ok === false);
+    await boss.call('embed:rotate');
+    ok('rotating the secret kills every token', (await post(t0)).status === 403);
+
+    const audit = await rowsOfAudit();
+    ok('audit: one row per token whose MAC held, customer, agent and outcome only', audit.some((a) => a.outcome === 'ok' && a.customer === 'cust-secret-id-9' && a.agent_id === agent.id) && audit.every((a) => ['ok', 'denied', 'error', 'refused'].includes(a.outcome)), JSON.stringify(audit));
+    const dump = JSON.stringify((await pool.query('SELECT * FROM embed_asks')).rows);
+    ok('audit: no question, no answer, no value in it', !dump.includes('SECRET_QUESTION_TEXT') && !dump.includes('MINE_') && !dump.includes('CV_ONE'));
+    const threads = await pool.query(`SELECT count(*)::int AS n FROM records WHERE kind LIKE '%thread%' OR path LIKE '%threads%'`).catch(() => ({ rows: [{ n: 0 }] }));
+    ok('nothing saved: no assistant conversation rows', threads.rows[0].n === 0 && (await pool.query(`SELECT count(*)::int AS n FROM assistant_threads`).then((r) => r.rows[0].n, () => 0)) === 0);
+    const logs = logLines.join('');
+    ok('canary: the token, the secret and the customer id are in no log line', !logs.includes(t0) && !logs.includes(SECRET) && !logs.includes('cust-secret-id-9') && !logs.includes(t0.split('.')[2]));
+    ok('canary: the question is in no log line', !logs.includes('SECRET_QUESTION_TEXT'));
+    const ok2 = await fetch(`${base}/embed/ask/${t0}`, { headers: { accept: 'text/html' } });
+    await ok2.text();
+    ok('a token in a URL is masked in the request log', !logLines.join('').includes(t0));
+  } finally {
+    analyze.askCopilot = real.ask;
+    execConfig.assistantOn = real.on;
+    await app.close();
+    await pool.end();
+    await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+    await root.end();
+  }
+}
+
+(async () => {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.log('skip embed ask DB suite: DATABASE_URL is unset (set it to a Postgres this suite may CREATE DATABASE on)');
+    return finish();
+  }
+  B.context.enterServerMode(DATA);
+  appMod.registerHandlers();
+  try {
+    await suite(url);
+  } finally {
+    fs.rmSync(DATA, { recursive: true, force: true });
+  }
+  finish();
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
