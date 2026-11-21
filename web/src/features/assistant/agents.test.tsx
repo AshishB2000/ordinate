@@ -29,6 +29,8 @@ const agent = (id: string, name: string, extra: Partial<AgentRow> = {}): AgentRo
   id, name, usable: true, topic: { id: 'c1111111-1111-4111-8111-111111111111', name: name.split(' ')[0], datasetIds: ['d1'] }, model: null, build: false, teams: [{ id: 't', name: 'Finance' }], ...extra,
 });
 const AGENTS = [agent(FIN, 'Finance assistant', { model: { provider: 'anthropic', model: 'claude-opus' } }), agent(SALES, 'Sales assistant')];
+// Auto (docs/agent-router) is the default for two or more agents; with one agent nothing changes, so the preselection tests use one.
+const ONE = AGENTS.slice(0, 1);
 
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
 function serve(routes: Record<string, Reply>) {
@@ -97,7 +99,7 @@ describe('agents in the dock', () => {
   });
 
   it('before any conversation: the preselected agent, its topic as what answers are based on, and its model named', async () => {
-    const calls = serve({ ...base(AGENTS, FIN), 'copilot:ask': { body: { ok: true, answer: 'Fine.', turns: [], threadId: T1, agent: { id: FIN, name: 'Finance assistant' } } } });
+    const calls = serve({ ...base(ONE, FIN), 'copilot:ask': { body: { ok: true, answer: 'Fine.', turns: [], threadId: T1, agent: { id: FIN, name: 'Finance assistant' } } } });
     renderApp('/');
     const dock = await openDock();
     await waitFor(() => expect(picked(dock)).toBe('Finance assistant'));
@@ -162,7 +164,7 @@ describe('agents in the dock', () => {
     const spec = (datasetId: string, title: string) => ({ datasetId, category: 'vendor', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'column', title });
     const row = (id: string, datasetId: string, question: string) => ({ id, question, phrasings: [], datasetId, datasetName: '', describe: '', filters: [], spec: spec(datasetId, question), verifiedBy: 'a', verifiedAt: new Date().toISOString(), runs: true, tag: 't' });
     const calls = serve({
-      ...base(AGENTS, FIN),
+      ...base(ONE, FIN),
       'verified:list': { body: { ok: true, broken: 0, questions: [row('v1', 'd1', 'Amount by vendor'), row('v2', 'd2', 'Revenue by region')] } },
       'copilot:newThread': { body: { ok: true, thread: { id: T1, title: 'Conversation', updatedAt: '', turnCount: 0, agentId: FIN } } },
       'answer:rerun': { body: { ok: true, turns: [], threadId: T1 } },
@@ -181,7 +183,7 @@ describe('agents in the dock', () => {
       { id: T1, title: 'Payroll', updatedAt: new Date().toISOString(), turnCount: 2, agentId: FIN, agentName: 'Finance assistant' },
       { id: T2, title: 'Anything', updatedAt: new Date().toISOString(), turnCount: 2 },
     ];
-    serve({ ...base(AGENTS, FIN), 'copilot:threads': { body: { ok: true, threads } } });
+    serve({ ...base(ONE, FIN), 'copilot:threads': { body: { ok: true, threads } } });
     renderApp('/');
     const dock = await openDock();
     await waitFor(() => expect(picked(dock)).toBe('Finance assistant'));
