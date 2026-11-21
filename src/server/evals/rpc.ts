@@ -27,6 +27,16 @@ const needsDb = () => fail(say.needsDb());
 /** Warehouse queries a Live compute case can make: the ask's own answer, the expected spec and the answer's spec, each one. */
 const LIVE_PER_CASE = 3;
 
+type Gate = Awaited<ReturnType<typeof caseGate>>;
+/** A run's counts as the caller may see them: the run row's own when no folder restricts them, else recounted over the cases they may open. */
+async function countsOf(org: string, run: store.Run, gate: Gate, byId: ReadonlyMap<string, store.Case>) {
+  if (!gate.level) return { casesDone: run.casesDone, casesTotal: run.casesTotal, passed: run.passed, failed: run.failed, notScored: run.notScored };
+  const open = new Set(run.caseIds.filter((id) => { const c = byId.get(id); return !c || gate.visible(c); }));
+  const done = (await store.resultsOf(org, run.id)).filter((r) => open.has(r.caseId));
+  const n = (f: (o: string) => boolean): number => done.filter((r) => f(r.outcome)).length;
+  return { casesDone: done.length, casesTotal: open.size, passed: n((o) => o === 'pass'), failed: n((o) => o === 'fail' || o === 'error'), notScored: n((o) => o === 'not_scored') };
+}
+
 export function register(): void {
   ipcMain.handle('feedback:rate', async (_e, p: { projectId: string; threadId: string; turnId: string; value: 'up' | 'down' | 'none'; reason?: string }) => feedback.rate(p));
   ipcMain.handle('feedback:inbox', async (_e, p: { projectId: string }) => (store.dbOrNull() ? { ok: true as const, items: await feedback.inbox(p.projectId) } : { ok: true as const, items: [], available: false }));
@@ -45,19 +55,20 @@ export function register(): void {
     const versions = new Map<string | null, Record<string, string>>();
     for (const agentId of new Set(suites.map((s) => s.agentId))) versions.set(agentId, await versionOf(p.projectId, agentId));
     const active = runs.find((r) => store.ACTIVE.includes(r.state));
+    const byId = new Map(allCases.map((c) => [c.id, c]));
     return {
       ok: true as const, available: true as const, activeRunId: active?.id ?? null,
-      suites: suites.map((s) => {
+      suites: await Promise.all(suites.map(async (s) => {
         const mine = cases.filter((c) => c.suiteId === s.id);
         const l = last.find((r) => r.suiteId === s.id);
         return {
           id: s.id, name: s.name, agentId: s.agentId, caseCount: mine.length, createdAt: s.createdAt,
           liveQueries: LIVE_PER_CASE * mine.filter((c) => c.expect.compute && [c.expect.compute.datasetId, ...relatedIds(c.expect.compute)].some((d) => live.has(d))).length,
-          last: l ? { runId: l.id, state: l.state, casesDone: l.casesDone, casesTotal: l.casesTotal, passed: l.passed, failed: l.failed, notScored: l.notScored, startedAt: l.startedAt } : null,
+          last: l ? { runId: l.id, state: l.state, startedAt: l.startedAt, ...(await countsOf(org.id, l, gate, byId)) } : null,
           stale: l ? changedParts(l.version, versions.get(s.agentId) ?? {}) : [],
           runningId: active && active.suiteId === s.id ? active.id : null,
         };
-      }),
+      })),
     };
   });
 
@@ -147,7 +158,9 @@ export function register(): void {
     if (!store.dbOrNull()) return { ok: true as const, runs: [] };
     const { org, user } = ctx();
     const runs = await store.listRuns(org.id, p.projectId, p.suiteId);
-    return { ok: true as const, runs: runs.map((r) => ({ id: r.id, suiteId: r.suiteId, state: r.state, casesDone: r.casesDone, casesTotal: r.casesTotal, passed: r.passed, failed: r.failed, notScored: r.notScored, modelCalls: r.modelCalls, startedAt: r.startedAt, finishedAt: r.finishedAt, mine: r.startedBy === user.email })) };
+    const gate = await caseGate(p.projectId);
+    const byId = new Map((await store.listCases(org.id, p.projectId)).map((c) => [c.id, c]));
+    return { ok: true as const, runs: await Promise.all(runs.map(async (r) => ({ id: r.id, suiteId: r.suiteId, state: r.state, ...(await countsOf(org.id, r, gate, byId)), modelCalls: r.modelCalls, startedAt: r.startedAt, finishedAt: r.finishedAt, mine: r.startedBy === user.email }))) };
   });
   ipcMain.handle('eval:runStop', async (_e, p: { projectId: string; runId: string }) => {
     if (!store.dbOrNull()) return needsDb();
