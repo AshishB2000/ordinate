@@ -16,9 +16,9 @@ import { parseEnv } from '../src/server/env';
   const app = Fastify();
   registerLimits(app, cfg.limits, new BlockList());
   const ran = { page: 0, ask: 0, other: 0 };
-  app.get(EMBED_ASK_PAGE_ROUTE, async () => (ran.page += 1, 'page'));
-  app.post(EMBED_ASK_ROUTE, async () => (ran.ask += 1, 'ask'));
-  app.get('/embed/other/*', async () => (ran.other += 1, 'other')); // NEGATIVE CONTROL: a route the limiter does not name
+  app.get(EMBED_ASK_PAGE_ROUTE, async () => { ran.page += 1; return 'page'; });
+  app.post(EMBED_ASK_ROUTE, async () => { ran.ask += 1; return 'ask'; });
+  app.get('/embed/other/*', async () => { ran.other += 1; return 'other'; }); // NEGATIVE CONTROL: a route the limiter does not name
   await app.ready();
   const get = (url: string) => app.inject({ method: 'GET', url, remoteAddress: '10.0.0.1' });
   const post = () => app.inject({ method: 'POST', url: '/embed/ask', payload: {}, remoteAddress: '10.0.0.1' });
