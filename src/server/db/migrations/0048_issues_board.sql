@@ -3,7 +3,7 @@
 -- Cloud, or resolve or ignore it. src/server/issues/ keeps these rows.
 --
 --   issue_settings       per project: the check is OFF until a project admin turns it on; when it last ran.
---   issues               one per cause. `key` is the cause (a missing name, a dataset, or the commonest question words); `tokens` the words of
+--   issues               one per cause. A title and fix are written from the questions of the group, so `name_*_ids` keep what those showed. `key` is the cause (a missing name, a dataset, or the commonest question words); `tokens` the words of
 --                        a words group, to join a later group to it. A resolved issue that gets a newer signal reopens. Hidden from the board
 --                        until it holds three questions (the board's query, not a column).
 --   issue_signals        one per (answer, kind of trouble). `question` is the asker's own words and `owner` who asked: the board shows the
@@ -22,6 +22,7 @@ CREATE TABLE issue_settings (
   enabled_by  text,
   last_run_at timestamptz,
   last_error  text,
+  check_requested_at timestamptz,            -- an admin pressed Check now: the org's weekly job picks the project up (any pod) and clears it
   PRIMARY KEY (org_id, project_id)
 );
 
@@ -40,6 +41,8 @@ CREATE TABLE issues (
   status_at  timestamptz,
   reopened   integer     NOT NULL DEFAULT 0,
   proposal_id uuid,
+  name_dataset_ids   jsonb NOT NULL DEFAULT '[]'::jsonb,  -- every dataset and dashboard the questions behind the title and fix showed when they were written:
+  name_dashboard_ids jsonb NOT NULL DEFAULT '[]'::jsonb,  -- the folder rule counts them even after the signals are swept, so old wording never outlives its access
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (org_id, id)

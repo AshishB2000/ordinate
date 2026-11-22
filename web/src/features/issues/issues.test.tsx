@@ -41,9 +41,9 @@ const ISSUE = {
   examples: [{ kind: 'undefined_name', reason: null, question: 'How many active customers?', at: '2026-11-19T10:00:00Z' }, { kind: 'thumbs_down', reason: 'wrong_number', question: 'Active customers by region?', at: '2026-11-19T11:00:00Z' }],
   tickets: [], proposalId: null, updatedAt: '2026-11-20T10:00:00Z',
 };
-const SET = { enabled: true, lastRunAt: '2026-11-18T10:00:00Z', lastError: null };
+const SET = { enabled: true, lastRunAt: '2026-11-18T10:00:00Z', lastError: null, checking: false };
 const BOARD = (issues: unknown[] = [ISSUE], trackers = { linear: false, jira: false }, settings: object = {}) => body({ ok: true, available: true, issues, trackers, settings: { ...SET, ...settings } });
-const tab = () => renderApp(`/model/${PID}?tab=assistant`);
+const tab = (extra = '') => renderApp(`/model/${PID}?tab=assistant${extra}`);
 
 describe('the notice in the Assistant', () => {
   it('the composer says editors may see questions that did not get a good answer, and never the answers', async () => {
@@ -150,6 +150,61 @@ describe('the Issues board', () => {
     tab();
     expect(await screen.findByText('Off. A project admin turns it on.', {}, LAZY)).toBeTruthy();
     expect(screen.queryByRole('switch', { name: 'Check every week' })).toBeNull();
+  }, 30_000);
+});
+
+describe('a ticket\'s link back', () => {
+  it('opens the issue: the board loads at once (not when scrolled near) and the issue is scrolled into view and marked', async () => {
+    const seenByObserver: Element[] = [];
+    vi.stubGlobal('IntersectionObserver', class { observe(e: Element) { seenByObserver.push(e); } disconnect() {} unobserve() {} });
+    const scrolled: string[] = [];
+    const real = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); };
+    try {
+      const other = { ...ISSUE, id: 'c2222222-2222-4222-8222-222222222222', title: 'Another one' };
+      const calls = serveRpc(common('editor', { 'issues:list': BOARD([other, ISSUE]) }));
+      tab(`&issue=${IID}`);
+      const card = await screen.findByRole('heading', { name: 'Active customer is not defined' }, LAZY);
+      expect(sent(calls, 'issues:list')).toHaveLength(1);
+      await waitFor(() => expect(scrolled).toEqual([`issue-${IID}`]));
+      expect(card.closest('[data-testid="issue"]')?.getAttribute('aria-current')).toBe('true');
+      expect(screen.getByRole('heading', { name: 'Another one' }).closest('[data-testid="issue"]')?.getAttribute('aria-current')).toBeNull();
+    } finally {
+      Element.prototype.scrollIntoView = real;
+    }
+  }, 30_000);
+
+  it('NEGATIVE CONTROL: without the link, the board waits until it is near the viewport, and scrolls nothing', async () => {
+    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} unobserve() {} }); // never intersects
+    const scrolled: string[] = [];
+    const real = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); };
+    try {
+      const calls = serveRpc(common('editor', { 'issues:list': BOARD() }));
+      tab();
+      await screen.findByRole('heading', { name: 'Issues' }, LAZY);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(sent(calls, 'issues:list')).toHaveLength(0);
+      expect(scrolled).toEqual([]);
+    } finally {
+      Element.prototype.scrollIntoView = real;
+    }
+  }, 30_000);
+
+  it('a ticket with an unsafe URL is shown as text, never as a link', async () => {
+    serveRpc(common('editor', { 'issues:list': BOARD([{ ...ISSUE, tickets: [{ provider: 'linear', ref: 'DATA-9', url: 'javascript:alert(1)' }] }], { linear: true, jira: false }) }));
+    tab();
+    const card = await screen.findByTestId('issue', {}, LAZY);
+    expect(within(card).queryByRole('link', { name: 'DATA-9' })).toBeNull();
+    expect(within(card).getByText(/DATA-9/)).toBeTruthy();
+  });
+
+  it('while a check runs the board says so and keeps asking; Check now is not pressable', async () => {
+    const calls = serveRpc(common('admin', { 'issues:list': BOARD([], undefined, { checking: true }) }));
+    tab();
+    expect(await screen.findByText(/Checking now\./, {}, LAZY)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Check now/ }) as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(sent(calls, 'issues:list').length).toBeGreaterThan(1), { timeout: 8000 });
   }, 30_000);
 });
 

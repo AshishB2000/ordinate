@@ -36,23 +36,23 @@ function Bar({ projectId, st }: { projectId: string; st: Settings }) {
           Weekly check {st.enabled ? <Badge tone="ok">On</Badge> : <Badge>Off</Badge>}
         </p>
         <p className={st.lastError ? `${s.barNote} ${s.warn}` : s.barNote}>
-          {st.lastError ? 'The last check could not finish. It tries again.' : st.enabled ? (last ? `Last checked ${last}. It reads stored answers only and runs no query.` : 'It runs within a few hours, then once a week. It reads stored answers only and runs no query.') : admin ? 'Off. Turn it on to read last week’s answers for where the Assistant struggled.' : 'Off. A project admin turns it on.'}
+          {st.checking ? 'Checking now. This takes a moment, and the board updates by itself.' : st.lastError ? 'The last check could not finish. It tries again.' : st.enabled ? (last ? `Last checked ${last}. It reads stored answers only and runs no query.` : 'It runs within a few hours, then once a week. It reads stored answers only and runs no query.') : admin ? 'Off. Turn it on to read last week’s answers for where the Assistant struggled.' : 'Off. A project admin turns it on.'}
         </p>
       </div>
       {admin && (
         <div className={s.barActions}>
           <Switch label="Check every week" checked={st.enabled} disabled={call.isPending} onCheckedChange={(on) => void change('issues:setEnabled', { enabled: on }, on ? 'The weekly check is on.' : 'The weekly check is off.')} />
-          {st.enabled && <Button size="sm" icon="refresh" loading={call.isPending} onClick={() => void change('issues:checkNow', {}, 'Checked.')}>Check now</Button>}
+          {st.enabled && <Button size="sm" icon="refresh" loading={call.isPending || st.checking} onClick={() => void change('issues:checkNow', {}, 'Checking now.')}>Check now</Button>}
         </div>
       )}
     </div>
   );
 }
 
-/** True once the element has come near the viewport (always true where IntersectionObserver is missing): the board loads when it is about to be seen, not with the tab. */
-function useNearView<T extends Element>(): [React.RefObject<T | null>, boolean] {
+/** True once the element has come near the viewport (at once when `now`, and where IntersectionObserver is missing): the board loads when it is about to be seen, not with the tab. */
+function useNearView<T extends Element>(now: boolean): [React.RefObject<T | null>, boolean] {
   const ref = useRef<T | null>(null);
-  const [near, setNear] = useState(typeof IntersectionObserver === 'undefined');
+  const [near, setNear] = useState(now || typeof IntersectionObserver === 'undefined');
   useEffect(() => {
     const el = ref.current;
     if (near || !el) return;
@@ -64,11 +64,15 @@ function useNearView<T extends Element>(): [React.RefObject<T | null>, boolean] 
 }
 
 export function IssuesSection({ projectId }: { projectId: string }) {
-  const [ref, near] = useNearView<HTMLElement>();
-  const q = useBoard(projectId, near);
   const [params] = useSearchParams();
-  const asked = params.get('issue') ?? '';
+  const asked = params.get('issue') ?? ''; // a ticket's link back: load the board now and bring that issue into view
+  const [ref, near] = useNearView<HTMLElement>(!!asked);
+  const q = useBoard(projectId, near);
   const board = q.data && q.data.ok ? q.data : null;
+  const found = !!asked && !!board?.issues.some((i) => i.id === asked);
+  useEffect(() => {
+    if (found) document.getElementById(`issue-${asked}`)?.scrollIntoView?.({ block: 'center' });
+  }, [found, asked]);
   if (board && !board.available) return null; // without a database there is no board
   let body;
   if (!near) body = <div className={s.skel} aria-hidden="true" />; // not asked for yet: a quiet space, not a busy skeleton

@@ -5,12 +5,11 @@
 
 import type { SignalKind } from '../../ai/issueSignals';
 import { ctx } from '../context';
-import { openRows } from '../evals/feedback';
 import { proposeFromQuestions } from '../proposals/proposals';
 import * as say from '../issueMessages';
+import { openTo } from './open';
 import * as store from './db';
 import { fallbackFor } from './fallback';
-import { checkProject } from './weekly';
 import * as trackers from './trackers/service';
 
 const EXAMPLES = 5;
@@ -25,27 +24,28 @@ export interface IssueView {
 
 const noDb = () => ({ ok: false as const, error: say.needsDb() });
 
-/** The issue `id` (or all) as the caller may see it. */
+/** The issue `id` (or all) as the caller may see it: its title was written from every question of the group, so any of them closed to the caller hides it. */
 async function visible(projectId: string, id?: string): Promise<store.Issue[]> {
-  return openRows(projectId, await store.board(ctx().org.id, projectId, id));
+  return openTo(projectId, await store.board(ctx().org.id, projectId, id));
 }
 
 /** The board, with the check's own state (one call: this tab loads it with the rest of the Assistant's settings). */
 export async function list(projectId: string) {
-  if (!store.dbOrNull()) return { ok: true as const, available: false, issues: [] as IssueView[], trackers: { linear: false, jira: false }, settings: { enabled: false, lastRunAt: null, lastError: null } };
+  if (!store.dbOrNull()) return { ok: true as const, available: false, issues: [] as IssueView[], trackers: { linear: false, jira: false }, settings: { enabled: false, lastRunAt: null, lastError: null, checking: false } };
   const org = ctx().org.id;
   const issues = await visible(projectId);
   const ids = issues.map((i) => i.id);
-  const [kinds, tickets] = await Promise.all([store.kindsOf(org, ids), store.ticketsOf(org, ids)]);
-  const out: IssueView[] = [];
-  for (const i of issues) {
-    const open = await openRows(projectId, await store.examples(org, projectId, i.id, EXAMPLES));
-    out.push({
-      id: i.id, title: i.title || fallbackFor({ key: i.key, kind: i.kind, labels: [], questions: open.map((e) => e.question) }).title, fix: i.fix, kind: i.kind, status: i.status, reopened: i.reopened,
+  // One statement each, however many issues: the examples, the kinds, the tickets, and one folder lookup per kind for all the examples.
+  const [kinds, tickets, rows] = await Promise.all([store.kindsOf(org, ids), store.ticketsOf(org, ids), store.examplesFor(org, projectId, ids, EXAMPLES)]);
+  const open = await openTo(projectId, rows);
+  const out: IssueView[] = issues.map((i) => {
+    const mine = open.filter((e) => e.issue === i.id);
+    return {
+      id: i.id, title: i.title, fix: i.fix, kind: i.kind, status: i.status, reopened: i.reopened,
       questions: i.questions, people: i.people, kinds: kinds.get(i.id) ?? [], tickets: tickets.get(i.id) ?? [], proposalId: i.proposalId, updatedAt: i.updatedAt,
-      examples: open.map((e) => ({ kind: e.kind, reason: e.reason, question: e.question, at: e.at })),
-    });
-  }
+      examples: mine.map((e) => ({ kind: e.kind, reason: e.reason, question: e.question, at: e.at })),
+    };
+  });
   return { ok: true as const, available: true, issues: out, trackers: await trackers.connected(), settings: await store.getSettings(org, projectId) };
 }
 
@@ -55,19 +55,11 @@ export async function setEnabled(projectId: string, enabled: boolean) {
   return { ok: true as const };
 }
 
-/** The admin's "Check now": the same check the job makes. */
+/** The admin's "Check now": asks for the check and returns at once. The org's weekly job (any pod) makes it, and the board shows "checking" until it is done. */
 export async function checkNow(projectId: string) {
   if (!store.dbOrNull()) return noDb();
-  const org = ctx().org.id;
-  const s = await store.getSettings(org, projectId);
-  try {
-    const r = await checkProject(projectId, s.lastRunAt ? new Date(s.lastRunAt) : null);
-    await store.stamp(org, projectId);
-    return { ok: true as const, signals: r.signals, created: r.created, reopened: r.reopened, named: r.named };
-  } catch {
-    await store.failed(org, projectId, 'failed');
-    return { ok: false as const, error: say.checkFailed() };
-  }
+  await store.requestCheck(ctx().org.id, projectId);
+  return { ok: true as const, started: true as const };
 }
 
 export async function setStatus(projectId: string, id: string, status: store.Status) {
@@ -81,10 +73,10 @@ export async function propose(projectId: string, id: string) {
   if (!store.dbOrNull()) return noDb();
   if (!(await visible(projectId, id)).length) return { ok: false as const, error: say.notFound() };
   const org = ctx().org.id;
-  const rows = await openRows(projectId, await store.examples(org, projectId, id, ASKERS));
+  const rows = await openTo(projectId, await store.examplesFor(org, projectId, [id], ASKERS));
   if (!rows.length) return { ok: false as const, error: say.noOpenQuestions() };
   const r = await proposeFromQuestions(projectId, {
-    questions: rows.map((x) => ({ email: x.owner, question: x.question.slice(0, 300) })),
+    questions: rows.map((x) => ({ email: x.owner, question: x.question.slice(0, 300), datasetIds: x.datasetIds })),
     datasetIds: [...new Set(rows.flatMap((x) => x.datasetIds))],
   });
   if (r.ok) await store.setProposal(org, id, r.id);

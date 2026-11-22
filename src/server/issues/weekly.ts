@@ -66,6 +66,7 @@ export async function checkProject(projectId: string, since?: Date | null): Prom
   const signals = await read(org, projectId, from);
   const groups = groupSignals(signals, await similarity(signals));
   const applied = await store.apply(org, projectId, groups);
+  const swept = await store.sweep(org, projectId); // before naming: an issue that lost signals is renamed from what is left
   const todo = await store.toName(org, projectId, NAMES_PER_RUN);
   const ready = todo.length > 0 && (await execConfig.executionReady().catch(() => false));
   const names = new Map<string, string>();
@@ -81,7 +82,7 @@ export async function checkProject(projectId: string, since?: Date | null): Prom
       await store.setFallback(org, item.id, own.title, own.fix);
     }
   }
-  return { ...applied, named, swept: await store.sweep(org, projectId) };
+  return { ...applied, named, swept };
 }
 
 /** Every due project of the org. Past `stopAt` it starts no new one and says so (true), as the runner's contract asks. */
@@ -97,7 +98,7 @@ export async function checkOrg(stopAt: number): Promise<boolean> {
       await store.failed(org, p.projectId, 'failed');
     }
   }
-  return false;
+  return store.hasRequests(org); // a "Check now" that came in during the run: due again at once
 }
 
 let wired = false;

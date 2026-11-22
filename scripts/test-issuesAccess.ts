@@ -70,13 +70,32 @@ const draft: typeof import('../src/ai/proposalDraft') = require('../src/ai/propo
 
     // ── check now, and the failure ──────────────────────────────────────────────────────────────────────────────────────────
     const now = await W.call('boss', 'issues:checkNow', { projectId: P });
-    ok('the project admin runs the check now; nothing is added twice', now.body?.ok === true && now.body.signals === 0 && now.body.created === 0, now.text);
+    await W.as('boss', () => weekly.checkOrg(Date.now() + 60_000)); // the job any pod runs
+    ok('the project admin asks for the check now; the job makes it, and nothing is added twice', now.body?.ok === true && now.body.started === true && (await W.pool.query('SELECT count(*)::int AS n FROM issue_signals')).rows[0].n === 5, now.text);
     ok('the settings: on, with the time of the last check, and no error', (await W.call('ed', 'issues:list', { projectId: P })).body.settings.lastRunAt !== null);
     ok('turning it off stops the weekly pass', (await W.call('boss', 'issues:setEnabled', { projectId: P, enabled: false })).body?.ok === true);
     await W.pool.query(`UPDATE issue_settings SET last_run_at = now() - interval '9 days'`);
     await seed('eve@acme.test', [['Active customers once more?', define('active customer')]], { ageMs: 0 });
     await W.as('boss', () => weekly.checkOrg(Date.now() + 60_000));
     ok('NEGATIVE CONTROL: with the check off, a due week reads nothing', (await W.call('ed', 'issues:list', { projectId: P })).body.issues[0].questions === 5);
+
+    // ── a proposal keeps only the asks on its own dataset ───────────────────────────────────────────────────────────────────
+    // Three people's answers showed Orders AND Plain, one's only Plain. The draft is about Plain: Orders-touching asks must not join it, because
+    // anyone who edits Plain reads a proposal's questions, and a reviewer closed to Orders must not read a question whose answer showed Orders.
+    await W.call('boss', 'issues:setEnabled', { projectId: P, enabled: true });
+    for (const o of ['fay', 'gus', 'hal']) await seed(`${o}@acme.test`, [[`How many big customers did ${o} win?`, { ...define('big customer'), factsFrom: [W.orders, W.plain] }]], { ageMs: 0 });
+    await seed('ivy@acme.test', [['How many big customers did ivy win?', define('big customer')]], { ageMs: 0 });
+    await W.call('boss', 'issues:checkNow', { projectId: P });
+    await W.as('boss', () => weekly.checkOrg(Date.now() + 60_000));
+    const big = (await W.call('ed', 'issues:list', { projectId: P })).body.issues.find((i: { title: string; questions: number }) => i.questions === 4);
+    ok('fixture: an issue of four questions, three of whose answers showed another dataset', !!big);
+    const asksBefore = (await W.pool.query('SELECT count(*)::int AS n FROM metric_proposal_asks')).rows[0].n;
+    const mixed = await W.call('ed', 'issues:propose', { projectId: P, id: big.id });
+    const asks = (await W.pool.query(`SELECT user_email, question FROM metric_proposal_asks ORDER BY created_at DESC LIMIT 10`)).rows;
+    const added = (await W.pool.query('SELECT count(*)::int AS n FROM metric_proposal_asks')).rows[0].n - asksBefore;
+    ok('the proposal took ivy\'s ask only (its dataset), not the three whose answers showed Orders', mixed.body?.ok === true && added === 1 && asks.some((r: { user_email: string }) => r.user_email === 'ivy@acme.test') && !asks.some((r: { user_email: string }) => /^(fay|gus|hal)@/.test(r.user_email)), JSON.stringify([mixed.body, added]));
+    const shown = JSON.stringify((await W.call('ed', 'proposal:list', { projectId: P, decided: false })).body);
+    ok('NEGATIVE CONTROL: no reviewer\'s queue holds those three questions', !/big customers did (fay|gus|hal)/.test(shown) && /big customers did ivy/.test(shown));
     void owners;
   } finally {
     analyze.dispatch = baseDispatch;

@@ -63,7 +63,7 @@ export function IssueCard({ projectId, issue, trackers, current }: { projectId: 
         <ul className={s.tickets} aria-label="Tickets">
           {issue.tickets.map((t) => (
             <li key={t.provider}>
-              {PROVIDER_LABEL[t.provider]}: <a className={s.link} href={t.url} target="_blank" rel="noreferrer noopener">{t.ref}</a>
+              {PROVIDER_LABEL[t.provider]}: {/^https:\/\//.test(t.url) ? <a className={s.link} href={t.url} target="_blank" rel="noreferrer noopener">{t.ref}</a> : t.ref}
             </li>
           ))}
         </ul>

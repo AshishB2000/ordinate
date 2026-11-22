@@ -16,7 +16,7 @@ export interface Issue {
   tickets: Array<{ provider: Provider; ref: string; url: string }>;
   proposalId: string | null; updatedAt: string;
 }
-export interface Settings { enabled: boolean; lastRunAt: string | null; lastError: string | null }
+export interface Settings { enabled: boolean; lastRunAt: string | null; lastError: string | null; /** A Check now is waiting for the job, or running. */ checking: boolean }
 export interface Board { ok: true; available: boolean; issues: Issue[]; trackers: Record<Provider, boolean>; settings: Settings }
 
 /** What each kind of trouble is called on the board. */
@@ -30,7 +30,8 @@ export const PROVIDER_LABEL: Record<Provider, string> = { linear: 'Linear', jira
 const boardKey = (projectId: string) => ['issues:list', projectId] as const;
 
 export function useBoard(projectId: string, enabled = true) {
-  return useQuery({ queryKey: boardKey(projectId), enabled, queryFn: async () => (await rpc('issues:list', { projectId })) as Board | Failed });
+  return useQuery({ queryKey: boardKey(projectId), enabled, queryFn: async () => (await rpc('issues:list', { projectId })) as Board | Failed,
+    refetchInterval: (q) => (q.state.data && q.state.data.ok && q.state.data.settings.checking ? 3000 : false) });
 }
 /** One board call, and the lists it makes stale. A refusal is the reply `{ ok: false, error }`. */
 export function useIssueCall(projectId: string) {

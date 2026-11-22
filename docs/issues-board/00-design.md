@@ -77,7 +77,15 @@ unnamed for the next run. The model never writes a count: the board shows the ap
   with **any** signal on something closed to the caller is **hidden from them entirely** (fail closed; an admin opens everything).
   This goes one step past the plan, which only hid the example. See Open points.
 - The Assistant notice (Q1): "Editors may see questions that didn’t get a good answer." (its tooltip adds: They never see the answers.)
-- Signals older than 90 days are deleted by the job, and an issue left with none.
+- Signals older than 90 days are deleted by the job, and an issue left with none. An issue that loses signals **forgets its title and fix** and
+  is renamed from what is left, before the board shows it again. The ids of the datasets and dashboards a title was written from are kept
+  (`name_dataset_ids`, `name_dashboard_ids`) and count in the folder rule even after the signals are gone.
+- An id that **no longer exists** counts as closed while a folder restricts the caller: a deleted dataset leaves no placement, which `levelsOf`
+  would read as open.
+- "Propose a definition" gives #7 each ask's datasets; after the model picks the dataset, only asks whose answers showed **that dataset only**
+  join the proposal, since anyone who edits it reads its questions.
+- A ticket's URL from Linear must be `https://linear.app/…`, or the ticket is refused and not recorded.
+- A ticket's link back opens the board loaded, with that issue scrolled into view and marked.
 
 ## Storage (`0048_issues_board.sql`, additive)
 
@@ -97,7 +105,7 @@ All tables: forced RLS on `ordinate.org`. The job runs inside the org's context,
 `issues:weekly`, one scheduled row per org (`defineJob`, any pod, FOR UPDATE SKIP LOCKED under a lease, `src/server/jobs/runner.ts`),
 every 6 hours. Per project with the check on and `last_run_at` older than 7 days (or never): read turns and thumbs since `last_run_at`
 (7 days the first time, at most 5,000 turns), extract, group, store, reopen, name new groups, sweep, stamp `last_run_at`. A failure is
-recorded in `last_error` and retried at the next wake. A crash repeats safely (primary keys). "Check now" (admin) runs the same function.
+recorded in `last_error` and retried at the next wake. A crash repeats safely (primary keys). "Check now" (admin) sets `check_requested_at` and makes the org's job row due now; the job works the project at once (and again at once if another request arrived during the run).
 
 ## Contracts (`src/api/issues.ts`)
 
@@ -105,7 +113,7 @@ recorded in `last_error` and retried at the next wake. A crash repeats safely (p
 |---|---|---|
 | `issues:list` | write, project | the board: issues with counts, examples, fix, tickets; the check's on/off and last run; which trackers are connected (one call, so the tab loads cheaply) |
 | `issues:setEnabled` | admin, project | switch the check |
-| `issues:checkNow` | admin, project | run the check now |
+| `issues:checkNow` | admin, project | asks for the check and returns at once; the org's weekly job (any pod) makes it, and the board shows "checking" until it is done |
 | `issues:setStatus` | write, project | `open`, `resolved`, `ignored` |
 | `issues:propose` | write, project | calls #7's `proposeFromQuestions` with the issue's open questions |
 | `issues:send` | write, project | one ticket to `linear` or `jira` |

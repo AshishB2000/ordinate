@@ -54,7 +54,8 @@ const MAX_QUESTIONS = 20;
 const MAX_NAMES = 100;
 
 export type RaiseReply = { ok: true; id: string; raised: boolean; asks: number } | { ok: false; error: string; notReady?: true; code?: 'rate_limited' | 'too_many_open' };
-export interface QuestionAsk { email: string; question: string }
+/** `datasetIds`: what the asker's answer showed. When given, the ask joins a proposal only if they are all the proposal's own dataset: a reviewer of one dataset is never shown a question that touched another (the issues board passes them). */
+export interface QuestionAsk { email: string; question: string; datasetIds?: readonly string[] }
 
 /** The editors and admins with Edit on the dataset, never the caller (they are not told of their own proposal). */
 async function approversOf(projectId: string, datasetId: string): Promise<string[]> {
@@ -120,7 +121,9 @@ export async function proposeFromQuestions(projectId: string, input: { questions
       return { ok: false, error: say.datasetNotFound(parsed.draft.dataset) };
     }
     const { dataset: _name, ...rest } = parsed.draft;
-    return await raiseProposal(projectId, { ...rest, datasetId: named.id } as DraftIn, asks);
+    const own = asks.filter((a) => !a.datasetIds || a.datasetIds.every((d) => d.toLowerCase() === named.id.toLowerCase()));
+    if (!own.length) return { ok: false, error: say.nothingToDefine() };
+    return await raiseProposal(projectId, { ...rest, datasetId: named.id } as DraftIn, own);
   } catch (err) {
     if (!called) await giveBack();
     throw err;

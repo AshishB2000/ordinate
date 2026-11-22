@@ -7,6 +7,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { createSecretKey, randomBytes, randomUUID } from 'crypto';
+import { Writable } from 'stream';
 import { ok, finish } from './selfcheck';
 import { evalWorld } from './evalHarness';
 import { seeds } from './issuesHarness';
@@ -17,6 +18,11 @@ const transport: typeof import('../src/server/issues/trackers/transport') = requ
 const tokens: typeof import('../src/server/issues/trackers/tokens') = require('../src/server/issues/trackers/tokens');
 const secrets: typeof import('../src/server/secrets/store') = require('../src/server/secrets/store');
 const nameMod: typeof import('../src/ai/issueName') = require('../src/ai/issueName');
+const linearMod: typeof import('../src/server/issues/trackers/linear') = require('../src/server/issues/trackers/linear');
+const appMod: typeof import('../src/server/app') = require('../src/server/app');
+const envMod: typeof import('../src/server/env') = require('../src/server/env');
+const wireMod: typeof import('../src/server/wire') = require('../src/server/wire');
+const { withCsrf } = require('./csrfPair') as typeof import('./csrfPair');
 const ssrf: typeof import('../src/connectors/ssrf') = require('../src/connectors/ssrf');
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -39,7 +45,8 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
   tokens.useTrackerSecrets(secrets.createSecretStore(W.pool, master));
   const seen: Seen[] = [];
   let down = false;
-  transport.setTransportForTest(async (url, init) => {
+  let linearUrl = 'https://linear.app/acme/issue/DATA-142';
+  const provider: import('../src/server/issues/trackers/transport').Transport = async (url, init) => {
     const headers = Object.fromEntries(new Headers(init.headers).entries());
     seen.push({ host: url.hostname, path: url.pathname, method: String(init.method), headers, body: String(init.body ?? ''), redirect: init.redirect });
     if (down) throw new Error(`connect ECONNREFUSED ${LINEAR_TOKEN}`);
@@ -47,7 +54,7 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
     if (url.hostname === 'api.linear.app') {
       if (headers.authorization !== LINEAR_TOKEN) return json(400, { errors: [{ message: 'Authentication required, not authenticated' }] });
       return String(init.body).includes('issueCreate')
-        ? json(200, { data: { issueCreate: { success: true, issue: { identifier: 'DATA-142', url: 'https://linear.app/acme/issue/DATA-142' } } } })
+        ? json(200, { data: { issueCreate: { success: true, issue: { identifier: 'DATA-142', url: linearUrl } } } })
         : json(200, { data: { teams: { nodes: [{ id: 'team-uuid-1', key: 'DATA' }] } } });
     }
     if (url.hostname === 'acme.atlassian.net') {
@@ -57,7 +64,8 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
       if (url.pathname === '/rest/api/3/issue' && init.method === 'POST') return json(201, { id: '1', key: 'DATA-7' });
     }
     return json(404, {});
-  });
+  };
+  transport.setTransportForTest(provider);
   try {
     const P = W.P;
     const { seed, define, thumb } = seeds(W);
@@ -131,6 +139,15 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
     down = false;
     ok('…and a retry then works', (await send('ed', 'linear')).body?.ok === true);
 
+    // The ticket's URL is stored and shown as a link: only https://linear.app/… is kept.
+    await W.pool.query('DELETE FROM issue_tickets');
+    linearUrl = 'https://evil.example.com/phish';
+    const evil = await send('ed', 'linear');
+    ok('a Linear reply whose URL is not https://linear.app/… is refused: no ticket recorded, the slot is free', evil.body?.ok === false && /did not accept/.test(evil.body.error) && (await W.pool.query('SELECT count(*)::int AS n FROM issue_tickets')).rows[0].n === 0);
+    ok('isLinearUrl: only https on linear.app, no user info, no port', linearMod.isLinearUrl('https://linear.app/acme/issue/DATA-1') && ['http://linear.app/x', 'https://linear.app.evil.com/x', 'https://evil.com/linear.app', 'javascript:alert(1)', 'https://u@linear.app/x', 'https://linear.app:444/x', 'linear.app/x', ''].every((u) => !linearMod.isLinearUrl(u)));
+    linearUrl = 'https://linear.app/acme/issue/DATA-142';
+    ok('control: with a linear.app URL the same Send works', (await send('ed', 'linear')).body?.ok === true);
+
     // ── the secret canary ────────────────────────────────────────────────────────────────────────────────────────────────────
     const replies = JSON.stringify([status.text, (await W.call('boss', 'tracker:status')).text, (await W.call('ed', 'issues:list', { projectId: P })).text, okLinear.text, okJira.text, bad.text, failed.text]);
     ok('CANARY: neither token is in any reply', !replies.includes('CANARY'), replies.slice(Math.max(0, replies.indexOf('CANARY') - 150), replies.indexOf('CANARY') + 80));
@@ -158,6 +175,52 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
     ok('no tracker file opens a socket by itself: only safeFetch, no fetch( or http(s).request', /safeFetch/.test(src) && !/[^.\w]fetch\(|https?\.request|from 'https?'|from 'node:https?'|axios|undici/.test(src));
     ok('a real safeFetch refuses a private address (the guard is the one in use)', await ssrf.safeFetch('http://127.0.0.1:9/').then(() => false, (e) => e instanceof ssrf.SsrfError));
     ok('safeFetch is the default transport', String(transport.setTransportForTest).length > 0 && fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'issues', 'trackers', 'transport.ts'), 'utf8').includes('safeFetch(url, init)'));
+
+    // ── the log ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    // The app's REAL log stream (a second app on the same database, `buildApp` takes a stream) through a failed connect, a connect, a Send, a
+    // failed Send and a Jira connect: no token appears. Last in the file: closing the second app un-wires the shared pools.
+    transport.setTransportForTest(provider); // the SSRF section above left a refusing one
+    const lines: string[] = [];
+    const stream = new Writable({ write(chunk, _enc, done) { lines.push(String(chunk)); done(); } });
+    const dbUrl = (W.pool as unknown as { options: { connectionString: string } }).options.connectionString;
+    const app2 = appMod.buildApp(envMod.parseEnv({
+      LOG_LEVEL: 'trace', DATA_DIR: fs.mkdtempSync(path.join(require('os').tmpdir(), 'ordinate-trackers-')), DATABASE_URL: dbUrl, AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32',
+      ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test', RATE_LIMIT_RPC_PER_MINUTE: '100000', RATE_LIMIT_RPC_IP_PER_MINUTE: '100000',
+    }), stream);
+    await app2.ready();
+    tokens.useTrackerSecrets(secrets.createSecretStore(W.pool, master)); // the second app wired none (no master key)
+    const consoleSeen: string[] = [];
+    const realConsole = { log: console.log, warn: console.warn, error: console.error };
+    for (const k of ['log', 'warn', 'error'] as const) console[k] = (...a: unknown[]) => { consoleSeen.push(a.map(String).join(' ')); };
+    try {
+      const call2 = (who: string, channel: string, payload?: unknown) => app2.inject({
+        method: 'POST', url: `/api/rpc/${encodeURIComponent(channel)}`, remoteAddress: '127.0.0.1',
+        headers: withCsrf({ 'content-type': 'application/json', 'x-forwarded-email': `${who}@acme.test` }), payload: wireMod.encode({ args: payload === undefined ? [] : [payload] }),
+      });
+      const results = [
+        await call2('boss', 'tracker:connect', { provider: 'linear', apiToken: 'lin_api_CANARY_WRONG_TOKEN_1', teamKey: 'DATA' }), // a failed connect
+        await call2('boss', 'tracker:connect', connectLinear),
+        await call2('boss', 'tracker:connect', { provider: 'jira', apiToken: JIRA_TOKEN, site: 'acme', email: 'pm@acme.test', projectKey: 'DATA' }),
+      ];
+      await W.pool.query('DELETE FROM issue_tickets');
+      results.push(await call2('ed', 'issues:send', { projectId: P, id: issue.id, provider: 'linear' })); // a Send
+      await W.pool.query('DELETE FROM issue_tickets');
+      down = true;
+      results.push(await call2('ed', 'issues:send', { projectId: P, id: issue.id, provider: 'jira' })); // a failed Send
+      down = false;
+      Object.assign(console, realConsole); // the checks below print through it
+      const log = lines.join('');
+      ok('the log is the real one: it holds the requests of the flow (so an empty search proves something)', lines.length > 10 && log.includes('tracker%3Aconnect') && log.includes('issues%3Asend') && results.filter((r) => r.statusCode === 200).length === 5, `${lines.length} lines`);
+      ok('LOG CANARY: no token appears in the log through a failed connect, a connect, a Send and a failed Send', !log.includes('CANARY') && !log.includes(LINEAR_TOKEN) && !log.includes(JIRA_TOKEN) && !log.includes('lin_api_'), log.slice(Math.max(0, log.indexOf('CANARY') - 120), log.indexOf('CANARY') + 60));
+      ok('…nor in anything written to the console', !consoleSeen.join('\n').includes('CANARY'));
+      app2.log.info({ apiToken: LINEAR_TOKEN }, 'planted: a field named like a token');
+      app2.log.info({ note: LINEAR_TOKEN }, 'planted: an unredacted field');
+      const planted = lines.join('');
+      ok('NEGATIVE CONTROL: a token in a field the logger knows is redacted, and one it does not know shows (the capture would see a leak)', /"apiToken":"\[redacted\]"/.test(planted) && planted.includes(`"note":"${LINEAR_TOKEN}"`));
+    } finally {
+      Object.assign(console, realConsole);
+      await app2.close();
+    }
     void randomUUID;
   } finally {
     transport.setTransportForTest(null);
@@ -166,4 +229,4 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
     await S.close();
   }
   finish();
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => { process.stderr.write(String(e && e.stack || e) + "\n"); process.exit(1); });

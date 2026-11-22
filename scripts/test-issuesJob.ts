@@ -144,7 +144,15 @@ const datasets: any = require('../src/data/datasets'); // any: the spy replaces 
     ok('the next check names it', (await W.pool.query(`SELECT named, title FROM issues WHERE key = 'miss:measure:refund rate'`)).rows[0].named === true);
 
     // ── the check now ───────────────────────────────────────────────────────────────────────────────────────────────────────
-    ok('"Check now" is the project admin\'s; an editor is refused', (await W.call('ed', 'issues:checkNow', { projectId: P })).status === 403 && (await W.call('boss', 'issues:checkNow', { projectId: P })).body?.ok === true);
+    ok('"Check now" is the project admin\'s; an editor is refused', (await W.call('ed', 'issues:checkNow', { projectId: P })).status === 403);
+    await seed('late@acme.test', [['Active customers, one more?', define('active customer')]], { ageMs: 0 });
+    const signalsBefore = (await W.pool.query('SELECT count(*)::int AS n FROM issue_signals')).rows[0].n;
+    const started = await W.call('boss', 'issues:checkNow', { projectId: P });
+    ok('"Check now" returns at once: it asks for the check and reads nothing in the request', started.body?.ok === true && started.body.started === true && (await W.pool.query('SELECT count(*)::int AS n FROM issue_signals')).rows[0].n === signalsBefore);
+    ok('the board says it is checking, and the org\'s weekly job is due now (any pod may claim it)', (await list()).settings.checking === true && (await W.pool.query(`SELECT count(*)::int AS n FROM jobs WHERE kind = 'issues:weekly' AND next_run_at <= now()`)).rows[0].n === 1);
+    await W.pool.query(`UPDATE issue_settings SET last_run_at = now()`); // not due by the week: only the request makes it run
+    ok('the job makes the check the admin asked for, clears the request, and has nothing left over', (await run()) === false && (await list()).settings.checking === false && (await W.pool.query('SELECT count(*)::int AS n FROM issue_signals')).rows[0].n === signalsBefore + 1);
+    ok('NEGATIVE CONTROL: with no request and a fresh check, the next pass reads nothing', (await run()) === false && (await W.pool.query('SELECT count(*)::int AS n FROM issue_signals')).rows[0].n === signalsBefore + 1);
 
     // ── row-level security ──────────────────────────────────────────────────────────────────────────────────────────────────
     const ordinary = await S.ordinary();

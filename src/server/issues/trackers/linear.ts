@@ -26,6 +26,17 @@ export async function findTeam(token: string, teamKey: string): Promise<{ id: st
   return t ? { id: String(t.id), key: String(t.key) } : null;
 }
 
+/** The ticket's URL is stored and shown as a link: only `https://linear.app/…` is kept (no other scheme, host or user info). */
+export function isLinearUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' && u.hostname === LINEAR_APP && !u.username && !u.password && !u.port;
+  } catch {
+    return false;
+  }
+}
+const LINEAR_APP = 'linear.app';
+
 export async function createIssue(token: string, teamId: string, title: string, description: string): Promise<{ ref: string; url: string }> {
   const body = await gql(
     token,
@@ -33,6 +44,6 @@ export async function createIssue(token: string, teamId: string, title: string, 
     { input: { teamId, title, description } },
   );
   const out = body.data?.issueCreate as { success?: boolean; issue?: { identifier?: unknown; url?: unknown } } | undefined;
-  if (!out?.success || typeof out.issue?.identifier !== 'string' || typeof out.issue.url !== 'string') throw new TrackerError('rejected');
+  if (!out?.success || typeof out.issue?.identifier !== 'string' || typeof out.issue.url !== 'string' || !isLinearUrl(out.issue.url)) throw new TrackerError('rejected');
   return { ref: out.issue.identifier, url: out.issue.url };
 }
