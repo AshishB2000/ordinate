@@ -133,7 +133,8 @@ const WRITE = JSON.stringify({
     const story2 = await W.as('boss', async () => (await stories.readStory(W.P, add2.body.storyId))?.rec);
     const t2 = (story2?.blocks ?? []).flatMap((b) => (b.kind === 'text' || b.kind === 'callout' ? [b.text] : []));
     const savedNames = await W.as('boss', async () => Promise.all((story2?.blocks ?? []).flatMap((b) => (b.kind === 'visual' ? [visuals.getVisual(W.P, (b as { visualId: string }).visualId).then((v) => v?.name ?? '')] : []))));
-    const everything = JSON.stringify([story2, savedNames]);
+    // Ids and timestamps are random hex and clock digits that can contain FIG by chance (a flake 1 run in ~5): strip them, search every other field.
+    const everything = JSON.stringify([story2, savedNames]).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, '<time>');
     ok('q5: the restricted figure appears NOWHERE in the Story (blocks, name) or in any saved visual\'s name', !everything.includes(FIG) && !everything.includes('4500'), everything.slice(0, 300));
     ok('q5: no model sentence is kept: summary (it cites nothing), every section\'s text (even the one citing only the open step) and the conclusion are the fixed line', ['SUMMARY_CANARY', 'OPEN_STEP_CANARY', 'RESTRICTED_CANARY', 'PLAIN_CANARY', 'CONCLUSION_CANARY'].every((c) => !everything.includes(c)) && t2.filter((t) => t === say.restrictedProse()).length === 5, JSON.stringify(t2));
     ok('q5: the caveats are the fixed line; the headings with a digit are "Finding n", the Story is named by the starter\'s question', !everything.includes('CAVEAT_CANARY') && t2.includes(say.restrictedCaveats().replace(/^/, '- ')) && t2.includes('## Finding 1') && t2.includes('## Finding 2') && t2.includes('## Plain data') && story2?.name === 'Orders versus plain', JSON.stringify([story2?.name, t2]));
