@@ -19,6 +19,7 @@ import { LinkCard } from './LinkCard';
 import { ResearchCard } from './research/ResearchCard';
 import { Thumbs } from './Thumbs';
 import { AddToTestsButton } from '../evals/AddToTests';
+import { ProposeDefinition } from './ProposeDefinition';
 import type { ChartAnswer } from './RequestDashboard';
 import s from './Dock.module.css';
 
@@ -168,6 +169,8 @@ export function Transcript({
           )}
           {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}
           {t.role === 'assistant' && t.suggest && <DidYouMean options={t.suggest.options} said={t.suggest.said} onPick={onFollowUp} />}
+          {/* A name nobody defined (a measure or a filter): anyone may ask for a definition; an editor reviews it (docs/metric-proposals). */}
+          {t.role === 'assistant' && t.define && threadId && <ProposeDefinition projectId={projectId} threadId={threadId} turnId={t.id} />}
           {/* Outcome E: the link the server checked, for an editor to add (./LinkCard). */}
           {t.role === 'assistant' && t.link && (
             <LinkCard projectId={projectId} link={t.link} question={turns[i - 1]?.role === 'user' ? turns[i - 1].text : ''} onAsk={onAsk} busy={!!pending} />

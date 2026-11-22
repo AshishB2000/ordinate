@@ -67,6 +67,8 @@ export interface VersionMeta {
   restoredFrom?: string;
   /** Who saved it (absent on saves from before it was kept). */
   by?: string;
+  /** Saved by approving an Assistant's proposal (src/server/proposals): how many questions needed it. */
+  proposal?: { asks: number };
   /** Dashboards: the first sheet's tiles on the 12-column grid. */
   thumb?: { x: number; y: number; w: number; h: number; type: string }[];
 }

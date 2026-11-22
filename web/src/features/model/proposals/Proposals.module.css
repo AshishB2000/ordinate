@@ -1,0 +1,105 @@
+/* Metric proposals: the queue under Data model, the card, and the Assistant's button. Tokens only; both themes. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  margin: var(--sp-16) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--t-13);
+  line-height: var(--lh-snug);
+  color: var(--muted);
+}
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--sp-16) var(--sp-24);
+  padding: var(--sp-16) var(--sp-20);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.card[data-state='approved'] { border-left-color: var(--ok, var(--accent)); }
+.card[data-state='declined'] { border-left-color: var(--border-2); }
+@container (max-width: 640px) { .card { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) { .card { grid-template-columns: minmax(0, 1fr); } }
+.main, .side { display: flex; flex-direction: column; gap: var(--sp-8); min-width: 0; }
+.head { display: flex; align-items: center; gap: var(--sp-8); flex-wrap: wrap; color: var(--muted); }
+.kind {
+  font-size: var(--t-12);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+}
+.need { margin-left: auto; font-size: var(--t-12); color: var(--muted); }
+.name { margin: 0; font-size: var(--t-17); letter-spacing: var(--tr-tight); color: var(--text); overflow-wrap: anywhere; }
+.def {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  font-family: var(--font-mono);
+  font-size: var(--t-13);
+  background: var(--surface-2, var(--bg));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  overflow-wrap: anywhere;
+}
+.on { font-size: var(--t-13); color: var(--muted); margin: 0; }
+.words { margin: 0; font-size: var(--t-14); line-height: var(--lh-snug); color: var(--text); }
+.aliases { margin: 0; font-size: var(--t-13); color: var(--muted); }
+.qs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-4); }
+.qs li { font-size: var(--t-13); color: var(--text); padding-left: var(--sp-12); border-left: 2px solid var(--border-2); overflow-wrap: anywhere; }
+.qLabel { font-size: var(--t-12); font-weight: 700; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); }
+.privacy { margin: 0; font-size: var(--t-12); color: var(--muted); }
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--surface-2, var(--bg));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+}
+.previewLabel { font-size: var(--t-12); color: var(--muted); }
+.figure { font-size: var(--t-24); font-weight: 600; letter-spacing: var(--tr-tight); font-variant-numeric: tabular-nums; color: var(--text); }
+.problem { margin: 0; font-size: var(--t-13); color: var(--error); }
+.actions { display: flex; gap: var(--sp-8); flex-wrap: wrap; margin-top: auto; }
+.form { display: flex; flex-direction: column; gap: var(--sp-8); }
+.field { display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--t-12); color: var(--muted); }
+.field input, .field textarea {
+  font: inherit;
+  font-size: var(--t-13);
+  color: var(--text);
+  padding: var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+}
+.field textarea { min-height: 64px; resize: vertical; }
+.mono { font-family: var(--font-mono); }
+.result { margin: 0; font-size: var(--t-13); color: var(--muted); }
+
+/* The Assistant's button under a refused answer. */
+.propose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  margin: var(--sp-8) 0 0;
+}
+.proposeNote { margin: 0; font-size: var(--t-12); color: var(--muted); max-width: 52ch; }
+.proposeDone { margin: var(--sp-8) 0 0; font-size: var(--t-13); color: var(--muted); }
+.proposeError { margin: var(--sp-4) 0 0; font-size: var(--t-13); color: var(--error); }

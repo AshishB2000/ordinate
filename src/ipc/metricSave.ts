@@ -104,7 +104,7 @@ async function mirrorReadOnly(projectId: string, m: metrics.Metric, raw: { defin
 }
 
 /** `metric:save`'s body: the reply. */
-export async function saveMetricChecked(projectId: string, input: unknown) { // the reply as it always was
+export async function saveMetricChecked(projectId: string, input: unknown, recordOpts: versions.RecordOpts = {}) { // the reply as it always was
   try {
     const raw: any = input && typeof input === 'object' ? input : {}; // any: the zod-checked input
     const checked = await metricProblem(projectId, raw);
@@ -116,7 +116,7 @@ export async function saveMetricChecked(projectId: string, input: unknown) { // 
       ...when,
     });
     if (!m) return { ok: false, error: msg.metricNotSaved() };
-    await versions.record(projectId, 'metric', m);
+    await versions.record(projectId, 'metric', m, recordOpts);
     return { ok: true, metric: m };
   } catch (err: any) { // any: whatever a store threw
     return { ok: false, error: err?.message || msg.metricSaveFailed() };

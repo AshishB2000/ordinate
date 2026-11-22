@@ -61,6 +61,7 @@ import { requests } from './requests';
 import { knowledge } from './knowledge';
 import { slack } from './slack';
 import { research } from './research';
+import { proposals } from './proposals';
 import { autopilot } from './autopilot';
 import { evals } from './evals';
 
@@ -125,6 +126,7 @@ export const contracts = {
   ...knowledge,
   ...slack,
   ...research,
+  ...proposals,
   ...autopilot,
   ...evals,
 } as const;

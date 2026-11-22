@@ -83,6 +83,8 @@ export interface Turn {
   outside?: { dataset: string };
   /** What a refused answer needs an editor to add first (src/ai/answerNeeds.ts): the reason Ask an editor carries. */
   needs?: 'link' | 'copy';
+  /** A measure or filter name nobody defined (src/ipc/answerCheck.ts): the turn offers "Propose a definition". */
+  define?: boolean;
   /** Outcome E for an editor: the link the server checked, which ./LinkCard offers to add. */
   link?: AnswerLink;
   /** Auto picked the agent that answered this: why, in the app's words (src/ai/routeTurn.ts). */
