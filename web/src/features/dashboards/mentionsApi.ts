@@ -53,11 +53,30 @@ export interface RequestRow {
   mine: boolean;
   seen: boolean;
 }
+/** A metric proposal (src/server/proposals/proposals.ts `ProposalRow`): an editor's open card, or an asker's outcome. */
+export interface ProposalRow {
+  projectId: string;
+  id: string;
+  kind: 'metric' | 'term';
+  name: string;
+  state: 'open' | 'approved' | 'declined';
+  decidedBy: string;
+  /** A decline's note. */
+  answer: string;
+  asks: number;
+  /** An asker's own first question ('' for an approver). */
+  question: string;
+  at: string;
+  /** The caller asked for it; else they may decide it. */
+  mine: boolean;
+  seen: boolean;
+}
 export interface MentionList {
   available: boolean;
   items: HomeMention[];
   asks: AskRow[];
   requests: RequestRow[];
+  proposals: ProposalRow[];
   /** The caller's unseen mentions and asks in the database (some may not be among `items` and `asks`). */
   unseen: number;
 }
@@ -82,7 +101,8 @@ export function useMentions(enabled = true) {
       const items = Array.isArray(r?.items) ? r.items : [];
       const asks = Array.isArray(r?.asks) ? r.asks : [];
       const requests = Array.isArray(r?.requests) ? r.requests : [];
-      return { available: r?.available === true, items, asks, requests, unseen: typeof r?.unseen === 'number' ? r.unseen : [...items, ...asks, ...requests].filter((m) => !m.seen).length };
+      const proposals = Array.isArray(r?.proposals) ? r.proposals : [];
+      return { available: r?.available === true, items, asks, requests, proposals, unseen: typeof r?.unseen === 'number' ? r.unseen : [...items, ...asks, ...requests, ...proposals].filter((m) => !m.seen).length };
     },
   });
 }

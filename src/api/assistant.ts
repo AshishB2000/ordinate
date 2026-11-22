@@ -70,6 +70,9 @@ export const assistant = {
       askId: Uuid.optional(),
       // The agent a conversation this ask STARTS is with; an existing one keeps its own (src/ipc/agentAsk.ts).
       agentId: Uuid.nullable().optional(),
+      // Auto (docs/agent-router): the conversation this ask starts (or one with no turns yet) is with the agent the router picks
+      // from the question, among the agents the caller may use. It may answer `choose` (two or three agents too close to tell).
+      auto: z.boolean().optional(),
       // "Not what I asked" on an answer from a verified question: the model takes the same question instead.
       skipVerified: z.boolean().optional(),
     }),

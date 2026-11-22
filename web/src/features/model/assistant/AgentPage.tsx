@@ -22,6 +22,8 @@ import { useEditGuard } from '../../editConflicts/useEditGuard';
 import { useShareTargets } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { useNavigation } from '../navigation';
+import { suitesKey } from '../../evals/api';
+import { TestsSection } from '../../evals/TestsSection';
 import { InstructionsEditor } from './InstructionsList';
 import { KnowledgeSection } from './KnowledgeSection';
 import { SlackChannels } from './SlackChannels';
@@ -130,6 +132,7 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
       if (r === null) return; // the conflict banner
       if (!r.ok) return setErrors({ [r.field ?? 'form']: r.error });
       await client.invalidateQueries({ queryKey: agentsKey(projectId) });
+      void client.invalidateQueries({ queryKey: suitesKey(projectId) }); // its tests may now be out of date: the Tests section says so
       if (isNew) onCreated(r.agent.id);
     } catch (err) {
       setErrors({ form: failure(err, 'The assistant could not be saved.') });
@@ -155,6 +158,7 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
     }
     if (!r.ok) return r.error || 'Could not save the instruction.';
     await client.invalidateQueries({ queryKey: agentsKey(projectId) });
+    void client.invalidateQueries({ queryKey: suitesKey(projectId) });
     return null;
   };
 
@@ -333,6 +337,8 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
       )}
 
       {row && <KnowledgeSection projectId={projectId} agentId={row.id} canEdit={canInstruct} instructionsId="agent-instructions-h" />}
+
+      {row && canInstruct && <TestsSection projectId={projectId} agentId={row.id} />}
 
       {asking && row && (
         <ConfirmDelete

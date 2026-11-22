@@ -54,6 +54,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'copilot:deleteThread': 'META',
   'copilot:history': 'EXPLICIT', // a kept answer card is sent only while the caller's row lock and hidden columns on its dataset match the ones it was computed under (src/ipc/answerSnapshots.ts); test-answerSnapshots
   'copilot:newThread': 'META',
+  'feedback:rate': 'META', // the caller's own answer turn gets a thumb and a reason code; the reply is that value: no row, label or figure
   'copilot:renameThread': 'META',
   'copilot:threads': 'META',
   'dashboard:asOfStamps': 'META',
@@ -207,6 +208,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'slack:myLink': 'META', // the caller's own Slack link: ids and a workspace name
   'slack:openQuestion': 'META', // where a Slack question lives (ids) and, for another member, the question's own words
   'slack:unlink': 'META', // removes the caller's own link; returns a count
+  'proposal:propose': 'META', // stores a checked draft (structure, never a row or figure) and the asker's question words; the model is told column names and types only, no value
   'research:card': 'DOOR', // a step's chart, drawn now for its starter through answer:card's handler, the SQL gate (storage net) or driversVizData: each takes the caller's row lock
   'research:get': 'EXPLICIT', // the starter's own run: specs, statuses, reasons and the report words written under THEIR access; hidden once a step's dataset is closed to them (shows()'s rule); never a step's facts
   'research:list': 'META', // the caller's own runs: ids, state, the question they typed

@@ -35,6 +35,8 @@ import { pageCsp } from '../published';
 import { readSettings, secretOf } from './settings';
 import { previewKey, readHeader, tokenFingerprint, verifyToken, MAX_TTL_SEC, type TokenRefusal } from './token';
 import { refusalCsp, refusalHtml } from './pages';
+import * as usage from '../autopilot/usage';
+import { performance } from 'node:perf_hooks';
 import {
   embedExpired, embedFailed, embedInvalid, embedNotFound, embedOrigin, embedPreviewOnly, embedRateLimited, embedRepublish, embedTooLong, embedUnavailable,
 } from '../embedMessages';
@@ -193,7 +195,10 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
         const dash = c.dash ?? site.config.dashboardIds[0];
         if (!dash || !site.config.dashboardIds.includes(dash)) return { missing: 'gone' as const };
         const { embedHtml } = require('../../publish/embedPage') as typeof import('../../publish/embedPage');
-        return embedHtml(site, dash, c);
+        const t0 = performance.now();
+        const built = await embedHtml(site, dash, c);
+        if ('html' in built) { usage.noteOpen('dashboard', site.projectId, dash, org); usage.noteCompute('dashboard', site.projectId, dash, performance.now() - t0, { org }); } // an embed read is an open, cached or not
+        return built;
       });
     } catch (err) {
       if (isRowPolicyError(err)) {

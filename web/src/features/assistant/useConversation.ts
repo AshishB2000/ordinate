@@ -17,7 +17,8 @@ import { rpc } from '../../api/client';
 import { useMe } from '../auth/api';
 import { useCanEdit } from '../projects/api';
 import { toast } from '../../ui/Toast';
-import { ask, deleteThread, newThread, UNTITLED, useAiStatus, useHistory, useVerifiedChips, type ActivityStep, type ConversationAgent, type SuggestedAction, type Turn } from './api';
+import { ask, deleteThread, newThread, UNTITLED, useAiStatus, useHistory, useVerifiedChips, type ActivityStep, type AgentChoice, type ConversationAgent, type SuggestedAction, type Turn } from './api';
+import { AUTO, isMarked, markAuto, useIsAuto } from './autoState';
 import { agentModel, usableAgents, useAgents, type AgentRow } from './agents';
 import type { Learn } from './DidYouMean';
 import { takePendingQuestion, takePendingSpec, useDockContext, useDockProject, usePendingQuestion, usePendingSpec, type DockContext, type HandedTo } from './dockState';
@@ -69,6 +70,8 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   const agents = usableAgents(agentList.data);
   // Before a conversation exists, the agent picked for the first one (else the preselected one answers it).
   const [draftAgent, setDraftAgent] = useState<{ projectId: string; id: string | null } | null>(null);
+  // Auto found two agents too close to tell for a question (docs/agent-router): the buttons asking which, with the question kept.
+  const [choice, setChoice] = useState<{ question: string; on: DockContext; options: AgentChoice[] } | null>(null);
   // The open thread, for the project it was opened in: another project starts on its own most recent.
   const [open, setOpen] = useState<OpenThread>(() => first ?? { projectId: null, id: '' });
   const threadId = open.id && (open.projectId === null || open.projectId === pid) ? open.id : '';
@@ -101,7 +104,12 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   const turns: Turn[] = history.data?.turns ?? [];
   // Who answers here: the conversation's own agent (rule 11) — or, with no conversation yet, the one it will start with.
   const stored: ConversationAgent = shownThread ? (history.data?.agent ?? null) : null;
-  const agentId = shownThread ? (stored?.id ?? null) : draftAgent && draftAgent.projectId === pid ? draftAgent.id : (agentList.data?.preselected ?? null);
+  // AUTO (docs/agent-router, Q3): a conversation with no turns yet, for a person who may use two or more agents, is asked with the
+  // router unless they picked an agent for it. It is the default: a new conversation, Home's ask bar, the first question.
+  const draftPicked = !!draftAgent && draftAgent.projectId === pid;
+  const markedAuto = useIsAuto(shownThread);
+  const auto = agents.length >= 2 && turns.length === 0 && (shownThread ? markedAuto : !draftPicked);
+  const agentId = auto ? null : shownThread ? (stored?.id ?? null) : draftAgent && draftPicked ? draftAgent.id : (agentList.data?.preselected ?? null);
   const agent: AgentRow | null = agents.find((x) => x.id === agentId) ?? null;
   // A conversation whose agent was deleted, or is no longer this person's: its questions go to the Project assistant (rule 12).
   const agentNote = stored && !agent ? noteFor(stored) : '';
@@ -239,6 +247,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   );
 
   function switchThread(id: string): void {
+    setChoice(null);
     setThreadId(id);
     setLastSteps(null);
     setGetData(false);
@@ -253,9 +262,11 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
       input.current?.focus();
       return;
     }
-    // With the agent answering here, while this person may still use it; else the one preselected for them.
-    const next = agent?.id ?? agentList.data?.preselected ?? null;
+    // Auto, for a person who may use two or more agents; else the agent answering here, while this person may still use it, else the one preselected for them.
+    const wantAuto = agents.length >= 2;
+    const next = wantAuto ? null : (agent?.id ?? agentList.data?.preselected ?? null);
     const id = await newThread(pid, next).catch(() => '');
+    if (wantAuto) markAuto(id);
     switchThread(id);
     setTurns([], id || null, refOf(next));
   }
@@ -265,9 +276,32 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     return row ? { id: row.id, name: row.name } : null;
   };
 
+  /** Deletes a conversation left behind, only if it still has no turns (another tab may have asked into it since). */
+  async function dropBlank(id: string): Promise<void> {
+    if (!pid || !id) return;
+    const h = (await rpc('copilot:history', { projectId: pid, threadId: id }).catch(() => null)) as { ok?: boolean; turns?: unknown[]; threadId?: string | null } | null;
+    if (h?.ok && h.threadId === id && h.turns?.length === 0) await deleteThread(pid, id).catch(() => false);
+  }
+
   /** Switching agents starts a new conversation with the one picked (rule 11); a blank one left behind is not kept. */
   async function pickAgent(id: string | null): Promise<void> {
-    if (!pid || pending || (id === agentId && !agentNote)) return;
+    if (!pid || pending) return;
+    setChoice(null);
+    if (id === AUTO) {
+      if (auto) return;
+      if (!shownThread) setDraftAgent(null); // the first question starts its conversation, routed
+      else if (turns.length === 0) markAuto(shownThread);
+      else {
+        const fresh = await newThread(pid, null).catch(() => '');
+        if (!fresh) return void toast('Could not switch the assistant. Try again.', { kind: 'error' });
+        markAuto(fresh);
+        switchThread(fresh);
+        setTurns([], fresh, null);
+      }
+      input.current?.focus();
+      return;
+    }
+    if (id === agentId && !agentNote && !auto) return;
     if (!shownThread) {
       setDraftAgent({ projectId: pid, id }); // the first question starts the conversation, with this agent
       input.current?.focus();
@@ -279,7 +313,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
       toast('Could not switch the assistant. Try again.', { kind: 'error' });
       return;
     }
-    if (blank) void deleteThread(pid, blank).catch(() => false);
+    if (blank) void dropBlank(blank);
     switchThread(tid);
     setTurns([], tid, refOf(id));
     input.current?.focus();
@@ -295,7 +329,26 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     }
     switchThread(tid);
     setTurns([], tid, null);
-    await send(question, context, tid, null);
+    await send(question, context, tid, null, false, false);
+  }
+
+  /**
+   * The same question, asked by one agent in a conversation of its own (a blank one left behind is not kept): "Change" under a
+   * routed answer, and a click on the agent buttons when Auto could not tell two apart (docs/agent-router).
+   */
+  async function askWith(question: string, id: string, on: DockContext = context): Promise<void> {
+    if (!pid || pending) return;
+    setChoice(null);
+    const blank = turns.length === 0 ? shownThread : '';
+    const tid = await newThread(pid, id).catch(() => '');
+    if (!tid) {
+      toast('Could not switch the assistant. Try again.', { kind: 'error' });
+      return;
+    }
+    if (blank) void dropBlank(blank);
+    switchThread(tid);
+    setTurns([], tid, refOf(id));
+    await send(question, on, tid, id, false, false);
   }
 
   /** "Not what I asked" under an answer from a verified question: the same words, for the model this time. */
@@ -308,15 +361,16 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
    * and `withAgent`, the conversation and its agent likewise (a conversation started this turn). `skipVerified`: "Not
    * what I asked" on a verified answer, so the model takes the same question.
    */
-  async function send(question: string, on: DockContext = context, into: string = shownThread, withAgent: string | null = agentId, skipVerified = false): Promise<void> {
+  async function send(question: string, on: DockContext = context, into: string = shownThread, withAgent: string | null = agentId, skipVerified = false, viaAuto: boolean = auto): Promise<void> {
     const q = question.trim();
     if (!q || !pid || pending) return;
+    setChoice(null);
     if (research.on) {
       // Deep research: a run in place of an ask (docs/deep-research). Its question and one research turn land in the conversation.
       setPending({ askId: crypto.randomUUID(), question: q, text: '', steps: [] });
       setHint('');
       setText('');
-      const r = await research.start(pid, q, into || undefined, withAgent).catch(() => ({ ok: false as const, error: 'Something went wrong. Try again.', notReady: false }));
+      const r = await research.start(pid, q, into || undefined, withAgent ?? (viaAuto ? (agentList.data?.preselected ?? null) : null)).catch(() => ({ ok: false as const, error: 'Something went wrong. Try again.', notReady: false }));
       setPending(null);
       if (r.ok) {
         setTurns(r.turns, r.threadId, into ? undefined : refOf(withAgent));
@@ -339,14 +393,21 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:'))); // last turn's proposal is superseded
     let r: Awaited<ReturnType<typeof ask>>;
     try {
-      // A first question asked before the agents are known (handed from Home, typed at once) waits for the preselection.
-      const answering = !into && agentList.isPending ? ((await agentList.refetch()).data?.preselected ?? null) : withAgent;
-      r = await ask(pid, on, q, into, askId, answering, skipVerified);
+      // A first question asked before the agents are known (handed from Home, typed at once) waits for them: the preselection, or
+      // whether this person has two or more agents, so that an Auto conversation is routed.
+      const waited = agentList.isPending && (!into || isMarked(into)) ? (await agentList.refetch()).data : undefined;
+      const routed = viaAuto || (!!waited && usableAgents(waited).length >= 2 && (into ? true : !draftPicked));
+      const answering = !into && waited ? (waited.preselected ?? null) : withAgent;
+      r = await ask(pid, on, q, into, askId, answering, skipVerified, routed);
     } catch {
       r = { ok: false, error: 'Something went wrong. Try again.' };
     }
     const steps = pendingRef.current?.askId === askId ? pendingRef.current.steps : [];
     setPending(null);
+    if (r.ok && 'choose' in r) {
+      setChoice({ question: q, on, options: r.choose }); // nothing was asked: the person picks, and the click asks it
+      return;
+    }
     if (r.ok) {
       setTurns(r.turns, r.threadId, r.agent);
       const answered = r.turns.findLast((t) => t.role === 'assistant');
@@ -374,12 +435,16 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   async function followUp(spec: Record<string, unknown>, label: string, learn?: Learn): Promise<void> {
     if (!pid) return;
     // The first answer of all (a verified chip in the empty state) starts its conversation with the agent shown.
-    const into = shownThread || (agentId ? await newThread(pid, agentId).catch(() => '') : '');
+    // In Auto no agent is picked: a chip is not routed (there is no question to read), so it starts with the preselected one, as deep research does.
+    const chipAgent = auto ? (agentList.data?.preselected ?? null) : agentId;
+    const fresh = chipAgent !== null && (!shownThread || auto);
+    const into = fresh ? await newThread(pid, chipAgent).catch(() => '') : shownThread;
+    if (fresh && into && shownThread) void dropBlank(shownThread);
     const r = (await rpc('answer:rerun', { projectId: pid, ...(into ? { threadId: into } : {}), spec: spec as { datasetId: string }, label, ...(learn ? { learn } : {}) }).catch(() => null)) as
       | { ok: true; turns: Turn[]; threadId: string | null }
       | { ok: false; reason?: string }
       | null;
-    if (r && r.ok) setTurns(r.turns, r.threadId, into && !shownThread ? refOf(agentId) : undefined);
+    if (r && r.ok) setTurns(r.turns, r.threadId, fresh && into ? refOf(chipAgent) : undefined);
     else toast((r && !r.ok && r.reason) || 'Could not run that follow-up.', { kind: 'error' });
   }
 
@@ -440,6 +505,10 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     agentNote,
     fixedModel,
     pickAgent,
+    auto,
+    choice,
+    setChoice,
+    askWith,
     askProject,
     chips,
     prompts,

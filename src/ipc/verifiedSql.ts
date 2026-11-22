@@ -109,7 +109,7 @@ export async function sqlRows(projectId: string, list: ReadonlyArray<{ rec: Veri
  * `{ ok: false }` with the reason and falls no further, as a chart's hit does. No model call, no words of the model.
  * Over Live it is translated again for the caller and printed under their lock (F4): their own statement and cache entry.
  */
-export async function verifiedSqlAsk(projectId: string, hit: VerifiedSqlQuestion, question: string, target: () => Promise<string | undefined>, note: string | null) {
+export async function verifiedSqlAsk(projectId: string, hit: VerifiedSqlQuestion, question: string, target: () => Promise<string | undefined>, note: string | null, route?: { why: string }) {
   if ((await sqlProblem(projectId, hit, false)) !== null) return null;
   const live = !!(await liveOf(projectId, hit));
   // The caller may not read a dataset whole: the gate's refusal is theirs, said as the gate says it. Else a failure is a breakage.
@@ -124,7 +124,7 @@ export async function verifiedSqlAsk(projectId: string, hit: VerifiedSqlQuestion
   const snapshot = await sqlSnapshotFor(projectId, run.card, sql);
   const tid = await target();
   await copilot.appendTurn(projectId, { role: 'user', text: question }, tid);
-  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance, sql, ...(snapshot ? { snapshot } : {}), guidance }, tid);
+  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance, sql, ...(snapshot ? { snapshot } : {}), guidance, ...(route ? { route } : {}) }, tid);
   return {
     ok: true as const, answer: text, provenance, turns: await turnsForBrowser(projectId, turns || []), threadId: tid || null,
     suggestedAction: NO_ACTION, ledger: [], numberAudit: { ok: true as const, violations: [] }, guidance,

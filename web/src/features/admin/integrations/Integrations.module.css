@@ -1,0 +1,20 @@
+/* Admin → Integrations: one card per tracker, in the Admin language. Tokens only, so both themes follow. */
+
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-16); align-items: start; }
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card { display: flex; flex-direction: column; gap: var(--sp-12); padding: var(--sp-16); background: var(--surface-1); border: 1px solid var(--border-hairline); border-radius: var(--r-lg); min-width: 0; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); }
+.title { margin: 0; display: inline-flex; align-items: center; gap: var(--sp-8); font-size: var(--t-15); font-weight: 600; color: var(--text-strong); }
+.lead { margin: 0; color: var(--muted); font-size: var(--t-13); line-height: var(--lh-body); max-width: 72ch; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-12); }
+@media (max-width: 700px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.wide { grid-column: 1 / -1; }
+.kv { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-4) var(--sp-16); font-size: var(--t-13); }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; color: var(--text-strong); overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-12); }
+.note { display: flex; align-items: flex-start; gap: var(--sp-8); margin: 0; font-size: var(--t-12); line-height: var(--lh-snug); color: var(--muted); }
+.note > svg { flex: none; margin-top: 2px; }
+.problem { margin: 0; font-size: var(--t-13); color: var(--error-text); }
+.form { display: flex; flex-direction: column; gap: var(--sp-12); }
+.pair { display: contents; }

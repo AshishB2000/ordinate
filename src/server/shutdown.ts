@@ -29,6 +29,7 @@ import * as jobs from '../app/jobs';
 import { appPool, background } from './app';
 import { abortRequests, Restarting, settleWork, startDraining } from './lifecycle';
 import { restartedWhileRunning } from './lifecycleMessages';
+import { stopUsage } from './autopilot/usage';
 
 /** Resolves with `p`'s value, or undefined at `deadlineAt` — whichever is first. */
 function capped<T>(p: Promise<T>, deadlineAt: number): Promise<T | undefined> {
@@ -76,6 +77,7 @@ export async function shutdown(app: FastifyInstance, budgetMs: number, log: Fast
     await capped(closed, at(0.8));
   });
   await step('detached', () => capped(settleWork(), at(0.8)));
+  await step('usage', () => capped(stopUsage(), at(0.85))); // Autopilot's last batch, before the pool ends
   duck.interruptAll();
   let survivors: string[] = [];
   await step('duckdb', async () => {

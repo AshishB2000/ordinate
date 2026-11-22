@@ -44,6 +44,8 @@ export interface VersionFile {
   by?: string;
   /** A dashboard's Publish, Unpublish or Discard edits (analysis/publishedCopy.ts), or a status change: recorded even when the content did not move. */
   event?: VersionEvent;
+  /** The save an editor made by approving an Assistant's proposal (src/server/proposals): how many questions needed it. Worded by the page. */
+  proposal?: { asks: number };
   // ponytail: content of one of five record shapes; its own store re-sanitizes on restore
   record: Record<string, any>;
 }
@@ -62,6 +64,7 @@ export interface VersionMeta {
   restoredFrom?: string;
   by?: string;
   event?: VersionEvent;
+  proposal?: { asks: number };
   /** Dashboards only: the first sheet's tiles as {x,y,w,h,type} — enough to
    *  draw a thumbnail of the layout without shipping every card. */
   thumb?: Array<{ x: number; y: number; w: number; h: number; type: string }>;
@@ -148,6 +151,8 @@ function savedBy(): string | undefined {
 export interface RecordOpts {
   restoredFrom?: string;
   by?: string;
+  /** Marks the save as an approved proposal (see VersionFile). */
+  proposal?: { asks: number };
   /** Written even when the content equals the newest version's; the summary names the event. */
   event?: VersionEvent;
   now?: Date;
@@ -193,6 +198,7 @@ async function write(
     if (opts.restoredFrom) file.restoredFrom = opts.restoredFrom;
     if (opts.by) file.by = opts.by;
     if (opts.event) file.event = opts.event;
+    if (opts.proposal) file.proposal = { asks: Math.max(0, Math.floor(opts.proposal.asks)) };
 
     await fs.promises.mkdir(dir, { recursive: true });
     const target = path.join(dir, key + '.json');
@@ -217,6 +223,7 @@ function toMeta(type: string, key: string, f: VersionFile): VersionMeta {
   if (f.restoredFrom) meta.restoredFrom = f.restoredFrom;
   if (f.by) meta.by = f.by;
   if (f.event) meta.event = f.event;
+  if (f.proposal) meta.proposal = f.proposal;
   if (type === 'dashboard') {
     const first = Array.isArray(f.record.sheets) ? f.record.sheets[0] : null;
     const cards = first && Array.isArray(first.cards) ? first.cards : [];

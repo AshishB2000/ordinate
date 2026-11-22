@@ -40,7 +40,7 @@ export type MetricCheckReply = Omit<MetricCheck, 'code'> & {
 };
 
 /** Every other metric of the project, with the metric names its formula references. */
-async function knownMetrics(projectId: string, exceptId: string | undefined): Promise<Map<string, KnownMetric>> {
+export async function knownMetrics(projectId: string, exceptId: string | undefined): Promise<Map<string, KnownMetric>> {
   const columnsOf = new Map<string, string[]>();
   const out = new Map<string, KnownMetric>();
   for (const [key, m] of await metrics.metricsByName(projectId)) {
