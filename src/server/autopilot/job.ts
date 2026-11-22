@@ -39,7 +39,7 @@ export async function weeklyForOrg(now: Date, stopAt = Infinity): Promise<boolea
 }
 
 /** "Run now": the same body at once, as a manual run. Returns the run's id, or null when it failed to start. */
-export async function runNow(projectId: string): Promise<string | 'busy' | null> {
+export async function runNow(projectId: string): Promise<string | null> {
   const s = await store.getSettings(projectId);
   const runId = await store.startManual(projectId, s.windowDays);
   if (runId === null) return 'busy'; // a run of this project is going: a double click, a second admin, or the weekly tick

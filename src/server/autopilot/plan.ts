@@ -113,7 +113,7 @@ export function planRun(i: PlanIn): Plan {
       for (const column of otherColumns(v.encoding)) if (!d.columns.includes(column) || d.missing.includes(column)) if (!left.some((l) => l.column === column) && !fixes.some((f) => f.from === column)) left.push({ column, why: 'other_fields' });
       if (fixes.length) {
         const after = repairedDefinition(v, new Map(fixes.map((f) => [f.from, f.to])));
-        for (const f of [...fixes]) {
+        for (const f of fixes.slice()) {
           if (namesString(after.encoding, f.from) || namesString(v.overrides, f.from) || namesString(v.analytics, f.from) || otherColumns(v.encoding).includes(f.from)) {
             fixes.splice(fixes.indexOf(f), 1);
             left.push({ column: f.from, why: 'other_fields', suggest: f.to });
