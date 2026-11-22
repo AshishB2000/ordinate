@@ -74,7 +74,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       datasets.add(v.datasetId);
       // The share path: what goes into a file is shaped by the project's Share policy.
       return call(event, 'visual:data', {
-        projectId, datasetId: v.datasetId, encoding: v.encoding, filters, params, ...(share ? { share: 'report' } : {}),
+        projectId, datasetId: v.datasetId, encoding: v.encoding, filters, params, visualId: v.id, ...(share ? { share: 'report' } : {}), // visualId: a Story or report reads this chart (Autopilot), and a waterfall gets its stored totals as a tile does
         ...(Array.isArray(v.analytics) && v.analytics.length ? { analytics: v.analytics } : {}),
         ...figureAsk(v.chartType, v.overrides), // what the page draws it as: its figures, and its caption's
       });

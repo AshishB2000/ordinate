@@ -300,6 +300,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
       if (isDraining()) return;
+      await (require('./autopilot/usage') as typeof import('./autopilot/usage')).stopUsage();
       await researchWorker?.stop();
       await slackWorker?.stop();
       await jobs?.stop();

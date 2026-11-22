@@ -29,6 +29,7 @@ import { asPublished, statusOf, visualOfCard } from '../analysis/publishedCopy';
 import { metaOf } from '../analysis/publishDashboard';
 import { contentTag } from '../app/editConflict';
 import { ROW_POLICY_CODE } from '../data/rowPolicyError';
+import * as usage from '../server/autopilot/usage';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -97,7 +98,7 @@ export function register(): void {
 
   // ponytail: every visual of the project, with its definition — a few KB each.
   // Page by the cards' ids if a project ever holds thousands.
-  ipcMain.handle('analysis:open', async (_e, { projectId, id, published }: any = {}) => {
+  ipcMain.handle('analysis:open', usage.openWhenOk('dashboard', async (_e, { projectId, id, published }: any = {}) => {
     // The dashboard and its stored tag, from one read: the editor's base (src/app/editConflict.ts).
     // In a folder the caller cannot open: exactly a missing id (docs/team-folders D12; the page asks folder:of).
     const t = (await analysis.opensDashboard(projectId, id)) ? await analysis.readAnalysis(projectId, id) : null;
@@ -137,7 +138,7 @@ export function register(): void {
     // A restricted caller's tags are of what they were sent (rowDoors.tagForCaller), the dashboard's too.
     const board = await dashboardForCaller(projectId, draft);
     return { ok: true, analysis: board, visuals: defs, tag: await tagForCaller(projectId, 'dashboard', board, t.tag), ...about };
-  });
+  }));
 
   // `share` (server-side callers only — a report, a send): every answer is about to leave the app, shaped by the Share policy.
   ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items, share }: any = {}) =>
