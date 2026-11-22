@@ -73,6 +73,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'copilot:deleteThread': 'OWN',
   'copilot:history': 'ASK', // E4: an answer on a closed dataset and its question are not sent (src/ipc/turnsOpen.ts)
   'copilot:newThread': 'OWN',
+  'feedback:rate': 'OWN', // the caller's own answer turn, one the folders show them (openTurns); never another's
   'copilot:renameThread': 'OWN',
   'copilot:threads': 'OWN', // E4: a title taken from such a question reads untitled
   'dashboard:asOfStamps': 'FIGURE',
@@ -223,6 +224,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'slack:myLink': 'OWN', // the caller's own Slack link
   'slack:openQuestion': 'OWN', // the caller's own Slack question (a channel question's words for anyone who may ask in its project)
   'slack:unlink': 'OWN',
+  'proposal:propose': 'FOLDER', // the caller's own refused turn; the model is told only datasets the caller opens; tells those with Edit on the dataset
   'research:card': 'FIGURE', // a door per step kind (answer:card, the SQL gate, driversVizData): the dataset open or reached
   'research:get': 'ITEM', // the starter's own run; not found once a dataset a computed step read is closed to them (src/server/research/rpc.ts, the rule of src/ipc/turnsOpen.ts)
   'research:list': 'OWN', // the caller's own runs
@@ -251,10 +253,27 @@ export const READS: Readonly<Record<string, FolderClass>> = {
 
 export const WRITES: Readonly<Record<string, FolderClass>> = {
   'agent:instructions': 'PROJECT',
+  'proposal:approve': 'FOLDER', // Edit on the dataset the draft is about (mustEdit); the save is the checked metric or term save, which holds Edit on the dataset's folder again
+  'proposal:decline': 'FOLDER', // Edit on the dataset the draft is about
+  'proposal:list': 'FOLDER', // only the proposals whose dataset the caller edits; structure only, no figure
   'research:addToProject': 'CREATE', // saves each cited chart as a visual and makes a Story: Edit on the target folder (answer:saveVisual's and story:create's rules)
   'research:resume': 'OWN', // the caller's own run, queued again
   'research:start': 'OWN', // the caller's own run and conversation turn; its steps run through the doors, as the starter
   'research:stop': 'OWN', // the caller's own run
+  'feedback:inbox': 'LIST', // a thumbs-down's question (Q1), never the answer; one whose answer showed a dataset or dashboard closed to the caller is left out (turnsOpen's rule, stored on the row)
+  'feedback:dismiss': 'ITEM', // as missing for an inbox item closed to the caller
+  'eval:suites': 'LIST', // a case whose spec reads a dataset closed to the caller is left out of its counts (src/server/evals/view.ts caseGate)
+  'eval:cases': 'LIST', // as verified:list: a case on a closed dataset is left out
+  'eval:caseSave': 'PROJECT', // a typed case: words or "should refuse", no dataset
+  'eval:caseDelete': 'PROJECT',
+  'eval:caseFrom': 'PROJECT', // a suite is project-level; the source is read under the caller's folders (listBoth, openTurns, caseGate): a closed dataset's answer cannot become a case
+  'eval:suiteSave': 'PROJECT',
+  'eval:suiteDelete': 'PROJECT',
+  'eval:runStart': 'OWN', // the caller's own run: every case is asked and computed as them, through the doors
+  'eval:runResume': 'OWN',
+  'eval:runStop': 'PROJECT', // any editor may stop a run: it exposes nothing
+  'eval:runGet': 'LIST', // each case's outcome, closed-dataset cases left out; the answer's words only for the runner, and only while the data is open to them
+  'eval:runList': 'LIST', // runs of the project; the counts are of the cases the caller may open
   'knowledge:save': 'PROJECT', // project-level prose: no folder
   'knowledge:upload': 'PROJECT',
   'knowledge:delete': 'PROJECT',
@@ -439,4 +458,8 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'visual:duplicate': 'CREATE',
   'visual:save': 'CREATE',
   'visual:update': 'EDIT',
+  'issues:list': 'LIST', // an issue with any signal on a dataset or dashboard closed to the caller is left out whole (its title was written from every question); examples are question words, never an answer, figure or asker (src/server/issues/board.ts)
+  'issues:setStatus': 'ITEM', // as missing for an issue closed to the caller
+  'issues:propose': 'ITEM', // as missing for a closed issue; #7's proposeFromQuestions is told only the open questions, and only datasets the caller opens
+  'issues:send': 'ITEM', // as missing for a closed issue; the ticket is the title, the counts, the fix and a link: no question text
 };

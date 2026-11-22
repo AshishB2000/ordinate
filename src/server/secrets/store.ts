@@ -22,7 +22,7 @@ import { createCipheriv, createDecipheriv, createHash, createSecretKey, randomBy
 import type { Pool } from 'pg';
 
 // Bound into every row's AAD: a kind is never renamed, only appended.
-export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook', 'embed.signing', 'privacy.salt', 'slack.botToken', 'slack.signingSecret', 'slack.clientSecret', 'slack.appToken'] as const;
+export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook', 'embed.signing', 'privacy.salt', 'slack.botToken', 'slack.signingSecret', 'slack.clientSecret', 'slack.appToken', 'tracker.token'] as const;
 export type SecretKind = (typeof SECRET_KINDS)[number];
 
 export interface SecretStore {

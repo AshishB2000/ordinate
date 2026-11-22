@@ -49,6 +49,7 @@ export async function dropGrants(projectId: string): Promise<void> {
     await inOrg(async (c, org) => {
       await c.query('DELETE FROM team_tables WHERE org_id = $1 AND project_id = $2', [org, projectId]);
       await c.query('DELETE FROM dashboard_requests WHERE org_id = $1 AND project_id = $2', [org, projectId]);
+      await c.query('DELETE FROM metric_proposals WHERE org_id = $1 AND project_id = $2', [org, projectId]); // its asks and bell rows go with it
     });
   }
 }

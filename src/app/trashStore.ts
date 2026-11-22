@@ -29,7 +29,14 @@ export interface TrashEntry {
   deletedAt: string;
   /** The record whose delete took this one along — a dataset's visuals. */
   deletedWith?: string;
+  /** Kept this many days instead of the usual 30 (Autopilot's moves: 90). */
+  keepDays?: number;
+  /** Why it is here, when something other than a person's delete put it here: `{ kind: 'autopilot', days, by }`. */
+  reason?: TrashReason;
 }
+
+/** Autopilot's move: not opened for `days` days, done as `by`. The web words it. */
+export interface TrashReason { kind: 'autopilot'; days: number; by: string }
 
 export function trashDir(projectId: string, type?: RecordType): string {
   const base = projectDir(projectId);
@@ -71,12 +78,14 @@ export async function stash(
   id: string,
   // ponytail: any record shape — trash keeps it verbatim plus two stamps
   record: any,
-  opts: { deletedWith?: string; now?: Date } = {},
+  opts: { deletedWith?: string; now?: Date; keepDays?: number; reason?: TrashReason } = {},
 ): Promise<boolean> {
   const file = entryPath(projectId, type, id);
   if (!file || !record || typeof record !== 'object') return false;
   const out = { ...record, deletedAt: (opts.now || new Date()).toISOString() };
   if (opts.deletedWith && isValidId(opts.deletedWith)) out.deletedWith = opts.deletedWith;
+  if (Number.isInteger(opts.keepDays) && (opts.keepDays as number) > 0) out.keepDays = opts.keepDays;
+  if (opts.reason) out.reason = opts.reason;
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await writeJsonAtomic(file, out);
   return true;
@@ -144,6 +153,9 @@ export async function listEntries(projectId: string): Promise<TrashEntry[]> {
         deletedAt: rec.deletedAt,
       };
       if (typeof rec.deletedWith === 'string') entry.deletedWith = rec.deletedWith;
+      if (Number.isInteger(rec.keepDays) && rec.keepDays > 0) entry.keepDays = rec.keepDays;
+      const why = rec.reason;
+      if (why && why.kind === 'autopilot' && Number.isInteger(why.days) && typeof why.by === 'string') entry.reason = { kind: 'autopilot', days: why.days, by: why.by };
       out.push(entry);
     }
   }

@@ -48,6 +48,8 @@ export interface TrashItem {
   deletedAt: string;
   /** The dataset whose delete took this visual along. */
   deletedWith?: string;
+  /** Autopilot moved it (docs/autopilot): not opened for `days` days, done as `by`. */
+  reason?: { kind: 'autopilot'; days: number; by: string };
   daysLeft: number;
 }
 
@@ -65,6 +67,8 @@ export interface VersionMeta {
   restoredFrom?: string;
   /** Who saved it (absent on saves from before it was kept). */
   by?: string;
+  /** Saved by approving an Assistant's proposal (src/server/proposals): how many questions needed it. */
+  proposal?: { asks: number };
   /** Dashboards: the first sheet's tiles on the 12-column grid. */
   thumb?: { x: number; y: number; w: number; h: number; type: string }[];
 }

@@ -50,16 +50,16 @@ export function verifiedMatch(projectId: string, question: string, scope: Readon
  */
 export async function verifiedAsk(
   projectId: string, question: string, target: () => Promise<string | undefined>,
-  scope: { only: ReadonlySet<string> | null; note: string | null } = { only: null, note: null },
+  scope: { only: ReadonlySet<string> | null; note: string | null; route?: { why: string } } = { only: null, note: null },
 ) {
   const hit = await verifiedMatch(projectId, question, scope.only);
   if (!hit) return null;
-  if (isSqlQuestion(hit)) return verifiedSqlAsk(projectId, hit, question, target, scope.note); // its SQL again, through the gate, for this caller
+  if (isSqlQuestion(hit)) return verifiedSqlAsk(projectId, hit, question, target, scope.note, scope.route); // its SQL again, through the gate, for this caller
   const built = await computeCard(projectId, hit.spec);
   if ('ok' in built) return { ok: false as const, error: built.reason };
   const guidance: TurnGuidance = { verifiedId: hit.id, instructions: 0, examples: [] };
   const text = scope.note ?? '';
-  const r = await appendAnswer(projectId, await target(), question, text, built, built.card.spec, undefined, guidance);
+  const r = await appendAnswer(projectId, await target(), question, text, built, built.card.spec, undefined, guidance, scope.route);
   return {
     ok: true as const, answer: text, provenance: built.provenance, turns: r.turns, threadId: r.threadId,
     suggestedAction: NO_ACTION, ledger: built.ledger, numberAudit: { ok: true as const, violations: [] }, guidance,

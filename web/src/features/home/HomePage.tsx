@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
 import { ASSISTANT_PATH } from '../assistant/DockParts';
+import { markAuto } from '../assistant/autoState';
 import { askOnPage, pickDockProject, runOnPage } from '../assistant/dockState';
 import { useMe } from '../auth/api';
 import { useCanEdit } from '../projects/api';
@@ -78,7 +79,9 @@ export default function HomePage() {
   // Which Assistant answers (docs/assistant-agents): the one preselected for this person until they pick another.
   const agentList = useAgents(projectId);
   const [picked, setPicked] = useState<{ projectId: string; id: string | null } | null>(null);
-  const agentId = picked && picked.projectId === projectId ? picked.id : (agentList.data?.preselected ?? null);
+  // Auto (docs/agent-router, Q3) is the default for a person who may use two or more agents: the router picks from the question.
+  const auto = usableAgents(agentList.data).length >= 2 && !(picked && picked.projectId === projectId);
+  const agentId = auto ? null : picked && picked.projectId === projectId ? picked.id : (agentList.data?.preselected ?? null);
   // Building is offered only to an editor; asking is anyone's. An agent's suggestions are its topic's datasets (as in the
   // composer): one outside it is the Project assistant's.
   const topic = usableAgents(agentList.data).find((x) => x.id === agentId)?.topic;
@@ -88,8 +91,11 @@ export default function HomePage() {
   const openNew = async () => {
     if (projectId) pickDockProject(projectId);
     // Asked before the agents are known: wait for them, so the preselected one starts it.
-    const agent = agentList.isPending && projectId && picked?.projectId !== projectId ? ((await agentList.refetch()).data?.preselected ?? null) : agentId;
+    const waited = agentList.isPending && projectId && picked?.projectId !== projectId ? (await agentList.refetch()).data : undefined;
+    const wantAuto = waited ? usableAgents(waited).length >= 2 : auto;
+    const agent = wantAuto ? null : waited ? (waited.preselected ?? null) : agentId;
     const id = projectId ? await newThread(projectId, agent).catch(() => '') : '';
+    if (wantAuto && id) markAuto(id); // the Assistant routes the question handed over, as a new conversation of its own does
     void navigate(id ? `${ASSISTANT_PATH}?thread=${id}` : ASSISTANT_PATH);
   };
   // Asked on the Assistant's own page, full width. A suggestion points it at the dataset it names, in Home's project.
@@ -125,6 +131,8 @@ export default function HomePage() {
         agents={usableAgents(agentList.data)}
         agentId={agentId}
         onAgent={(id) => projectId && setPicked({ projectId, id })}
+        auto={auto}
+        onAuto={() => setPicked(null)}
       />
       <YourNumbers projectId={projectId} />
       <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />

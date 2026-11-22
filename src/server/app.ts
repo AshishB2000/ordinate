@@ -227,6 +227,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     let sweep: { stop(): void } | null = null;
     let slackWorker: { stop(): Promise<void> } | null = null;
     let researchWorker: { stop(): Promise<void> } | null = null;
+    let evalWorker: { stop(): Promise<void> } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -268,6 +269,14 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // Deep research: its runs are rows (0043), the worker below claims them; a job per org sweeps the runs of people who left and old unadded ones.
       (require('./research/db') as typeof import('./research/db')).useResearchDb(pool);
       (require('./research/sweep') as typeof import('./research/sweep')).wireResearchSweep();
+      // Autopilot's weekly job, once per org (docs/autopilot): it acts as the admin who switched it on.
+      (require('./autopilot/job') as typeof import('./autopilot/job')).wireAutopilot();
+      // Evaluation suites (0045): suites, cases, runs and thumbs are rows; the worker below claims runs; a job per org sweeps what a crash left.
+      (require('./evals/db') as typeof import('./evals/db')).useEvalsDb(pool);
+      (require('./evals/sweep') as typeof import('./evals/sweep')).wireEvalSweep();
+      // The issues board (0048): its weekly check is a job per org (off until a project admin turns it on); Linear and Jira tokens go to the encrypted store.
+      (require('./issues/weekly') as typeof import('./issues/weekly')).wireIssuesJob();
+      (require('./issues/trackers/tokens') as typeof import('./issues/trackers/tokens')).useTrackerSecrets(cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
       // The org's settings document is a row every pod reads, not a file on this pod's disk (0014).
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
@@ -294,13 +303,17 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       slackWorker = (require('./slack/worker') as typeof import('./slack/worker')).startSlackWorker(app.log);
       researchWorker = (require('./research/worker') as typeof import('./research/worker')).startResearchWorker(app.log);
       const slack = slackWorker;
+      evalWorker = (require('./evals/worker') as typeof import('./evals/worker')).startEvalWorker(app.log);
       const research = researchWorker;
-      bg = { runner: { stop: async () => { await research?.stop(); await jobs?.stop(); await slack?.stop(); } }, bus, sweep }; // the shutdown stops the Slack and research workers with the runner
+      const evals = evalWorker;
+      bg = { runner: { stop: async () => { await evals?.stop(); await research?.stop(); await jobs?.stop(); await slack?.stop(); } }, bus, sweep }; // the shutdown stops the Slack, research and evaluation workers with the runner
     });
     // An app closed on its own (the tests) stops its runner and bus here. A
     // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
       if (isDraining()) return;
+      await evalWorker?.stop();
+      await (require('./autopilot/usage') as typeof import('./autopilot/usage')).stopUsage();
       await researchWorker?.stop();
       await slackWorker?.stop();
       await jobs?.stop();
@@ -324,6 +337,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useEmbedDb(null, null);
       (require('./slack/db') as typeof import('./slack/db')).useSlackDb(null, null);
       (require('./research/db') as typeof import('./research/db')).useResearchDb(null);
+      (require('./evals/db') as typeof import('./evals/db')).useEvalsDb(null);
+      (require('./issues/trackers/tokens') as typeof import('./issues/trackers/tokens')).useTrackerSecrets(null);
       useAiKeys(null, null);
       (require('./subscriptions/job') as typeof import('./subscriptions/job')).unwireSubscriptions();
       orgConfig.useOrgConfig(null);
@@ -714,4 +729,12 @@ export function registerHandlers(): void {
   (require('./slack/rpc') as typeof import('./slack/rpc')).register();
   // Deep research (docs/deep-research): start, watch, stop, resume and add a run to the project; the org's limits.
   (require('./research/rpc') as typeof import('./research/rpc')).register();
+  // Evaluation suites (docs/eval-suites): thumbs, the inbox, suites and cases, runs, the Judge model.
+  (require('./evals/rpc') as typeof import('./evals/rpc')).register();
+  // Metric proposals (docs/metric-proposals): a refused answer's missing metric or term, drafted, reviewed by an editor.
+  (require('./proposals/rpc') as typeof import('./proposals/rpc')).register();
+  // The data issues board (docs/issues-board): the board, proposals from it, tickets to Linear and Jira.
+  (require('./issues/rpc') as typeof import('./issues/rpc')).register();
+  // Autopilot (docs/autopilot): per-project settings, the weekly run's reports, Run now and Undo.
+  (require('./autopilot/rpc') as typeof import('./autopilot/rpc')).register();
 }

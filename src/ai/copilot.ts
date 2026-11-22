@@ -27,6 +27,9 @@
 // component and needs no second guard.
 
 import { sanitizeResearch, type ResearchRef } from './researchTurn';
+import { sanitizeFeedback, type Feedback } from './feedback';
+import { sanitizeIds, sanitizeOutside } from './turnFields';
+import { sanitizeRoute, type RouteNote } from './routeTurn';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -90,6 +93,8 @@ export interface CopilotTurn {
   /** What a refused answer needs an editor to add (./answerNeeds): Ask an editor's reason, and outcome E's checked link. Never beside `answer`. */
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
+  /** A refused chart whose measure or filter name nobody defined (docs/metric-proposals): the turn offers "Propose a definition". Never beside `answer`. */
+  define?: true;
   /**
    * The datasets this answer's facts were built from (copilot:ask; a turn stored before it has none), so ../ipc/turnsOpen
    * hides its words, prose with no chart included, from a caller one is closed to. SERVER ONLY: `turnsForBrowser` drops it.
@@ -99,6 +104,10 @@ export interface CopilotTurn {
   dashboardsFrom?: string[];
   /** A deep-research run's turn (./researchTurn): the run id. Its text is a fixed sentence; the card reads the rest from research:get. */
   research?: ResearchRef;
+  /** The asker's thumbs up or down (./feedback, ./copilotFeedback): a value and a reason code, never words of the answer. */
+  feedback?: Feedback;
+  /** Auto picked the agent that answered: why, in the app's words (./routeTurn). Assistant turns only. */
+  route?: RouteNote;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -149,9 +158,11 @@ export interface NewCopilotTurn {
   outside?: { dataset: string };
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
+  define?: true;
   factsFrom?: string[];
   dashboardsFrom?: string[];
   research?: ResearchRef;
+  route?: RouteNote;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -252,19 +263,6 @@ function normalizeProvenance(p: any): CopilotProvenance | undefined {
   return prov;
 }
 
-/** A dataset name the out-of-scope card names: one line, as a dataset's name is cut. */
-function sanitizeOutside(raw: unknown): { dataset: string } | undefined {
-  const d = (raw as { dataset?: unknown } | null)?.dataset;
-  const dataset = typeof d === 'string' ? d.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
-  return dataset ? { dataset } : undefined;
-}
-
-/** A turn's `factsFrom`: its dataset ids, once each. */
-function sanitizeIds(raw: unknown): string[] | undefined {
-  const ids = Array.isArray(raw) ? [...new Set(raw.filter(isValidId))] : [];
-  return ids.length ? ids : undefined;
-}
-
 // Re-sanitize a stored turn list (drop non-object turns, clamp role, coerce text
 // to string, keep/repair id + createdAt, whitelist provenance), then ring-cap.
 export function normalizeTurns(raw: any): CopilotTurn[] {
@@ -298,12 +296,17 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     const outside = role === 'assistant' && !answer ? sanitizeOutside(t.outside) : undefined;
     if (outside) turn.outside = outside;
     if (role === 'assistant' && !answer) Object.assign(turn, sanitizeNeeds(t));
+    if (role === 'assistant' && !answer && t.define === true) turn.define = true;
     const factsFrom = role === 'assistant' ? sanitizeIds(t.factsFrom) : undefined;
     if (factsFrom) turn.factsFrom = factsFrom;
     const dashboardsFrom = role === 'assistant' ? sanitizeIds(t.dashboardsFrom) : undefined;
     if (dashboardsFrom) turn.dashboardsFrom = dashboardsFrom;
     const research = role === 'assistant' ? sanitizeResearch(t.research) : undefined;
     if (research) turn.research = research;
+    const feedback = role === 'assistant' ? sanitizeFeedback(t.feedback) : undefined;
+    if (feedback) turn.feedback = feedback;
+    const route = role === 'assistant' ? sanitizeRoute(t.route) : undefined;
+    if (route) turn.route = route;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -422,7 +425,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
 function ownerNow(): string | undefined {
   return serverDataDir() === null ? undefined : ctx().user.email;
 }
-function mine(threads: CopilotThread[]): CopilotThread[] {
+export function mine(threads: CopilotThread[]): CopilotThread[] {
   const who = ownerNow();
   return who === undefined ? threads : threads.filter((t) => t.owner === who);
 }
@@ -531,7 +534,7 @@ export async function createThread(projectId: string, agentId?: string | null): 
 
 // Every change reads, changes and writes copilot.json under its record lock (recordFs.locked, every
 // pod): one file holds every member's conversations, so two unlocked appends lost one of them.
-function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => Promise<T>): Promise<T> {
+export function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => Promise<T>): Promise<T> {
   return recordFs.locked(copilotFilePath(projectId), async () => fn(await loadThreads(projectId)));
 }
 
@@ -539,7 +542,7 @@ function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => P
 // in recency order (appendTurn moves what it touched to the end), so the ones that
 // drop are the LEAST RECENTLY USED — a conversation you came back to last week is
 // not the one to evict just because you started it first.
-async function writeThreads(projectId: string, threads: CopilotThread[]): Promise<CopilotThread[]> {
+export async function writeThreads(projectId: string, threads: CopilotThread[]): Promise<CopilotThread[]> {
   const capped = capThreads(threads);
   keepSnapshotBudget(capped);
   const file: CopilotFile = { projectId, threads: capped, schemaVersion: 2 };
@@ -614,6 +617,7 @@ export async function appendTurn(
   const outside = role === 'assistant' && !answer ? sanitizeOutside(turn && turn.outside) : undefined;
   if (outside) record.outside = outside;
   if (role === 'assistant' && !answer) Object.assign(record, sanitizeNeeds(turn));
+  if (role === 'assistant' && !answer && turn && turn.define === true) record.define = true;
   // A related category's or split's dataset, the answer's or an option's (./answerJoin), hides the turn as its facts' do: 0039's SQL count reads it here.
   const factsFrom = role === 'assistant' ? sanitizeIds([...(Array.isArray(turn?.factsFrom) ? turn.factsFrom : []), ...turnRelatedIds(answer, suggest?.options)]) : undefined;
   if (factsFrom) record.factsFrom = factsFrom;
@@ -621,6 +625,8 @@ export async function appendTurn(
   if (dashboardsFrom) record.dashboardsFrom = dashboardsFrom;
   const research = role === 'assistant' ? sanitizeResearch(turn && turn.research) : undefined;
   if (research) record.research = research;
+  const route = role === 'assistant' ? sanitizeRoute(turn && turn.route) : undefined;
+  if (route) record.route = route;
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {
