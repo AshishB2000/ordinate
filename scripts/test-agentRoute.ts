@@ -134,6 +134,8 @@ async function main(): Promise<void> {
   calls.length = 0;
   await router.routeAsk(pid, 'payroll cost by team', all, 'ask', fake());
   ok('NEGATIVE CONTROL: a clear winner makes no model call', calls.length === 0);
+  const broken = await router.routeAsk(pid, 'payroll cost by team', all, 'ask', fake({ titles: async () => { throw new Error('boom'); } }));
+  ok('routeAsk: a read that throws never costs the question: nothing to compare, the usual pick stands', broken.kind === 'none');
   const docs = await router.routeAsk(pid, 'holiday policy', [aHr, aSales], 'ask', fake({ search: async () => [], titles: async () => new Map([[aSales.id, ['Holiday policy']]]) }));
   ok('routeAsk: a document title decides, and is named', docs.kind === 'agent' && docs.agentId === aSales.id && docs.why === msg.routeMatchedOne(msg.routeDocument('Holiday policy')), JSON.stringify(docs));
 }

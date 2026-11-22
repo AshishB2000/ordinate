@@ -178,6 +178,47 @@ describe('agents in the dock', () => {
     expect(calls.find((c) => c.channel === 'copilot:newThread')?.payload).toEqual({ projectId: PID, agentId: FIN });
   });
 
+  it('two agents: Auto is shown before any conversation, so no topic is assumed and no model is named for it', async () => {
+    serve(base(AGENTS, FIN));
+    renderApp('/');
+    const dock = await openDock();
+    await waitFor(() => expect(picked(dock)).toBe('Auto'));
+    expect(within(dock).queryByTestId('dock-context')?.textContent ?? '').not.toBe('Finance');
+    expect(within(dock).queryByText('Powered by Claude Opus')).toBeNull();
+  });
+
+  it('two agents, Auto: the first verified chip starts its conversation with the preselected agent, never an unpicked Project assistant', async () => {
+    const spec = { datasetId: 'd1', category: 'vendor', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Amount by vendor' };
+    const row = { id: 'v1', question: 'Amount by vendor', phrasings: [], datasetId: 'd1', datasetName: '', describe: '', filters: [], spec, verifiedBy: 'a', verifiedAt: new Date().toISOString(), runs: true, tag: 't' };
+    const calls = serve({
+      ...base(AGENTS, FIN),
+      'verified:list': { body: { ok: true, broken: 0, questions: [row] } },
+      'copilot:newThread': { body: { ok: true, thread: { id: T1, title: 'Conversation', updatedAt: '', turnCount: 0, agentId: FIN } } },
+      'answer:rerun': { body: { ok: true, turns: [], threadId: T1 } },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    await waitFor(() => expect(picked(dock)).toBe('Auto'));
+    fireEvent.click(await within(dock).findByRole('button', { name: '✓ Amount by vendor' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'answer:rerun')?.payload).toMatchObject({ projectId: PID, threadId: T1 }));
+    expect(calls.find((c) => c.channel === 'copilot:newThread')?.payload).toEqual({ projectId: PID, agentId: FIN });
+  });
+
+  it('two agents: History names each conversation\'s agent', async () => {
+    const threads = [
+      { id: T1, title: 'Payroll', updatedAt: new Date().toISOString(), turnCount: 2, agentId: FIN, agentName: 'Finance assistant' },
+      { id: T2, title: 'Anything', updatedAt: new Date().toISOString(), turnCount: 2 },
+    ];
+    serve({ ...base(AGENTS, FIN), 'copilot:threads': { body: { ok: true, threads } } });
+    renderApp('/');
+    const dock = await openDock();
+    await waitFor(() => expect(picked(dock)).toBe('Auto'));
+    fireEvent.click(within(dock).getByRole('button', { name: 'Conversation history' }));
+    const history = await screen.findByRole('dialog', { name: 'Conversation history' });
+    await within(history).findByRole('button', { name: /^Payroll/ });
+    expect(within(history).getAllByTestId('history-agent').map((t) => t.textContent)).toEqual(['Finance assistant', 'Project assistant']);
+  });
+
   it('History names each conversation\'s agent once this person has one', async () => {
     const threads = [
       { id: T1, title: 'Payroll', updatedAt: new Date().toISOString(), turnCount: 2, agentId: FIN, agentName: 'Finance assistant' },

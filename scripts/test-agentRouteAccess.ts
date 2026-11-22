@@ -20,7 +20,7 @@ const router: typeof import('../src/ipc/agentRoute') = require('../src/ipc/agent
 
 const who = (local: string, role: Identity['user']['role'] = 'viewer'): Identity => ({ user: { email: `${local}@acme.test`, role }, org: { id: ORG } });
 
-withServer('agent-route-access', {}, async (b) => {
+withServer('agent-route-access', { ORDINATE_FOLDERS: 'on' }, async (b) => {
   const must = async (as: string, channel: string, payload: unknown): Promise<any> => { // any: each channel's own reply
     const r = await b.as(as).call(channel, payload);
     if (r.status !== 200) throw new Error(`${channel} as ${as}: ${r.status} ${r.text.slice(0, 200)}`);
@@ -73,6 +73,17 @@ withServer('agent-route-access', {}, async (b) => {
   ok('a close call: the agents Gus may use are offered, as buttons', !!close && 'choose' in close && close.choose.map((o) => o.id).sort().join() === [A, S].sort().join(), show(close));
   const none = await route('fay', 'viewer', 'invoices orders');
   ok('NEGATIVE CONTROL: Fay is offered nothing, and the Sales agent is not named', none === null && !JSON.stringify(none).includes('Sales agent'), show(none));
+
+  // ── (d) a topic dataset in a team folder the person cannot open is never scored or named ─────────────────
+  const HR = await b.run(BOSS, async () => (await datasets.saveDataset(P, { name: 'Salaries', sourceKind: 'csv', columns: [{ name: 'person', type: 'text' }, { name: 'bonus', type: 'number' }], rows: [['Ann', 1]] }))!.id);
+  const tHr = await b.run(BOSS, () => topics.saveTopic(P, { name: 'People', datasets: [{ id: HR }] }));
+  const H = await save('People agent', '', tHr!.id, fin);
+  await b.pool.query('INSERT INTO folders (org_id, project_id, id, parent_id, name, share_figures, created_by) VALUES ($1, $2, $3, NULL, $4, false, $5)', [ORG, P, '77777777-7777-4777-8777-777777777777', 'HR only', 'boss@acme.test']);
+  await b.pool.query('INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, $3, $4, $5, $6)', [ORG, P, 'dataset', HR.toLowerCase(), '77777777-7777-4777-8777-777777777777', 'boss@acme.test']);
+  const gusHr = await route('gus', 'viewer', 'salaries bonus by person');
+  ok('a topic dataset in a folder Gus cannot open is not scored: the People agent is never picked or offered for it', !JSON.stringify(gusHr).includes(H), show(gusHr));
+  const bossHr = await b.run(BOSS, () => router.autoRoute(P, 'salaries bonus by person', null, false));
+  ok('NEGATIVE CONTROL: the org admin, who opens the folder, is routed to it', !!bossHr && 'agentId' in bossHr && bossHr.agentId === H, show(bossHr));
 }).then(finish, (err) => {
   console.error(err);
   process.exitCode = 1;

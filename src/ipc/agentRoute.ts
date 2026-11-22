@@ -17,6 +17,7 @@ import * as copilot from '../ai/copilot';
 import * as analyze from '../ai/analyze';
 import * as execConfig from '../app/execConfig';
 import { titlesByAgent } from '../knowledge/store';
+import { logger } from '../app/logger';
 import { ctx } from '../server/context';
 import { searchModel } from './assistantSearch';
 
@@ -85,6 +86,16 @@ async function topicsOf(projectId: string, agents: readonly Agent[]): Promise<Ma
  * there is nobody to click). `usable` is the caller's own (agentsFor): the one filter by `mayUse`.
  */
 export async function routeAsk(projectId: string, question: string, usable: readonly Agent[], unsure: 'ask' | 'best', deps: Partial<RouteDeps> = {}): Promise<Route> {
+  try {
+    return await route(projectId, question, usable, unsure, deps);
+  } catch (err) {
+    // A router that cannot read what it compares must never cost the question: the usual pick stands.
+    logger.error('[agent-router] could not route, the usual pick stands:', (err as Error).message);
+    return { kind: 'none' };
+  }
+}
+
+async function route(projectId: string, question: string, usable: readonly Agent[], unsure: 'ask' | 'best', deps: Partial<RouteDeps>): Promise<Route> {
   if (usable.length < 2) return { kind: 'none' };
   const d = { ...defaults, ...deps };
   const topics = await topicsOf(projectId, usable);

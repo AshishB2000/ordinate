@@ -92,6 +92,12 @@ async function main(): Promise<void> {
   const kept = await ask('Orders revenue by region', { threadId: same.id, auto: true });
   ok('NEGATIVE CONTROL: a blank conversation already with the routed agent is kept as it is', kept.ok && kept.threadId === same.id && kept.agent?.id === sales.id);
 
+  // A stale thread id falls back to the caller's latest conversation: even blank, it is not the one named, so it is never replaced.
+  const latestBlank = (await call('copilot:newThread', { projectId: pid, agentId: hr.id })).thread;
+  const stale = await ask('Orders revenue by region', { threadId: '99999999-9999-4999-8999-999999999999', auto: true });
+  ok('a stale id lands in the latest conversation, which is NOT deleted or swapped, and carries no route for another agent', stale.ok && stale.threadId === latestBlank.id && stale.agent?.id === hr.id
+    && (await threads()).some((t) => t.id === latestBlank.id) && !lastAssistant(stale)?.route, JSON.stringify([stale.threadId, latestBlank.id, stale.agent]));
+
   // ── 3. a close call ───────────────────────────────────────────────────────
   narrations = 0;
   const blankPa = async (): Promise<string> => (await call('copilot:newThread', { projectId: pid, agentId: null })).thread.id;

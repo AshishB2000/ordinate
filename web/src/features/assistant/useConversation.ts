@@ -276,6 +276,13 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     return row ? { id: row.id, name: row.name } : null;
   };
 
+  /** Deletes a conversation left behind, only if it still has no turns (another tab may have asked into it since). */
+  async function dropBlank(id: string): Promise<void> {
+    if (!pid || !id) return;
+    const h = (await rpc('copilot:history', { projectId: pid, threadId: id }).catch(() => null)) as { ok?: boolean; turns?: unknown[]; threadId?: string | null } | null;
+    if (h?.ok && h.threadId === id && h.turns?.length === 0) await deleteThread(pid, id).catch(() => false);
+  }
+
   /** Switching agents starts a new conversation with the one picked (rule 11); a blank one left behind is not kept. */
   async function pickAgent(id: string | null): Promise<void> {
     if (!pid || pending) return;
@@ -306,7 +313,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
       toast('Could not switch the assistant. Try again.', { kind: 'error' });
       return;
     }
-    if (blank) void deleteThread(pid, blank).catch(() => false);
+    if (blank) void dropBlank(blank);
     switchThread(tid);
     setTurns([], tid, refOf(id));
     input.current?.focus();
@@ -338,7 +345,7 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
       toast('Could not switch the assistant. Try again.', { kind: 'error' });
       return;
     }
-    if (blank) void deleteThread(pid, blank).catch(() => false);
+    if (blank) void dropBlank(blank);
     switchThread(tid);
     setTurns([], tid, refOf(id));
     await send(question, on, tid, id, false, false);
@@ -428,12 +435,16 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
   async function followUp(spec: Record<string, unknown>, label: string, learn?: Learn): Promise<void> {
     if (!pid) return;
     // The first answer of all (a verified chip in the empty state) starts its conversation with the agent shown.
-    const into = shownThread || (agentId ? await newThread(pid, agentId).catch(() => '') : '');
+    // In Auto no agent is picked: a chip is not routed (there is no question to read), so it starts with the preselected one, as deep research does.
+    const chipAgent = auto ? (agentList.data?.preselected ?? null) : agentId;
+    const fresh = chipAgent !== null && (!shownThread || auto);
+    const into = fresh ? await newThread(pid, chipAgent).catch(() => '') : shownThread;
+    if (fresh && into && shownThread) void dropBlank(shownThread);
     const r = (await rpc('answer:rerun', { projectId: pid, ...(into ? { threadId: into } : {}), spec: spec as { datasetId: string }, label, ...(learn ? { learn } : {}) }).catch(() => null)) as
       | { ok: true; turns: Turn[]; threadId: string | null }
       | { ok: false; reason?: string }
       | null;
-    if (r && r.ok) setTurns(r.turns, r.threadId, into && !shownThread ? refOf(agentId) : undefined);
+    if (r && r.ok) setTurns(r.turns, r.threadId, fresh && into ? refOf(chipAgent) : undefined);
     else toast((r && !r.ok && r.reason) || 'Could not run that follow-up.', { kind: 'error' });
   }
 

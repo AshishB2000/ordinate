@@ -530,18 +530,19 @@ export function register() {
       const blank = auto === true && !sharing && !!into && (stored ?? await copilot.loadHistory(projectId, into.id)).length === 0;
       const routed = auto === true && !sharing ? await autoRoute(projectId, q, into, blank) : null;
       if (routed && 'choose' in routed) return { ok: true, choose: routed.choose };
-      const swap = routed && into && blank && (into.agentId ?? null) !== routed.agentId ? into.id : null; // its blank conversation is with another agent: a new one replaces it once the answer is stored
+      const swap = routed && into && blank && into.id === tid && (into.agentId ?? null) !== routed.agentId ? into.id : null; // the blank conversation NAMED is with another agent: a new one replaces it once the answer is stored (never the caller's latest, which a stale id falls back to)
       if (swap) into = null;
       const named = !!tid && into?.id === tid;
       const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : routed ? routed.agentId : agentId);
-      const route = scope.agent ? (routed?.why ? { why: routed.why } : sanitizeRoute({ why: context?.routed })) : undefined; // `context.routed`: Slack's (server-set; the contract has no such field)
+      const route = scope.agent ? (routed?.why && scope.agent.id === routed.agentId ? { why: routed.why } : sanitizeRoute({ why: context?.routed })) : undefined; // `context.routed`: Slack's (server-set; the contract has no such field)
       // The agent the conversation is stored with, as the reply names it: none for a token or a share, which keep the Project assistant (rule 13).
       const kept = scope === PROJECT_SCOPE ? null : into ? (into.agentId ?? null) : (scope.agent?.id ?? null);
       // Pinned BEFORE the first append, so a question and its answer land in the SAME conversation — the one whose agent
       // answered — even if something else creates a newer one between the two writes, and the reply can say which it was.
       const pin = async (): Promise<string | undefined> => {
         const id = (named ? tid : into?.id) ?? (await copilot.createThread(projectId, scope.agent?.id))?.id;
-        if (swap && id) await copilot.deleteThread(projectId, swap).catch(() => false);
+        // Only while still blank: another tab may have asked into it since.
+        if (swap && id && (await copilot.loadHistory(projectId, swap)).length === 0) await copilot.deleteThread(projectId, swap).catch(() => false);
         return id;
       };
       const asked = await scopedContext(projectId, scope, context || {}); // an agent's topic, unless the screen is inside it
