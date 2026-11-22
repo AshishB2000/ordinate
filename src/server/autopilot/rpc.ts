@@ -6,6 +6,7 @@ import { getProject, listProjects } from '../../app/projects';
 import { ctx } from '../context';
 import { orgDb } from '../db/inOrg';
 import { runNow } from './job';
+import { addDays } from './plan';
 import * as store from './store';
 import { undoItem, undoRepairs } from './undo';
 
@@ -25,11 +26,15 @@ export function settingsView(s: store.Settings) {
 export function register(): void {
   ipcMain.handle('autopilot:overview', async () => {
     if (!orgDb()) return needsDatabase();
-    const [all, latest] = await Promise.all([store.allSettings(), store.latestRuns()]);
+    const [all, latest, first] = await Promise.all([store.allSettings(), store.latestRuns(), store.firstUsageDay()]);
     const projects = (await listProjects()).filter((p) => !p.archivedAt);
     return {
       ok: true as const,
-      projects: projects.map((p) => ({ id: p.id, name: p.name, settings: settingsView(all.get(p.id.toLowerCase()) ?? store.defaultsFor(p.id.toLowerCase())), latest: latest.get(p.id.toLowerCase()) ?? null })),
+      projects: projects.map((p) => {
+        const settings = all.get(p.id.toLowerCase()) ?? store.defaultsFor(p.id.toLowerCase());
+        // The first day a chart can be called unused: usage is watched from the day after its first row, for a whole window.
+        return { id: p.id, name: p.name, settings: settingsView(settings), latest: latest.get(p.id.toLowerCase()) ?? null, firstCleanup: first === null ? null : addDays(first, 1 + settings.windowDays) };
+      }),
     };
   });
 

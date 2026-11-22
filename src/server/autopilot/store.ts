@@ -222,3 +222,8 @@ export async function pruneUsage(): Promise<number> {
          'projects/' || u.project_id || '/trash/' || u.kind || '/' || u.item_id || '.json'))))`, [org]));
   return r.rowCount ?? 0;
 }
+
+/** The first day the org has a usage row, or null: usage is watched from the day after it. */
+export async function firstUsageDay(): Promise<string | null> {
+  return (await inOrg((c, org) => c.query<{ d: string | null }>(`SELECT to_char(min(day), 'YYYY-MM-DD') AS d FROM item_usage_daily WHERE org_id = $1`, [org]))).rows[0]?.d ?? null;
+}

@@ -1,0 +1,140 @@
+/* Autopilot: the Admin tab's one card per project, and a run's report page. Rows, not boxes; the same tokens as Admin. */
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  padding: var(--sp-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.name {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.grow {
+  flex: 1;
+}
+.status {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-12) var(--sp-16);
+  align-items: start;
+}
+.actions {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pause {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--r-md);
+  padding: var(--sp-8) var(--sp-12);
+  font-size: var(--t-13);
+}
+
+/* The report */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  padding-top: var(--sp-8);
+}
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.stat b {
+  color: var(--text-strong);
+  font-size: var(--t-20);
+  font-variant-numeric: tabular-nums;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+.row:first-child {
+  border-top: 0;
+}
+.what {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chart {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.words {
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.sub {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.sectionTitle {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: var(--sp-16) 0 var(--sp-8);
+}
+.earlier {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+
+.fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
