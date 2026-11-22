@@ -56,8 +56,9 @@ function contractCases(): void {
   const real = { dispatch: analyze.dispatch, ready: execConfig.executionReady };
   let reply: string | (() => string) = J(per);
   let calls = 0;
+  let modelError = false; // the next model calls fail
   let seen = '';
-  analyze.dispatch = async (_system: string, messages: Array<{ text: string }>) => { calls += 1; seen = messages[messages.length - 1]?.text ?? ''; return { rawText: typeof reply === 'function' ? reply() : reply }; };
+  analyze.dispatch = async (_system: string, messages: Array<{ text: string }>) => { calls += 1; seen = messages[messages.length - 1]?.text ?? ''; if (modelError) return { error: { ok: false, errorType: 'provider', message: 'provider error' } }; return { rawText: typeof reply === 'function' ? reply() : reply }; };
   execConfig.executionReady = async () => true;
   const pools: Pool[] = [];
   const roles: string[] = [];
@@ -72,7 +73,11 @@ function contractCases(): void {
       const turns = (await copilot.appendTurn(P, { role: 'assistant', text: `No chart. ${CANARY} 1,234,567`, ...(o.define === false ? {} : { define: true }), factsFrom: o.datasetIds ?? [W.plain] }, th.id))!;
       return { projectId: P, threadId: th.id, turnId: turns[turns.length - 1].id };
     });
-    const propose = (who: string, turn: unknown) => W.call(who, 'proposal:propose', turn);
+    let counting = false; // only the limit's own section counts presses against the day
+    const propose = async (who: string, turn: unknown) => {
+      if (!counting) await counters.forgetForTest('acme', 'proposal:from:');
+      return W.call(who, 'proposal:propose', turn);
+    };
 
     // ── propose, who is told, one card ───────────────────────────────────────────────────────────────────────────────
     const t1 = await refused('west', 'What is the sales per unit by region?');
@@ -202,6 +207,7 @@ function contractCases(): void {
     execConfig.executionReady = async () => true;
     ok('not ready: no model call, and the reply says so', off.body?.ok === false && off.body.notReady === true && calls === callsBefore);
     await W.call('boss', 'dataset:setColumnAccess', { projectId: P, datasetId: W.plain, columns: null });
+    counting = true;
     let n = 0;
     reply = () => J({ ...per, name: `Limit ${n++}`, formula: 'sum(sales)' });
     let last: Any = null;
@@ -214,11 +220,50 @@ function contractCases(): void {
     reply = 'nope';
     const o = await propose('nobody', await refused('nobody', 'after the limit'));
     ok('limit: a refusal past the limit does not call the model', o.body?.code === 'rate_limited');
+    // The limit bounds MODEL CALLS: one that completed is charged however it ended (nothing to define, prose, a refused draft).
     await counters.forgetForTest('acme', 'proposal:from:');
     const c0 = calls;
-    await propose('nobody', await refused('nobody', 'a refused draft gives its charge back'));
-    await propose('nobody', await refused('nobody', 'and again'));
-    ok('limit: a draft the app refuses gives its charge back (the model was called both times)', calls === c0 + 2);
+    reply = J({ kind: 'none' });
+    for (let i = 1; i <= proposals.PROPOSALS_PER_DAY; i += 1) await propose('nobody', await refused('nobody', `nothing to define ${i}`));
+    const stuck = await propose('nobody', await refused('nobody', 'nothing to define, once more'));
+    ok('limit: "nothing to define" answers are charged: the eleventh press is refused with no model call', calls === c0 + proposals.PROPOSALS_PER_DAY && stuck.body?.code === 'rate_limited', `${calls - c0} ${stuck.text}`);
+    await counters.forgetForTest('acme', 'proposal:from:');
+    modelError = true;
+    for (let i = 1; i <= proposals.PROPOSALS_PER_DAY + 2; i += 1) await propose('nobody', await refused('nobody', `provider down ${i}`));
+    modelError = false;
+    reply = J({ ...per, name: 'After the outage', formula: 'sum(sales)' });
+    ok('limit (control): a model call that never completed gives its charge back, so an outage never uses the day up', (await propose('nobody', await refused('nobody', 'back up'))).body?.ok === true);
+
+    counting = false;
+    // ── one card per dataset, kind and name: a need on another dataset is never joined ───────────────────────────────────
+    reply = J({ kind: 'metric', name: 'Churn', dataset: 'Orders', formula: 'sum(sales)', description: '', aliases: [] });
+    const onOrders = await propose('boss', await refused('boss', 'churn on orders', { datasetIds: [W.orders] }));
+    reply = J({ kind: 'metric', name: 'Churn', dataset: 'Plain', formula: 'sum(sales)', description: '', aliases: [] });
+    const onPlain = await propose('west', await refused('west', 'churn please'));
+    ok('one card: the same name on another dataset is its own card, and the reply says nothing of the first (not raised, one ask)', onOrders.body?.ok === true && onPlain.body?.ok === true && onPlain.body.raised === false && onPlain.body.asks === 1 && onPlain.body.id !== onOrders.body.id, `${onOrders.text} ${onPlain.text}`);
+    ok('one card: west has no bell row for the card on Orders, and the cards are on their own datasets', (await rows(`SELECT 1 FROM metric_proposal_inbox WHERE proposal_id = $1 AND user_email = 'west@acme.test'`, [onOrders.body.id])).length === 0
+      && (await rows(`SELECT dataset_id FROM metric_proposals WHERE name = 'Churn' ORDER BY dataset_id`)).map((r) => r.dataset_id).sort().join() === [W.orders, W.plain].sort().join());
+    ok('one card (control): the same need on the same dataset joins', (await propose('east', await refused('east', 'churn too'))).body?.raised === true);
+
+    // ── the queue lists every card the caller edits, however many others there are ───────────────────────────────────────
+    await q(`INSERT INTO metric_proposals (org_id, id, project_id, kind, name, name_key, dataset_id, draft)
+             SELECT 'acme', gen_random_uuid(), $1, 'metric', 'Bulk ' || n, 'bulk ' || n, $2, $3::jsonb FROM generate_series(1, 150) AS n`,
+    [P, W.orders, J({ kind: 'metric', name: 'Bulk', datasetId: W.orders, description: '', aliases: [], formula: 'sum(sales)' })]);
+    const big = await W.call('ed', 'proposal:list', { projectId: P, decided: false });
+    ok('list: more than 100 open cards all reach an editor (the limit counts only cards they edit)', big.body?.proposals?.length > 150, String(big.body?.proposals?.length));
+    const storeMod: typeof import('../src/server/proposals/store') = require('../src/server/proposals/store');
+    const noneOn = await W.as('ed', () => storeMod.list(P, false, [randomUUID()], 200));
+    const someOnes = await W.as('ed', () => storeMod.list(P, false, [W.orders], 200));
+    ok('list: filtered in SQL by dataset (control: a dataset with none lists none, Orders lists its own)', noneOn.length === 0 && someOnes.length >= 150 && someOnes.every((x) => x.datasetId === W.orders));
+    await q(`DELETE FROM metric_proposals WHERE name LIKE 'Bulk %'`);
+
+    // ── an edit may not add another metric's or term's name as an alias ──────────────────────────────────────────────────
+    reply = J({ ...per, name: 'Alias edit', formula: 'sum(sales)', aliases: [] });
+    const al = await propose('west', await refused('west', 'alias edit'));
+    const clash = await W.call('ed', 'proposal:approve', { projectId: P, id: al.body.id, edit: { aliases: ['revenue'] } });
+    const alRow = (await rows('SELECT state, decided_by FROM metric_proposals WHERE id = $1', [al.body.id]))[0];
+    ok('approve: an alias added in an edit that is another metric\'s name is refused, and the card stays open and unclaimed', clash.body?.ok === false && alRow.state === 'open' && alRow.decided_by === null, clash.text);
+    ok('approve (control): the same edit with a free alias saves', (await W.call('ed', 'proposal:approve', { projectId: P, id: al.body.id, edit: { aliases: ['alias two'] } })).body?.ok === true);
 
     // ── RLS: the three tables, as an ordinary role ───────────────────────────────────────────────────────────────────
     const role = `proposals_role_${process.pid}`;

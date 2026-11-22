@@ -33,8 +33,15 @@ writes a number (AGENTS.md core principle).
 - **A draft is checked twice, each time as the person acting:** at proposal as the proposer, at approval as the
   approving editor. Both times the columns it may use are those of a dataset the person opens now, minus
   `hiddenColumnsFor`. A hidden column is an unknown column. A failed check is shown, never repaired.
-- **One card per need.** A partial unique index on open proposals `(org, project, kind, name key)` plus
+- **One card per need.** A partial unique index on open proposals `(org, project, dataset, kind, name key)` plus
   `ON CONFLICT` makes a repeat proposal add an ask to the existing card. Two proposals at once cannot make two cards.
+- **The dataset is part of the key.** A need on a dataset in a folder closed to a person is never joined by theirs on
+  another dataset: a reply never reveals a card they cannot open, and the editors of their own dataset see their need.
+- **The daily limit bounds model calls.** A call that completed is charged however it ended (nothing to define, prose, a
+  refused draft); the charge is given back only when no call completed (a provider error).
+- **The queue is filtered in SQL** by the datasets the caller edits, with a limit of the project's open cap, so cards of
+  datasets they cannot edit never hide theirs.
+- **At approval, other names are checked against the whole project** (an edit may add one), as the editor's own save checks the name.
 - **A person counts once per question.** An ask is `(proposal, person, question key)`; pressing the button twice on
   the same question, or the same person asking the same words again, does not raise the count.
 - **The preview is not a new channel.** The queue returns structure only. The card calls the existing `metric:check`
@@ -43,7 +50,9 @@ writes a number (AGENTS.md core principle).
   avoided.
 - **The core takes question texts and askers, not a turn id**, so feature 8 (the issues board) can open or raise a
   proposal from a group of questions: `proposeFromQuestions` (draft and raise) and `raiseProposal` (a draft already
-  made). The RPC is a thin wrapper that reads the caller's own refused turn.
+  made). The RPC is a thin wrapper that reads the caller's own refused turn. Both TRUST the emails and
+  questions they are given and check no access themselves (only the draft, as the caller): feature 8 must call them only
+  from an editor-scoped contract, never with a viewer's input.
 - **Notification** follows dashboard requests: a bell row for each approver at open (editors and admins with Edit on
   the dataset, never the proposer) and for each asker when it is decided, a push `proposals:changed` (ids, names and the
   state, never the definition), and the unseen badge. No email in this version.

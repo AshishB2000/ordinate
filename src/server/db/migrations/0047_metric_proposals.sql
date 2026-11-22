@@ -5,7 +5,9 @@
 --   a column and aggregation, a description, other names; a term's filters), never a figure. `state`: open → approved |
 --   declined. `decided_by` / `decided_at` set on an open row are an approval under way (a claim; a stale one, older than
 --   ten minutes, may be taken again), so two approvers never save two metrics. `name_key` is the lower-cased name: the
---   partial unique index makes a repeat proposal raise the count of the open one instead of making a second card.
+--   partial unique index (one open card per dataset, kind and name) makes a repeat proposal raise the count of the open one
+--   instead of making a second card. The dataset is part of the key: a need on a dataset in a folder closed to a person is
+--   never joined by theirs on another.
 -- metric_proposal_asks: who needed it, by question. The question's words only, never the answer or a figure.
 -- metric_proposal_inbox: the bell's rows: the approvers at open ('approver'), each asker once it is decided ('asker').
 --   At most 200 a member.
@@ -30,7 +32,7 @@ CREATE TABLE metric_proposals (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (org_id, id)
 );
-CREATE UNIQUE INDEX metric_proposals_one_open ON metric_proposals (org_id, project_id, kind, name_key) WHERE state = 'open';
+CREATE UNIQUE INDEX metric_proposals_one_open ON metric_proposals (org_id, project_id, dataset_id, kind, name_key) WHERE state = 'open';
 CREATE INDEX metric_proposals_project ON metric_proposals (org_id, project_id, state, created_at DESC);
 
 CREATE TABLE metric_proposal_asks (

@@ -13,13 +13,17 @@
 // index decides, so two at once make one card). A person counts once per question.
 //
 // FOR FEATURE 8 (the issues board): `proposeFromQuestions` drafts from a group of questions and raises the card;
-// `raiseProposal` raises a draft already made. Both run as the caller, who must read the project.
+// `raiseProposal` raises a draft already made. Both run as the caller and TRUST the emails and questions they are given: they check no access of
+// the askers, so feature 8 must call them only from an editor-scoped contract.
 
 import * as analyze from '../../ai/analyze';
 import * as copilot from '../../ai/copilot';
 import * as execConfig from '../../app/execConfig';
 import { assistantOff } from '../../ai/aiMessages';
 import * as metrics from '../../analysis/metrics';
+import { listDatasets } from '../../data/datasets';
+import { nameRefusalAmong } from '../../ipc/metricSave';
+import { wholeProject } from '../authz/folders';
 import { listFullTerms } from '../../analysis/terms';
 import { parseDraft, proposeUser, PROPOSE_SYSTEM, type DraftIn } from '../../ai/proposalDraft';
 import { contracts } from '../../api/index';
@@ -92,35 +96,33 @@ export async function proposeFromQuestions(projectId: string, input: { questions
   const mine = await counters.take(org.id, [{ key: `proposal:from:${user.email.toLowerCase()}`, limit: PROPOSALS_PER_DAY, windowMs: DAY }]);
   if (!mine.ok) return { ok: false, code: 'rate_limited', error: say.tooManyToday(PROPOSALS_PER_DAY) };
   const giveBack = async (): Promise<void> => counters.give(org.id, mine.windows, 1);
+  let called = false; // a model call completed: the charge stays
   try {
     const taken = [...(await metrics.listMetrics(projectId)).map((m) => m.name), ...(await listFullTerms(projectId)).map((t) => t.name)].slice(0, MAX_NAMES);
     const text = proposeUser(asks.map((a) => a.question), visible, taken);
+    // The charge is a model call's: it is given back only when none completed (an error, or an exception before one).
     const { rawText, error } = await analyze.dispatch(PROPOSE_SYSTEM, [{ role: 'user', text }]);
+    called = true;
     if (error) {
       await giveBack();
       return { ok: false, error: say.modelFailed() };
     }
     const parsed = parseDraft(rawText);
     if (!parsed.ok) {
-      await giveBack();
       return { ok: false, error: parsed.code === 'figure_text' ? say.figureInDraft() : say.badDraft() };
     }
     if ('none' in parsed) {
-      await giveBack();
       return { ok: false, error: say.nothingToDefine() };
     }
     // The model names a dataset: only one it was told about counts (never another the caller happens to open).
     const named = visible.find((d) => d.name.trim().toLowerCase() === parsed.draft.dataset.trim().toLowerCase());
     if (!named) {
-      await giveBack();
       return { ok: false, error: say.datasetNotFound(parsed.draft.dataset) };
     }
     const { dataset: _name, ...rest } = parsed.draft;
-    const r = await raiseProposal(projectId, { ...rest, datasetId: named.id } as DraftIn, asks);
-    if (!r.ok) await giveBack();
-    return r;
+    return await raiseProposal(projectId, { ...rest, datasetId: named.id } as DraftIn, asks);
   } catch (err) {
-    await giveBack();
+    if (!called) await giveBack();
     throw err;
   }
 }
@@ -189,10 +191,11 @@ async function viewOf(p: Proposal, datasetName: string, problem?: string): Promi
 /** The reviewer's cards: the proposals whose dataset they edit, each open one re-checked as them. */
 export async function listProposals(projectId: string, decided: boolean): Promise<{ ok: true; proposals: ProposalView[] } | { ok: false; error: string }> {
   if (!orgDb()) return { ok: false, error: say.proposalsOff() };
-  const all = await store.list(projectId, decided, 100);
-  const may = new Set(await editsOnly(projectId, [...new Set(all.map((p) => p.datasetId))]));
+  // The datasets the caller edits come first, so the limit counts only cards they can see (never 100 of others' hiding theirs).
+  const may = await editsOnly(projectId, (await listDatasets(projectId)).map((d) => d.id));
+  const all = may.length ? await store.list(projectId, decided, may, store.MAX_OPEN) : [];
   const out: ProposalView[] = [];
-  for (const p of all.filter((x) => may.has(x.datasetId))) {
+  for (const p of all) {
     const ds = await visibleDataset(projectId, p.datasetId);
     const problem = p.state === 'open' ? (ds ? await checkDraft(projectId, toIn(p.draft), false).then((c) => (c.ok ? undefined : c.error)) : say.datasetNotFound('')) : undefined;
     out.push(await viewOf(p, ds?.name ?? '', problem));
@@ -233,6 +236,17 @@ export async function approveProposal(projectId: string, id: string, edit?: Edit
       return { ok: false, error: checked.error };
     }
     const c = checked.draft;
+    // An edit may add another name: checked here against the WHOLE project, as the editor's own save checks the name.
+    const clash = c.kind === 'metric' && c.aliases.length
+      ? await wholeProject(async () => {
+        const [all, known] = [await metrics.listMetrics(projectId), await listFullTerms(projectId)];
+        return c.aliases.map((a) => nameRefusalAmong(a, all, known)).find(Boolean) ?? null;
+      })
+      : null;
+    if (clash) {
+      await store.release(projectId, id);
+      return { ok: false, error: clash };
+    }
     const mark = { proposal: { asks: p.asks } } satisfies versionsMod.RecordOpts;
     let savedId: string | undefined;
     let why = '';

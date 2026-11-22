@@ -87,15 +87,15 @@ export async function openOrRaise(
       `INSERT INTO metric_proposals (org_id, id, project_id, kind, name, name_key, dataset_id, draft)
        SELECT $1, $2, $3, $4, $5, $6, $7, $8::jsonb
         WHERE (SELECT count(*) FROM metric_proposals WHERE org_id = $1 AND project_id = $3 AND state = 'open') < ${MAX_OPEN}
-       ON CONFLICT (org_id, project_id, kind, name_key) WHERE state = 'open' DO NOTHING RETURNING id::text`,
+       ON CONFLICT (org_id, project_id, dataset_id, kind, name_key) WHERE state = 'open' DO NOTHING RETURNING id::text`,
       [org, id, projectId, draft.kind, draft.name, key, draft.datasetId, JSON.stringify(draft)],
     );
     const created = !!ins.rows[0];
     let at = id;
     if (!created) {
       const open = await c.query<{ id: string }>(
-        "SELECT id::text FROM metric_proposals WHERE org_id = $1 AND project_id = $2 AND kind = $3 AND name_key = $4 AND state = 'open'",
-        [org, projectId, draft.kind, key],
+        "SELECT id::text FROM metric_proposals WHERE org_id = $1 AND project_id = $2 AND dataset_id = $5 AND kind = $3 AND name_key = $4 AND state = 'open'",
+        [org, projectId, draft.kind, key, draft.datasetId],
       );
       if (!open.rows[0]) return null; // the cap
       at = open.rows[0].id;
@@ -114,12 +114,12 @@ export async function openOrRaise(
   });
 }
 
-/** The proposals of a project in `state` ('decided': approved or declined), newest first. */
-export async function list(projectId: string, decided: boolean, limit: number): Promise<Proposal[]> {
+/** The proposals of a project on `datasetIds` (the ones the caller edits) in `state` ('decided': approved or declined), newest first. */
+export async function list(projectId: string, decided: boolean, datasetIds: readonly string[], limit: number): Promise<Proposal[]> {
   const r = await inOrg((c, org) => c.query<Row>(
-    `SELECT ${COLUMNS} FROM metric_proposals p WHERE p.org_id = $1 AND p.project_id = $2 AND (p.state = 'open') <> $3
+    `SELECT ${COLUMNS} FROM metric_proposals p WHERE p.org_id = $1 AND p.project_id = $2 AND (p.state = 'open') <> $3 AND p.dataset_id = ANY($5::uuid[])
       ORDER BY p.created_at DESC LIMIT $4`,
-    [org, projectId, decided, limit],
+    [org, projectId, decided, limit, datasetIds],
   ));
   return r.rows.map(fromRow);
 }
