@@ -99,10 +99,10 @@ export async function send(projectId: string, id: string, provider: store.Provid
   if (!store.dbOrNull()) return noDb();
   const [issue] = await visible(projectId, id);
   if (!issue) return { ok: false as const, error: say.notFound() };
-  const link = trackers.linkBack(projectId, id);
-  if (!link) return { ok: false as const, error: say.noPublicUrl() };
   const org = ctx().org.id;
   if (!(await trackers.connected())[provider]) return { ok: false as const, error: say.notConnected(trackers.NAMES[provider]) };
+  const link = trackers.linkBack(projectId, id);
+  if (!link) return { ok: false as const, error: say.noPublicUrl() };
   if (!(await store.claimTicket(org, id, provider, ctx().user.email))) return { ok: false as const, error: say.alreadySent(trackers.NAMES[provider]) };
   const own = fallbackFor({ key: issue.key, kind: issue.kind, labels: [], questions: [] });
   try {

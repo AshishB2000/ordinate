@@ -458,4 +458,9 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'visual:duplicate': 'CREATE',
   'visual:save': 'CREATE',
   'visual:update': 'EDIT',
+  'issues:list': 'LIST', // an issue with any signal on a dataset or dashboard closed to the caller is left out whole (its title was written from every question); examples are question words, never an answer, figure or asker (src/server/issues/board.ts)
+  'issues:settings': 'PROJECT', // on or off, the time of the last check, which trackers are connected (flags): no dataset, no folder
+  'issues:setStatus': 'ITEM', // as missing for an issue closed to the caller
+  'issues:propose': 'ITEM', // as missing for a closed issue; #7's proposeFromQuestions is told only the open questions, and only datasets the caller opens
+  'issues:send': 'ITEM', // as missing for a closed issue; the ticket is the title, the counts, the fix and a link: no question text
 };
