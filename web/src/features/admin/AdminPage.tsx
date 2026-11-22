@@ -32,10 +32,11 @@ import { ChannelsTab } from './ChannelsTab';
 import { EmbeddingTab } from './EmbeddingTab';
 import { SlackTab } from './slack/SlackTab';
 import { AutopilotTab } from '../autopilot/AutopilotTab';
+import { IntegrationsTab } from './integrations/IntegrationsTab';
 import { Icon } from '../../ui/icons/Icon';
 import s from './Admin.module.css';
 
-const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings', 'embedding', 'slack', 'autopilot'] as const;
+const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings', 'embedding', 'slack', 'autopilot', 'integrations'] as const;
 const ORG_TABS = ['workspace', 'ai', 'themes', 'backups', 'live', 'channels'] as const;
 type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
@@ -116,6 +117,9 @@ export default function AdminPage() {
               <Tab value="autopilot" icon="activity">
                 Autopilot
               </Tab>
+              <Tab value="integrations" icon="send">
+                Integrations
+              </Tab>
             </>
           )}
           <Tab value="workspace" icon="sliders">
@@ -166,6 +170,9 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value="autopilot">
               <AutopilotTab />
+            </TabPanel>
+            <TabPanel value="integrations">
+              <IntegrationsTab />
             </TabPanel>
           </>
         )}

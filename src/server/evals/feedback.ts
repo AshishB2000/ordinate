@@ -42,7 +42,7 @@ export async function rate(p: { projectId: string; threadId: string; turnId: str
 interface Row { turnId: string; question: string; agentId: string | null; reason: string | null; createdAt: string; datasetIds: string[]; dashboardIds: string[] }
 
 /** The rows whose answer showed nothing in a folder closed to the caller: a question before such an answer is hidden as it is in History (turnsOpen). */
-async function openRows<T extends { datasetIds: string[]; dashboardIds: string[] }>(projectId: string, rows: T[]): Promise<T[]> {
+export async function openRows<T extends { datasetIds: string[]; dashboardIds: string[] }>(projectId: string, rows: T[]): Promise<T[]> {
   const ds = await levelsOf(projectId, 'dataset');
   const bd = rows.some((x) => x.dashboardIds.length) ? await levelsOf(projectId, 'dashboard') : null;
   return rows.filter((x) => !x.datasetIds.some((d) => ds?.(d) === 'none') && !x.dashboardIds.some((d) => bd?.(d) === 'none'));
