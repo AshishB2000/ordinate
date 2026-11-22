@@ -6,6 +6,7 @@ import type { PoolClient } from 'pg';
 import { ctx } from '../context';
 import { inOrg, orgDb } from '../db/inOrg';
 import { INBOX_SHOWN } from '../requests/store';
+import { INBOX_SHOWN as PROPOSAL_SHOWN } from '../proposals/store';
 
 /** Rows kept per member, newest first. */
 export const MAX_ROWS = 200;
@@ -119,7 +120,9 @@ export async function unseenCount(): Promise<number> {
              + (SELECT count(*) FROM editor_asks a
                  WHERE a.org_id = $1 AND a.user_email = $2 AND a.seen_at IS NULL AND (${WRITABLE}))
              + (SELECT count(*) FROM dashboard_request_inbox i
-                 WHERE i.org_id = $1 AND i.user_email = $2 AND i.seen_at IS NULL AND (${INBOX_SHOWN})))::int AS n`,
+                 WHERE i.org_id = $1 AND i.user_email = $2 AND i.seen_at IS NULL AND (${INBOX_SHOWN}))
+             + (SELECT count(*) FROM metric_proposal_inbox i
+                 WHERE i.org_id = $1 AND i.user_email = $2 AND i.seen_at IS NULL AND (${PROPOSAL_SHOWN})))::int AS n`,
       [org, user.email, user.role === 'admin'],
     ),
   );
@@ -131,7 +134,7 @@ export async function markSeen(which: { projectId: string; pieceId: string } | {
   const one = 'pieceId' in which ? [which.projectId, which.pieceId, null] : [null, null, Number.isFinite(Date.parse(which.through)) ? new Date(which.through).toISOString() : null];
   if (one.every((x) => x === null)) return; // an unreadable time marks nothing
   await inOrg(async (c, org) => {
-    for (const [table, id] of [['mentions', 'piece_id'], ['editor_asks', 'id'], ['dashboard_request_inbox', 'request_id']]) {
+    for (const [table, id] of [['mentions', 'piece_id'], ['editor_asks', 'id'], ['dashboard_request_inbox', 'request_id'], ['metric_proposal_inbox', 'proposal_id']]) {
       await c.query(
         `UPDATE ${table} SET seen_at = now()
           WHERE org_id = $1 AND user_email = $2 AND seen_at IS NULL

@@ -146,8 +146,8 @@ export interface Built {
  * filter it cannot apply (thrown by the door, typed by the route).
  * `suggest`: a refused spec named something that does not exist, and this is what it may have meant.
  */
-/** `needs`: what an editor must add first (Ask an editor's reason): a link (outcome E, `link` the checked one), or a copy of a table not asked live. */
-export type Failure = { ok: false; reason: string; code?: LiveFailureCode | typeof TERM_CODE; suggest?: AnswerSuggest; needs?: 'link' | 'copy'; link?: AnswerLink };
+/** `define`: the refusal is a measure or filter NAME the app could not find (docs/metric-proposals): a metric or term may be missing, so the turn offers "Propose a definition". `needs`: what an editor must add first (Ask an editor's reason): a link (outcome E, `link` the checked one), or a copy of a table not asked live. */
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode | typeof TERM_CODE; suggest?: AnswerSuggest; needs?: 'link' | 'copy'; link?: AnswerLink; define?: true };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 

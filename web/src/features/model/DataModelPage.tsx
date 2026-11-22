@@ -17,6 +17,7 @@ import { MetricEditor } from '../analyses/metrics/MetricEditor';
 import { DatasetsTab } from './datasets/DatasetsTab';
 import { SourcesLoading, SourceTablesTab } from './sources/SourceTablesTab';
 import { AssistantTab } from './assistant/AssistantTab';
+import { ProposalsTab } from './proposals/ProposalsTab';
 import { MetricsTab } from './metrics/MetricsTab';
 import { GlossaryTab } from './terms/GlossaryTab';
 import { TermDialog } from './terms/TermDialog';
@@ -28,7 +29,7 @@ import { TopicPicker } from './topics/TopicPicker';
 import { ExportMenu } from './ExportMenu';
 import { ImportDialog } from './ImportDialog';
 
-const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant'] as const;
+const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant', 'proposals'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
@@ -63,7 +64,7 @@ function Section({ projectId }: { projectId: string }) {
     setTab('metrics');
   };
   // Source tables are an editor's: a viewer's address lands on Datasets, once the roles are known (not before: an editor's link waits).
-  if (tab === 'sources' && !roles.isPending && !canEdit) return <Navigate to="?tab=datasets" replace />;
+  if ((tab === 'sources' || tab === 'proposals') && !roles.isPending && !canEdit) return <Navigate to="?tab=datasets" replace />;
   return (
     <Page
       title={TITLE}
@@ -111,6 +112,11 @@ function Section({ projectId }: { projectId: string }) {
           <Tab value="assistant" icon="sparkles">
             Assistant
           </Tab>
+          {canEdit && (
+            <Tab value="proposals" icon="file-text">
+              Proposals
+            </Tab>
+          )}
         </TabList>
         <TabPanel value="datasets">
           <DatasetsTab projectId={projectId} topic={topic} />
@@ -129,6 +135,7 @@ function Section({ projectId }: { projectId: string }) {
         <TabPanel value="assistant">
           <AssistantTab projectId={projectId} />
         </TabPanel>
+        <TabPanel value="proposals">{canEdit ? <ProposalsTab projectId={projectId} /> : null}</TabPanel>
       </Tabs>
       {newMetric && canEdit && <MetricEditor projectId={projectId} existing={{}} onClose={() => setNewMetric(false)} onSaved={metricSaved} />}
       {newTerm && canEdit && <TermDialog projectId={projectId} onClose={() => setNewTerm(false)} onSaved={() => setTab('glossary')} />}

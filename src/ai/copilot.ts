@@ -91,6 +91,8 @@ export interface CopilotTurn {
   /** What a refused answer needs an editor to add (./answerNeeds): Ask an editor's reason, and outcome E's checked link. Never beside `answer`. */
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
+  /** A refused chart whose measure or filter name nobody defined (docs/metric-proposals): the turn offers "Propose a definition". Never beside `answer`. */
+  define?: true;
   /**
    * The datasets this answer's facts were built from (copilot:ask; a turn stored before it has none), so ../ipc/turnsOpen
    * hides its words, prose with no chart included, from a caller one is closed to. SERVER ONLY: `turnsForBrowser` drops it.
@@ -152,6 +154,7 @@ export interface NewCopilotTurn {
   outside?: { dataset: string };
   needs?: AnswerNeeds['needs'];
   link?: AnswerLink;
+  define?: true;
   factsFrom?: string[];
   dashboardsFrom?: string[];
   research?: ResearchRef;
@@ -301,6 +304,7 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     const outside = role === 'assistant' && !answer ? sanitizeOutside(t.outside) : undefined;
     if (outside) turn.outside = outside;
     if (role === 'assistant' && !answer) Object.assign(turn, sanitizeNeeds(t));
+    if (role === 'assistant' && !answer && t.define === true) turn.define = true;
     const factsFrom = role === 'assistant' ? sanitizeIds(t.factsFrom) : undefined;
     if (factsFrom) turn.factsFrom = factsFrom;
     const dashboardsFrom = role === 'assistant' ? sanitizeIds(t.dashboardsFrom) : undefined;
@@ -617,6 +621,7 @@ export async function appendTurn(
   const outside = role === 'assistant' && !answer ? sanitizeOutside(turn && turn.outside) : undefined;
   if (outside) record.outside = outside;
   if (role === 'assistant' && !answer) Object.assign(record, sanitizeNeeds(turn));
+  if (role === 'assistant' && !answer && turn && turn.define === true) record.define = true;
   // A related category's or split's dataset, the answer's or an option's (./answerJoin), hides the turn as its facts' do: 0039's SQL count reads it here.
   const factsFrom = role === 'assistant' ? sanitizeIds([...(Array.isArray(turn?.factsFrom) ? turn.factsFrom : []), ...turnRelatedIds(answer, suggest?.options)]) : undefined;
   if (factsFrom) record.factsFrom = factsFrom;

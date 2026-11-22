@@ -16,6 +16,7 @@ import { targetReaders } from './targetReaders';
 import { emailMe, listMine, markGone, markSeen, setEmailMe, unseenCount } from './store';
 import { askEditors, listAsks, requestEmail, setRequestEmail, type AskReason } from './asks';
 import { listRequests } from '../requests/requests';
+import { listInbox as listProposals } from '../proposals/proposals';
 
 /** People the picker offers. */
 export const PICKER_MAX = 8;
@@ -113,6 +114,7 @@ export function register(): void {
   // dashboard requests — theirs once decided, and those they may approve (../requests).
   registry.handle('mentions:list', async () => ({
     ok: true as const, ...(await homeMentions()), asks: mentionsOn() ? await listAsks(HOME_MAX) : [], requests: mentionsOn() ? await listRequests(HOME_MAX) : [],
+    proposals: mentionsOn() ? await listProposals(HOME_MAX) : [],
   }));
   registry.handle('mentions:seen', async (_e, input: { projectId: string; id: string } | { through: string }) => {
     if (!mentionsOn()) return { ok: true as const };

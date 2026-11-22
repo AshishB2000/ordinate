@@ -224,6 +224,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'slack:myLink': 'OWN', // the caller's own Slack link
   'slack:openQuestion': 'OWN', // the caller's own Slack question (a channel question's words for anyone who may ask in its project)
   'slack:unlink': 'OWN',
+  'proposal:propose': 'FOLDER', // the caller's own refused turn; the model is told only datasets the caller opens; tells those with Edit on the dataset
   'research:card': 'FIGURE', // a door per step kind (answer:card, the SQL gate, driversVizData): the dataset open or reached
   'research:get': 'ITEM', // the starter's own run; not found once a dataset a computed step read is closed to them (src/server/research/rpc.ts, the rule of src/ipc/turnsOpen.ts)
   'research:list': 'OWN', // the caller's own runs
@@ -252,6 +253,9 @@ export const READS: Readonly<Record<string, FolderClass>> = {
 
 export const WRITES: Readonly<Record<string, FolderClass>> = {
   'agent:instructions': 'PROJECT',
+  'proposal:approve': 'FOLDER', // Edit on the dataset the draft is about (mustEdit); the save is the checked metric or term save, which holds Edit on the dataset's folder again
+  'proposal:decline': 'FOLDER', // Edit on the dataset the draft is about
+  'proposal:list': 'FOLDER', // only the proposals whose dataset the caller edits; structure only, no figure
   'research:addToProject': 'CREATE', // saves each cited chart as a visual and makes a Story: Edit on the target folder (answer:saveVisual's and story:create's rules)
   'research:resume': 'OWN', // the caller's own run, queued again
   'research:start': 'OWN', // the caller's own run and conversation turn; its steps run through the doors, as the starter

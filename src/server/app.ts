@@ -722,4 +722,6 @@ export function registerHandlers(): void {
   (require('./research/rpc') as typeof import('./research/rpc')).register();
   // Evaluation suites (docs/eval-suites): thumbs, the inbox, suites and cases, runs, the Judge model.
   (require('./evals/rpc') as typeof import('./evals/rpc')).register();
+  // Metric proposals (docs/metric-proposals): a refused answer's missing metric or term, drafted, reviewed by an editor.
+  (require('./proposals/rpc') as typeof import('./proposals/rpc')).register();
 }
