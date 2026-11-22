@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from '../../../ui/States';
 import { day, formatNumber } from '../../data/format';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { useCheckResult, useVerified, type CheckResult, type VerifiedRow } from './api';
+import { AddToTestsButton } from '../../evals/AddToTests';
 import { CheckAssistant, CheckOutcome } from './CheckAssistant';
 import { VerifiedDialog } from './VerifiedDialog';
 import a from './Assistant.module.css';
@@ -51,6 +52,7 @@ function Row({ projectId, row, canEdit, onEdit, result }: { projectId: string; r
         {!!row.phrasings.length && <p className={a.detail}>Also asked as {row.phrasings.map((p) => `“${p}”`).join(', ')}</p>}
         {row.note && <p className={a.note}>{row.note}</p>}
         {result && <CheckOutcome result={result} />}
+        {canEdit && row.runs && !row.sql && <AddToTestsButton projectId={projectId} source={{ kind: 'verified', id: row.id }} />}
         {!row.runs && row.problem && (
           <p className={a.warn}>
             <Icon name="alert" size={12} />

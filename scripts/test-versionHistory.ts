@@ -100,6 +100,9 @@ async function main(): Promise<void> {
   // state as the first version — the seeded sample's first edit is undoable.
   const legacy = await analysis.saveAnalysis(pid, { name: 'Legacy', sheets: [] });
   if (!legacy) throw new Error('could not create the legacy analysis');
+  // The record's own updatedAt is the first version's time only when the edit comes at least a millisecond later (versions.ts: `at < now`, else one before
+  // now); on a fast machine the save and the rename shared a millisecond and this failed one run in two.
+  await new Promise((r) => setTimeout(r, 5));
   await call('analysis:rename', { projectId: pid, id: legacy.id, name: 'Legacy renamed' });
   const legacyList = await versions.list(pid, 'dashboard', legacy.id);
   ok('a first save that changes a history-less record keeps its prior state too',

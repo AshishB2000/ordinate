@@ -54,6 +54,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'copilot:deleteThread': 'META',
   'copilot:history': 'EXPLICIT', // a kept answer card is sent only while the caller's row lock and hidden columns on its dataset match the ones it was computed under (src/ipc/answerSnapshots.ts); test-answerSnapshots
   'copilot:newThread': 'META',
+  'feedback:rate': 'META', // the caller's own answer turn gets a thumb and a reason code; the reply is that value: no row, label or figure
   'copilot:renameThread': 'META',
   'copilot:threads': 'META',
   'dashboard:asOfStamps': 'META',

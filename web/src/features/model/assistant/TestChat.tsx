@@ -73,13 +73,13 @@ export function TestChat({ projectId }: { projectId: string }) {
     try {
       const id = await thread();
       const r = await ask(projectId, { kind: '' }, q, id, askId);
-      if (r.ok) put(r.turns, id);
+      if (r.ok && 'turns' in r) put(r.turns, id); // never `choose`: the test chat does not ask with Auto
       else {
         setText(q);
-        if (r.notReady) {
+        if (!r.ok && r.notReady) {
           void qc.invalidateQueries({ queryKey: ['ai:status'] });
           setHint('Connect a model to ask anything else.');
-        } else setHint(r.error || 'Could not answer that. Try again.');
+        } else setHint((!r.ok && r.error) || 'Could not answer that. Try again.');
         void qc.invalidateQueries({ queryKey: ['copilot:threads', projectId] }); // a thread made for an ask that failed
       }
     } catch (e) {

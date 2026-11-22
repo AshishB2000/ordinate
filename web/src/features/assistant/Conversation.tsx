@@ -20,7 +20,8 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { mineModel } from './api';
 import { AskAnEditor } from './AskAnEditor';
-import { AgentPicker } from './AgentPicker';
+import { AgentChoices, AgentPicker } from './AgentPicker';
+import { AUTO } from './autoState';
 import { AiNotReady } from './AiNotReady';
 import { Composer } from './Composer';
 import { modelLabel } from './DockParts';
@@ -73,7 +74,14 @@ function Notice({ c }: { c: Conversation }) {
 
 /** Which Assistant answers, beside the composer: shown only when this person may use an agent (rule 1). */
 function AgentPick({ c }: { c: Conversation }) {
-  return <AgentPicker agents={c.agents} value={c.agentNote ? null : c.agentId} disabled={!c.pid || !!c.pending} onChange={(id) => void c.pickAgent(id)} />;
+  return <AgentPicker agents={c.agents} value={c.agentNote ? null : c.agentId} auto={c.auto} onAuto={() => void c.pickAgent(AUTO)} disabled={!c.pid || !!c.pending} onChange={(id) => void c.pickAgent(id)} />;
+}
+
+/** Auto could not tell two or three agents apart for the last question: nothing was asked, the person picks (docs/agent-router). */
+function Choices({ c }: { c: Conversation }) {
+  const { choice } = c;
+  if (!choice) return null;
+  return <AgentChoices question={choice.question} options={choice.options} busy={!!c.pending} onPick={(id) => void c.askWith(choice.question, id, choice.on)} onDismiss={() => c.setChoice(null)} />;
 }
 
 /** The turns, and what the last reply offers to do next. */
@@ -92,6 +100,9 @@ function Turns({ c }: { c: Conversation }) {
         threadId={c.shownThread}
         onFollowUp={c.followUp}
         agentName={c.agent?.name ?? c.history.data?.agent?.name}
+        agentId={c.agent?.id ?? c.history.data?.agent?.id}
+        agents={c.agents}
+        onChangeAgent={c.ready && c.enabled ? (q, id) => void c.askWith(q, id) : undefined}
         onAskProject={(q) => void c.askProject(q)}
         onNotThis={c.ready && c.enabled ? (q) => void c.notThis(q) : undefined}
         onAsk={c.ready && c.enabled ? (q) => void c.send(q) : undefined}
@@ -233,6 +244,7 @@ export function ConversationBody({ c, layout, intro }: { c: Conversation; layout
         </div>
         {verified && <VerifiedChips chips={c.chips} onPick={(v) => void c.followUp(v.spec, v.question)} />}
         <Suggestions c={c} className={s.suggests} pill={s.suggest} />
+        <Choices c={c} />
         <ConversationComposer c={c} layout="dock" />
       </>
     );
@@ -255,6 +267,7 @@ export function ConversationBody({ c, layout, intro }: { c: Conversation; layout
       <div className={w.foot}>
         <Notice c={c} />
         {hint}
+        <Choices c={c} />
         <ConversationComposer c={c} layout="page" className={start ? w.heroComposer : undefined} />
         {start && verified && <VerifiedChips className={w.verified} chips={c.chips} onPick={(v) => void c.followUp(v.spec, v.question)} />}
         {start && <Suggestions c={c} className={w.suggests} pill={w.suggest} />}

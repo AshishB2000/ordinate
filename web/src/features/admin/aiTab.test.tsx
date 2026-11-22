@@ -16,8 +16,8 @@ const EMPTY = { keyStore: null, providers: ['anthropic', 'openai', 'gemini', 'ga
 const SET_UP = { keyStore: null, providers: [on('anthropic'), off('openai'), off('gemini'), off('gateway')], models: [SONNET, HAIKU] };
 
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
-/** Channels the AI tab reads beside its own (deep research's limits card), answered quietly unless a test says otherwise. */
-const ALSO: Record<string, Reply> = { 'research:limits': { body: { ok: true, limits: { steps: 8, queries: 12, minutes: 10 }, ceilings: { steps: 20, queries: 30, minutes: 30 } } } };
+/** Channels the AI tab reads beside its own (deep research's limits card, the judge model card), answered quietly unless a test says otherwise. */
+const ALSO: Record<string, Reply> = { 'eval:judge': { body: { ok: true, pick: null } }, 'research:limits': { body: { ok: true, limits: { steps: 8, queries: 12, minutes: 10 }, ceilings: { steps: 20, queries: 30, minutes: 30 } } } };
 
 function serve(routes: Record<string, Reply>) {
   const calls: { channel: string; payload: unknown }[] = [];

@@ -272,6 +272,14 @@
   color: var(--text-dim);
 }
 
+/* The thumbs and Add to tests under an answer (./Thumbs, ../evals/AddToTests). */
+.rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-4) var(--sp-12);
+}
+
 /* ── Activity: the app showing its work, never persisted ────────────────── */
 .activity {
   display: flex;
