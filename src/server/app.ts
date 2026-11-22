@@ -307,6 +307,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     app.addHook('preClose', async () => {
       if (isDraining()) return;
       await evalWorker?.stop();
+      await (require('./autopilot/usage') as typeof import('./autopilot/usage')).stopUsage();
       await researchWorker?.stop();
       await slackWorker?.stop();
       await jobs?.stop();

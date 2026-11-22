@@ -143,7 +143,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/live/liveJoin.ts': { count: 1, how: 'throws' },
   // prepare: a Prepare list (or a dataset setting). Must NOT take a term; unchanged, an unknown step is dropped.
   'src/ai/planCheck.ts': { count: 1, how: 'prepare' },
-  'src/data/datasets.ts': { count: 3, how: 'prepare' },
+  'src/data/datasets.ts': { count: 2, how: 'prepare' },
+  'src/data/datasetEdit.ts': { count: 1, how: 'prepare' }, // updateDataset moved here from datasets.ts: the same site
   'src/data/inputTable/store.ts': { count: 1, how: 'prepare' },
   // a cascading picker's parent picks: plain filter steps only, a term is dropped on purpose (narrows less, never more)
   'src/ipc/distinctNarrow.ts': { count: 2, how: 'prepare' },

@@ -40,6 +40,8 @@ export interface HostedPage {
   readonly file: string;
   readonly kind: 'dashboard' | 'story' | 'scorecard';
   readonly name: string;
+  /** The dashboard, story or scorecard the page shows (Autopilot's open record). Absent on a site published before. */
+  readonly id?: string;
 }
 
 export interface HostedSite {
@@ -228,7 +230,7 @@ export async function publishHosted(
       buildStartedAt: started,
       bytes: files.reduce((n, f) => n + Buffer.byteLength(f.html), 0),
       combos,
-      pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name })),
+      pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name, id: p.id })),
       datasetIds: [...new Set(read)],
       config: { dashboardIds: config.dashboardIds, storyIds: config.storyIds, scorecardIds: config.scorecardIds, options: config.options, ...(config.brands ? { brands: config.brands } : {}) },
     };

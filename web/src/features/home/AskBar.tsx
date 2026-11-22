@@ -44,9 +44,12 @@ export interface AskBarProps {
   /** The one the next question goes to; null: the Project assistant. */
   agentId?: string | null;
   onAgent?: (id: string | null) => void;
+  /** Auto (docs/agent-router) is the one shown: the router picks from the question. */
+  auto?: boolean;
+  onAuto?: () => void;
 }
 
-export function AskBar({ prompts, onAsk, projectId, onRun, agents = [], agentId = null, onAgent }: AskBarProps) {
+export function AskBar({ prompts, onAsk, projectId, onRun, agents = [], agentId = null, onAgent, auto = false, onAuto }: AskBarProps) {
   const [q, setQ] = useState('');
   const [about, setAbout] = useState<About | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -80,6 +83,11 @@ export function AskBar({ prompts, onAsk, projectId, onRun, agents = [], agentId 
           <AgentPicker
             agents={agents}
             value={agentId}
+            auto={auto}
+            onAuto={onAuto && (() => {
+              onAuto();
+              input.current?.focus();
+            })}
             onChange={(id) => {
               onAgent(id);
               input.current?.focus();

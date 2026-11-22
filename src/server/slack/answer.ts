@@ -90,7 +90,7 @@ export async function processQuestion(pool: Pool, q: store.Question, owner: stri
     // Where: the channel's agent, or the person's own assistant in a direct message.
     let target: Target | null;
     if (dm) {
-      target = await directTarget(pool, who);
+      target = await directTarget(pool, who, q.text);
     } else {
       const ca = await store.channelAgent(q.teamId, q.channelId);
       const project = ca && ca.orgId === q.orgId ? await projects.getProject(ca.projectId) : null;

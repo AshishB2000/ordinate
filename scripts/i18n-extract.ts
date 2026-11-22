@@ -399,6 +399,7 @@ export const MAIN_FILES = [
   'src/ipc/drillMessages.ts',
   'src/analysis/topicMessages.ts',
   'src/ai/agentMessages.ts',
+  'src/ai/agentRouteMessages.ts',
   'src/analysis/fanOutMessages.ts',
   'src/data/columnAccessMessages.ts',
   'src/analysis/targetMessages.ts',
