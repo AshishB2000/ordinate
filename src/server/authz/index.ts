@@ -52,6 +52,8 @@ async function projectExists(id: string): Promise<boolean> {
 
 /** The caller's best grant rank on `projectId` (0 = none), by user and through teams. Throws on a database error. */
 export async function grantRank(pool: Pool | null, who: Identity, projectId: string): Promise<number> {
+  // An embedded Assistant's asker has no account and no grant: viewer on its agent's project, nothing anywhere else.
+  if (who.embed) return who.embed.projectId.toLowerCase() === projectId.toLowerCase() ? 1 : 0;
   if (!pool) return 0;
   const r = await pool.query<{ rank: number | null }>(
     `SELECT max(CASE g.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 WHEN 'viewer' THEN 1 ELSE 0 END)::int AS rank

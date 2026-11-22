@@ -27,9 +27,24 @@ export interface Client {
 /** The caller's role in the org (stored on the org membership, `users.role`). T3.3 enforces it. */
 export type Role = 'admin' | 'editor' | 'viewer';
 
+/**
+ * An outside customer asking an embedded Assistant (docs/embedded-assistant): no account. Built only by
+ * src/server/embed/asker.ts from a verified token and the agent's marking. `datasets`: each embeddable dataset id
+ * (lowercase) → the column every read is locked on and the values it is held to.
+ */
+export interface EmbedAsker {
+  readonly agentId: string;
+  readonly projectId: string;
+  /** The token's `sub`. Data: never logged. */
+  readonly customer: string;
+  readonly datasets: Readonly<Record<string, { readonly column: string; readonly values: readonly string[]; readonly writers: string }>>;
+}
+
 export interface Identity {
   readonly user: { readonly email: string; readonly role: Role };
   readonly org: { readonly id: string };
+  /** Set for an embedded Assistant's asker: every reader locks to it or refuses (src/data/rowAccess.ts). */
+  readonly embed?: EmbedAsker;
   /** Set when the request signed in with a personal API token (`Authorization: Bearer`, ./auth/tokens.ts). */
   readonly via?: 'token';
   /**
@@ -171,4 +186,9 @@ export function identityFor(cfg: ServerEnv): (headers: Headers) => Identity {
  */
 export function senderOf(e: unknown): Client {
   return dataDir === null ? (e as { sender: Client }).sender : ctx().client;
+}
+
+/** The embed asker of the current request, or undefined (a member, a job, outside a request). */
+export function embedAsker(): EmbedAsker | undefined {
+  return als.getStore()?.embed;
 }

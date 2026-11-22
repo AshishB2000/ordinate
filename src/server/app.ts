@@ -45,6 +45,7 @@ import { registerRequestMetrics, watchPgPool } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/route';
 import { useEmbedDb } from './embed/settings';
+import { registerEmbedAskRoute } from './embed/askRoute';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
@@ -604,6 +605,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   registerPublishedRoutes(app, identify, () => pool);
 
   // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
+  registerEmbedAskRoute(app); // the Assistant's: POST /embed/ask, the token in the body (docs/embedded-assistant)
   registerEmbedRoutes(app, { pool: () => pool, identify, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
 
   // An app closed on its own (the in-process suites) lets its DuckDB go, as it always did: the next

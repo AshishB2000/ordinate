@@ -508,6 +508,7 @@ export async function latestThreadId(projectId: string): Promise<string | null> 
 // invalid projectId or a missing parent project — same guard as appendTurn.
 // `agentId`: the Assistant agent it is with (the caller checked they may use it); none, the Project assistant.
 export async function createThread(projectId: string, agentId?: string | null): Promise<CopilotThreadSummary | null> {
+  if (ctx().embed) throw new Error('an embedded asker saves nothing'); // docs/embedded-assistant: no thread, ever
   if (!isValidId(projectId)) return null;
   const agent = isValidId(agentId) ? agentId : undefined;
   const parent = await projects.getProject(projectId);
@@ -587,6 +588,7 @@ export async function appendTurn(
   turn: NewCopilotTurn,
   threadId?: string,
 ): Promise<CopilotTurn[] | null> {
+  if (ctx().embed) throw new Error('an embedded asker saves nothing'); // docs/embedded-assistant: no turn, ever
   if (!isValidId(projectId)) return null;
   const parent = await projects.getProject(projectId);
   if (!parent) return null;
