@@ -1,0 +1,42 @@
+:root { color-scheme: light dark; --bg: #f7f8fa; --panel: #fff; --fg: #1f2430; --muted: #5b6475; --line: #dfe3ea; --accent: #3156d3; --accent-fg: #fff; --bad: #b3261e; --c0: #3156d3; --c1: #e08a1e; --c2: #1e9e7a; --c3: #a23fb8; }
+@media (prefers-color-scheme: dark) { :root { --bg: #14171d; --panel: #1b1f27; --fg: #e8ebf0; --muted: #9aa3b2; --line: #2a303a; --accent: #7b9bff; --accent-fg: #0d1117; --bad: #ff8a80; --c0: #7b9bff; --c1: #f5b25c; --c2: #5fd0ad; --c3: #d58be8; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.page { display: flex; flex-direction: column; height: 100%; max-width: 860px; margin: 0 auto; padding: 0 16px; }
+header h1 { font-size: 16px; font-weight: 600; margin: 14px 0 6px; }
+.log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 0 12px; }
+.empty { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
+.hint { font-size: 12px; }
+.me { align-self: flex-end; margin: 0; max-width: 80%; padding: 8px 12px; border-radius: 12px 12px 2px 12px; background: var(--accent); color: var(--accent-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.answer { align-self: stretch; }
+.prose { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.card h3 { margin: 0 0 8px; font-size: 14px; }
+.headline { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0 0 8px; padding: 0; }
+.headline li { display: flex; flex-direction: column; }
+.headline span { color: var(--muted); font-size: 12px; }
+.headline strong { font-size: 20px; }
+.chart { margin: 0; }
+.chart svg { width: 100%; height: auto; max-height: 280px; }
+.axis { stroke: var(--line); }
+.tick { fill: var(--muted); font-size: 11px; }
+.series { stroke-width: 2.5; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+.cut, .caption, .filters, .notes { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.bullets { margin: 8px 0 0; padding-left: 18px; }
+details { margin-top: 8px; font-size: 12px; }
+summary { cursor: pointer; color: var(--muted); }
+.grid { border-collapse: collapse; margin-top: 6px; width: 100%; }
+.grid th, .grid td { border-bottom: 1px solid var(--line); padding: 3px 8px; text-align: right; }
+.grid th[scope="row"], .grid thead th:first-child { text-align: left; font-weight: 500; }
+.problem { margin: 0; padding: 8px 12px; border: 1px solid var(--bad); color: var(--bad); border-radius: 10px; }
+.busy { margin: 0; color: var(--muted); }
+.composer { display: flex; gap: 8px; align-items: flex-end; padding: 8px 0; border-top: 1px solid var(--line); }
+.composer textarea { flex: 1; resize: none; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.composer textarea:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; padding: 8px 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-fg); cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+footer { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

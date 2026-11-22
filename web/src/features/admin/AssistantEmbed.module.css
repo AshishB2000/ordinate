@@ -1,0 +1,19 @@
+/* Admin → Embedding → Assistant: the marked agents, the mark form, the caps. Tokens only, so both themes follow. */
+.notice { display: flex; gap: var(--sp-8); padding: var(--sp-12); border: 1px solid var(--border-hairline); border-radius: var(--r-md); background: var(--surface-2); color: var(--muted); font-size: var(--t-13); }
+.notice p { margin: 0; max-width: 78ch; }
+.notice strong { color: var(--text-strong); }
+.agents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-12); }
+.agent { display: flex; flex-direction: column; gap: var(--sp-8); padding: var(--sp-12); border: 1px solid var(--border-hairline); border-radius: var(--r-md); }
+.agentHead { display: flex; align-items: center; gap: var(--sp-12); flex-wrap: wrap; }
+.where { color: var(--muted); font-size: var(--t-12); flex: 1; }
+.marked { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--t-13); }
+.marked li { display: flex; align-items: center; gap: var(--sp-8); flex-wrap: wrap; }
+.marked code { font-family: var(--font-mono); color: var(--muted); }
+.actions { display: flex; gap: var(--sp-8); flex-wrap: wrap; }
+.form { display: flex; flex-direction: column; gap: var(--sp-12); padding: var(--sp-12); border: 1px solid var(--border-hairline); border-radius: var(--r-md); }
+.datasets { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-8); }
+.datasets legend { padding: 0; margin-bottom: var(--sp-4); font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }
+.datasetRow { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); flex-wrap: wrap; }
+.caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-12); align-items: start; }
+.caps > p { grid-column: 1 / -1; margin: 0; }
+.sub { margin: var(--sp-8) 0 0; font-size: var(--t-13); font-weight: 600; color: var(--text-strong); }

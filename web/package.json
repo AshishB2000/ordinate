@@ -7,7 +7,7 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "size": "node scripts/bundle-size.ts",
+    "size": "node scripts/bundle-size.ts && node scripts/bundle-size.ts 90 embed-ask.html",
     "e2e": "tsc --noEmit -p tsconfig.e2e.json && E2E_NO_BUILD=1 node --test --test-concurrency=1 --test-reporter=spec \"e2e/*.e2e.ts\""
   },
   "dependencies": {

@@ -45,7 +45,7 @@ import { registerRequestMetrics, watchPgPool } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/route';
 import { useEmbedDb } from './embed/settings';
-import { registerEmbedAskRoute } from './embed/askRoute';
+import { registerEmbedAskPage, registerEmbedAskRoute } from './embed/askRoute';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
@@ -590,6 +590,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   registerPublishedRoutes(app, identify, () => pool);
 
   // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
+  registerEmbedAskPage(app);
   registerEmbedAskRoute(app); // the Assistant's: POST /embed/ask, the token in the body (docs/embedded-assistant)
   registerEmbedRoutes(app, { pool: () => pool, identify, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
 
@@ -687,6 +688,8 @@ export function registerHandlers(): void {
   (require('../ipc/publishServer') as typeof import('../ipc/publishServer')).register(() => dbPool);
   // Signed embedding (docs/embed): the org's settings and secret, a dashboard's lockable columns, a preview link.
   (require('../ipc/embed') as typeof import('../ipc/embed')).register();
+  // The embedded Assistant's setup (docs/embedded-assistant): which agents and datasets, and the caps.
+  (require('../ipc/embedAssistant') as typeof import('../ipc/embedAssistant')).register();
   for (const mod of ['../ipc/comments', '../ipc/summary', '../ipc/dashboardsServer', '../ipc/fx']) (require(mod) as { register: () => void }).register();
   (require('../ipc/alerts') as typeof import('../ipc/alerts')).register();
   // Live datasets (docs/live-data/00-plan.md L2.1): the mode switch.

@@ -67,3 +67,42 @@ export async function recordAsk(org: string, row: { id: string; agentId: string 
   await inOrg(pool(), org, (c) =>
     c.query('INSERT INTO embed_asks (org_id, id, agent_id, customer, outcome) VALUES ($1, $2, $3, $4, $5)', [org, row.id, row.agentId, row.customer.slice(0, 200), row.outcome]));
 }
+
+export interface EmbedAgentRow extends EmbedAgent { readonly enabled: boolean }
+
+/** Every marked agent of the org, in project then agent order (the Admin screen's list). */
+export async function listEmbedAgents(org: string): Promise<EmbedAgentRow[]> {
+  const r = await inOrg(pool(), org, (c) =>
+    c.query<{ agent_id: string; project_id: string; datasets: unknown; enabled: boolean }>('SELECT agent_id::text, project_id::text, datasets, enabled FROM embed_agents WHERE org_id = $1 ORDER BY project_id, agent_id', [org]));
+  return r.rows.map((row) => ({ agentId: row.agent_id, projectId: row.project_id, datasets: sanitizeDatasets(row.datasets), enabled: row.enabled }));
+}
+
+/** Stops embedding one agent: its marking is deleted, and every token for it is refused from the next ask on. */
+export async function removeEmbedAgent(org: string, agentId: string): Promise<boolean> {
+  const r = await inOrg(pool(), org, (c) => c.query('DELETE FROM embed_agents WHERE org_id = $1 AND agent_id = $2', [org, agentId]));
+  return (r.rowCount ?? 0) > 0;
+}
+
+export const MAX_DAILY_CAP = 1_000_000;
+export const MAX_PER_MINUTE_CAP = 600;
+
+/** Saves the caps (Q4). The caller has checked the ranges (they are the table's CHECKs too). */
+export async function setCaps(org: string, caps: Caps): Promise<void> {
+  await inOrg(pool(), org, (c) =>
+    c.query(
+      `INSERT INTO embed_assistant_limits (org_id, daily_cap, per_minute_cap, updated_at) VALUES ($1, $2, $3, now())
+       ON CONFLICT (org_id) DO UPDATE SET daily_cap = $2, per_minute_cap = $3, updated_at = now()`,
+      [org, caps.daily, caps.perMinute],
+    ));
+}
+
+/** The org's last `days` of asks, by outcome: what the Admin screen shows beside the caps. Counts only. */
+export async function askCounts(org: string): Promise<{ today: number; limited: number }> {
+  const r = await inOrg(pool(), org, (c) =>
+    c.query<{ today: number; limited: number }>(
+      `SELECT count(*) FILTER (WHERE outcome = 'ok')::int AS today, count(*) FILTER (WHERE outcome = 'limited')::int AS limited
+         FROM embed_asks WHERE org_id = $1 AND at > now() - interval '24 hours'`,
+      [org],
+    ));
+  return r.rows[0] ?? { today: 0, limited: 0 };
+}

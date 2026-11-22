@@ -144,6 +144,35 @@ async function suite(adminUrl: string): Promise<void> {
     ok('timeout: a hanging model gets the failure sentence at the limit, not after it', slow.status === 200 && slow.json?.ok === false && /could not answer/.test(slow.json?.error ?? '') && Date.now() - t0ms < 5000, `${slow.status} ${slow.text} ${Date.now() - t0ms}ms`);
     ok('timeout: …and the audit row says error', (await pool.query(`SELECT outcome FROM embed_asks WHERE customer = 'slow-customer'`)).rows[0]?.outcome === 'error');
 
+    // ── the page: GET /embed/ask/<token> (phase 3) ──
+    const pageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-ask-page-'));
+    fs.writeFileSync(path.join(pageDir, 'embed-ask.html'), '<!doctype html><html><body><div id="root"></div><script type="module" src="/assets/embed-ask.js"></script></body></html>');
+    askRoute.setAskPageDirForTest(pageDir);
+    const page = async (tok: string, headers: Record<string, string> = {}) => {
+      const r = await fetch(`${base}/embed/ask/${tok}`, { headers: { accept: 'text/html', ...headers }, redirect: 'manual' });
+      return { status: r.status, text: await r.text(), csp: r.headers.get('content-security-policy') ?? '', xfo: r.headers.get('x-frame-options'), r };
+    };
+    const okPage = await page(t0);
+    ok('page: a valid token is served the app\'s page', okPage.status === 200 && okPage.text.includes('id="root"'), `${okPage.status} ${okPage.text.slice(0, 120)}`);
+    ok('page: framable by the org\'s listed sites only, never by others, script and style from this server only', okPage.csp.includes(`frame-ancestors ${PORTAL}`) && !okPage.csp.includes('*') && okPage.csp.includes("script-src 'self'") && okPage.csp.includes("style-src 'self'") && okPage.csp.includes("connect-src 'self'") && !okPage.csp.includes('unsafe') && okPage.xfo === null, okPage.csp);
+    ok('page: no cache, no robots, no referrer (the token is in its URL), no cookie', okPage.r.headers.get('cache-control') === 'no-store' && /noindex/.test(okPage.r.headers.get('x-robots-tag') ?? '') && okPage.r.headers.get('referrer-policy') === 'no-referrer' && !okPage.r.headers.get('set-cookie'));
+    const bad = await page(hostSign('ord_embed_' + 'z'.repeat(43), claims()));
+    ok('page: a bad signature is the bare refusal, framable by nobody', bad.status === 403 && bad.xfo === 'DENY' && bad.csp.includes("frame-ancestors 'none'") && !bad.text.includes('id="root"'));
+    const old = await page(hostSign(SECRET, claims({ exp: now() - 600 })));
+    ok('page: an expired token says so, in a frame the org\'s sites may show', old.status === 403 && /expired/i.test(old.text) && old.csp.includes(`frame-ancestors ${PORTAL}`));
+    const unmarked = await page(hostSign(SECRET, claims({ agent: DS })));
+    ok('page: an agent that is not marked gets a refusal, not the composer', unmarked.status === 403 && !unmarked.text.includes('id="root"'));
+    const noLock = await page(hostSign(SECRET, claims({ params: { region: 'x' } })));
+    ok('page: a token that does not lock the required column is refused', noLock.status === 403 && !noLock.text.includes('id="root"'));
+    const wrongSite = await page(t0, { referer: 'https://evil.example/page' });
+    ok('page: a Referer from a site that is not listed is refused', wrongSite.status === 403 && !wrongSite.text.includes('id="root"'));
+    ok('page: a Referer from a listed site passes', (await page(t0, { referer: `${PORTAL}/portal` })).status === 200);
+    const prev = await page(hostSign(SECRET, claims()), {});
+    ok('control: the same token on the POST route is answered', prev.status === 200 && (await post(t0)).status === 200);
+    fs.rmSync(pageDir, { recursive: true, force: true });
+    ok('page: the app not built is a 503 refusal, not a crash', (await page(t0)).status === 503);
+    askRoute.setAskPageDirForTest();
+
     await boss.call('embed:rotate');
     ok('rotating the secret kills every token', (await post(t0)).status === 403);
 
