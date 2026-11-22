@@ -130,7 +130,8 @@ const noUrl = (m: unknown): string => JSON.stringify(m).replace(/https?:\/\/[^"]
     await W.call('boss', 'privacy:setPolicy', { projectId: W.P, policy: { slack: 'mask' } });
 
     // ── 10. no copy of the card is kept ───────────────────────────────────────
-    const kept = JSON.stringify((await W.pool.query(`SELECT answer FROM slack_questions WHERE answer IS NOT NULL`)).rows);
+    // Ids and hashes are random hex: a figure like 1784 can sit inside one by chance (a ~1% flake), so they are stripped before the scan.
+    const kept = JSON.stringify((await W.pool.query(`SELECT answer FROM slack_questions WHERE answer IS NOT NULL`)).rows).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{64}/gi, 'ID');
     ok('10. slack_questions keeps ids and names only: no card, no figure, no category label', !/series|labels|values|East|West|1784|"rows"|"card"/.test(kept) && kept.includes('turnId'), kept.slice(0, 300));
     S.answer = { text: 'Orders by region: East 41.', datasets: [W.orders], card: chartCard('Orders', 'region', ['East', 'West']) };
     const toShare = await ask('boss', 'CMIX', 'orders?');

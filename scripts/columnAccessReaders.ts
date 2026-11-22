@@ -70,6 +70,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'copilot:deleteThread': 'META',
   'copilot:history': 'REDACT', // a kept answer card is not sent once a column is hidden from the caller since (src/ipc/answerSnapshots.ts `accessPrint`); test-answerSnapshots
   'copilot:newThread': 'META',
+  'feedback:rate': 'META', // a thumb and a reason code on the caller's own turn; no value, figure or row of a dataset
   'copilot:renameThread': 'META',
   'copilot:threads': 'META',
   'dashboard:asOfStamps': 'META',

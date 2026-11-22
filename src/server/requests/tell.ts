@@ -86,7 +86,7 @@ export async function tellRequester(r: DashboardRequest): Promise<void> {
 }
 
 /** One email to `email`, only when they turned on users.request_email, under the mention email budget (`author`'s hour and theirs). */
-async function mailOne(author: string, email: string, projectId: string, m: { title: string; subtitle: string[]; note: string; noteBy: string; path: string | null }): Promise<void> {
+export async function mailOne(author: string, email: string, projectId: string, m: { title: string; subtitle: string[]; note: string; noteBy: string; path: string | null }): Promise<void> {
   const r0 = await orgDb()!.query<{ id: string; request_email: boolean }>('SELECT id::text, request_email FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL', [ctx().org.id, email]);
   const who = r0.rows[0];
   if (!who || !who.request_email) return; // off unless they turned it on

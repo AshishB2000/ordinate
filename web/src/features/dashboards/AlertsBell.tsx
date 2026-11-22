@@ -36,6 +36,7 @@ import { MentionedYou } from './MentionedYou';
 import { AskedYou, useAskNotice } from './AskedYou';
 import { RequestsForYou, useRequestNotice } from './RequestsForYou';
 import { ProposalsForYou, useProposalNotice } from './ProposalsForYou';
+import { useAutopilotNotice } from '../autopilot/api';
 import { useMentions, useMentionSeen } from './mentionsApi';
 import { reason, useAlerts, useAlertsLive, useAlertWrite, type AlertEvent, type AlertRule } from './api';
 import { usePausedNotice } from '../subscriptions/notices';
@@ -251,6 +252,7 @@ export function AlertsBell() {
   // …and where a dashboard request reaches its approvers, and its outcome the viewer who asked (./RequestsForYou).
   useRequestNotice();
   useProposalNotice(); // …and a metric proposal's, to its editors and to the people who asked (./ProposalsForYou).
+  useAutopilotNotice(); // an admin's tabs hear a finished Autopilot report
   // The bell asks the server only once it matters: opened, or an alert fired
   // (alerts:fired). A dashboard's KPI cards read the same list, so on a
   // dashboard the badge is there at once; every other page stays inside its

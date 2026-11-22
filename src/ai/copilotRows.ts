@@ -108,17 +108,17 @@ async function turnsOf(c: PoolClient, org: string, projectId: string, threadId: 
 async function target(c: PoolClient, org: string, projectId: string, threadId: string | undefined, lock = false): Promise<{ id: string; title: string; agent_id?: string | null } | null> {
   const named = threadId && copilot.isValidId(threadId) ? threadId : null;
   const r = await c.query<{ id: string; title: string; agent_id: string | null }>(
-    `SELECT t.id::text, t.title, t.agent_id::text FROM assistant_threads t WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
+    `SELECT t.id::text, t.title, t.agent_id::text FROM assistant_threads t WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND (NOT t.hidden OR t.id = $4::uuid) -- a suite run's hidden conversation is found only by its id
       ORDER BY coalesce(t.id = $4::uuid, false) DESC, t.updated_at DESC, t.touched DESC LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
     [org, projectId, me(), named],
   );
   return r.rows[0] ?? null;
 }
 
-const newThread = (c: PoolClient, org: string, projectId: string, id: string, at: string, agentId?: string) =>
+const newThread = (c: PoolClient, org: string, projectId: string, id: string, at: string, agentId?: string, hidden = false) =>
   c.query(
-    `INSERT INTO assistant_threads (org_id, project_id, id, owner, title, created_at, updated_at, agent_id) VALUES ($1, $2, $3, $4, $5, $6, $6, $7)`,
-    [org, projectId, id, me(), copilot.FALLBACK_TITLE, at, agentId ?? null],
+    `INSERT INTO assistant_threads (org_id, project_id, id, owner, title, created_at, updated_at, agent_id, hidden) VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8)`,
+    [org, projectId, id, me(), copilot.FALLBACK_TITLE, at, agentId ?? null, hidden],
   );
 
 /** Every member's conversations in stored order (least recently touched first), turns and all. */
@@ -146,7 +146,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
 
 export async function listThreads(projectId: string): Promise<CopilotThreadSummary[]> {
   await moveFile(projectId);
-  const r = await tx(false, (c, org) => c.query<ThreadRow>(`${SUMMARY} WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 ${RECENT}`, [org, projectId, me()]));
+  const r = await tx(false, (c, org) => c.query<ThreadRow>(`${SUMMARY} WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND NOT t.hidden ${RECENT}`, [org, projectId, me()]));
   return r.rows.map(summaryOf);
 }
 
@@ -184,7 +184,7 @@ export async function listPage(projectId: string, after?: string, open: readonly
   const page = copilot.THREAD_PAGE;
   const r = await tx(false, (c, org) => c.query<ThreadRow & { shown: number | null; first_q: string | null; first_q_hidden: boolean | null }>(
     `${SUMMARY.replace(' FROM assistant_threads t', `, v.shown, v.first_q, v.first_q_hidden FROM assistant_threads t ${SHOWN}`)}
-      WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND ($5::uuid[] IS NULL OR v.shown > 0 OR v.stored = 0)
+      WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND NOT t.hidden AND ($5::uuid[] IS NULL OR v.shown > 0 OR v.stored = 0)
        ${from ? `AND (t.updated_at, t.touched) < (timestamptz 'epoch' + $6::bigint * interval '1 microsecond', $7::bigint)` : ''}
      ${RECENT} LIMIT $4`,
     [org, projectId, me(), page + 1, open, ...(from ? [from[1], from[2]] : [])],
@@ -204,12 +204,13 @@ export async function threadFor(projectId: string, threadId?: string): Promise<c
   return t ? { id: t.id, title: t.title, ...(t.agent_id ? { agentId: t.agent_id } : {}) } : null;
 }
 
-export async function createThread(projectId: string, at: string, agentId?: string): Promise<CopilotThreadSummary> {
+/** `hidden`: a suite run's conversation (src/server/evals): in no list and never the caller's latest. */
+export async function createThread(projectId: string, at: string, agentId?: string, hidden = false): Promise<CopilotThreadSummary> {
   await moveFile(projectId);
   const id = randomUUID();
   await tx(true, async (c, org) => {
     await lockOwner(c, org, projectId, me());
-    await newThread(c, org, projectId, id, at, agentId);
+    await newThread(c, org, projectId, id, at, agentId, hidden);
   });
   return { id, title: copilot.FALLBACK_TITLE, updatedAt: at, turnCount: 0, ...(agentId ? { agentId } : {}) };
 }

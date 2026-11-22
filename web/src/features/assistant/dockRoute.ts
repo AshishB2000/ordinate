@@ -12,7 +12,7 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const CAPTURE_ID = /^[0-9a-zA-Z_-]{1,64}$/;
 
 /** What comes before `:projectId` in every route that names a project (app/routes.tsx — dockRoute.test.tsx walks that list against this one). */
-const BEFORE_PROJECT = ['/data', '/data/captures', '/data/input', '/data/metrics', '/visuals', '/analyses', '/scorecards', '/analytics', '/analytics/scenarios', '/connections', '/pipelines', '/reports', '/stories', '/versions', '/dashboards', '/model', '/requests', '/research'];
+const BEFORE_PROJECT = ['/data', '/data/captures', '/data/input', '/data/metrics', '/visuals', '/analyses', '/scorecards', '/analytics', '/analytics/scenarios', '/connections', '/pipelines', '/reports', '/stories', '/versions', '/dashboards', '/model', '/requests', '/research', '/autopilot', '/evals'];
 
 /** The project the URL names, or null — the segment where a route keeps its project, and only when it is an id. */
 export function routeProject(pathname: string): string | null {

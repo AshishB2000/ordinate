@@ -73,6 +73,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'copilot:deleteThread': 'OWN',
   'copilot:history': 'ASK', // E4: an answer on a closed dataset and its question are not sent (src/ipc/turnsOpen.ts)
   'copilot:newThread': 'OWN',
+  'feedback:rate': 'OWN', // the caller's own answer turn, one the folders show them (openTurns); never another's
   'copilot:renameThread': 'OWN',
   'copilot:threads': 'OWN', // E4: a title taken from such a question reads untitled
   'dashboard:asOfStamps': 'FIGURE',
@@ -259,6 +260,20 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'research:resume': 'OWN', // the caller's own run, queued again
   'research:start': 'OWN', // the caller's own run and conversation turn; its steps run through the doors, as the starter
   'research:stop': 'OWN', // the caller's own run
+  'feedback:inbox': 'LIST', // a thumbs-down's question (Q1), never the answer; one whose answer showed a dataset or dashboard closed to the caller is left out (turnsOpen's rule, stored on the row)
+  'feedback:dismiss': 'ITEM', // as missing for an inbox item closed to the caller
+  'eval:suites': 'LIST', // a case whose spec reads a dataset closed to the caller is left out of its counts (src/server/evals/view.ts caseGate)
+  'eval:cases': 'LIST', // as verified:list: a case on a closed dataset is left out
+  'eval:caseSave': 'PROJECT', // a typed case: words or "should refuse", no dataset
+  'eval:caseDelete': 'PROJECT',
+  'eval:caseFrom': 'PROJECT', // a suite is project-level; the source is read under the caller's folders (listBoth, openTurns, caseGate): a closed dataset's answer cannot become a case
+  'eval:suiteSave': 'PROJECT',
+  'eval:suiteDelete': 'PROJECT',
+  'eval:runStart': 'OWN', // the caller's own run: every case is asked and computed as them, through the doors
+  'eval:runResume': 'OWN',
+  'eval:runStop': 'PROJECT', // any editor may stop a run: it exposes nothing
+  'eval:runGet': 'LIST', // each case's outcome, closed-dataset cases left out; the answer's words only for the runner, and only while the data is open to them
+  'eval:runList': 'LIST', // runs of the project; the counts are of the cases the caller may open
   'knowledge:save': 'PROJECT', // project-level prose: no folder
   'knowledge:upload': 'PROJECT',
   'knowledge:delete': 'PROJECT',

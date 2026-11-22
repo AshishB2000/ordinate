@@ -27,6 +27,9 @@
 // component and needs no second guard.
 
 import { sanitizeResearch, type ResearchRef } from './researchTurn';
+import { sanitizeFeedback, type Feedback } from './feedback';
+import { sanitizeIds, sanitizeOutside } from './turnFields';
+import { sanitizeRoute, type RouteNote } from './routeTurn';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -101,6 +104,10 @@ export interface CopilotTurn {
   dashboardsFrom?: string[];
   /** A deep-research run's turn (./researchTurn): the run id. Its text is a fixed sentence; the card reads the rest from research:get. */
   research?: ResearchRef;
+  /** The asker's thumbs up or down (./feedback, ./copilotFeedback): a value and a reason code, never words of the answer. */
+  feedback?: Feedback;
+  /** Auto picked the agent that answered: why, in the app's words (./routeTurn). Assistant turns only. */
+  route?: RouteNote;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -155,6 +162,7 @@ export interface NewCopilotTurn {
   factsFrom?: string[];
   dashboardsFrom?: string[];
   research?: ResearchRef;
+  route?: RouteNote;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -255,19 +263,6 @@ function normalizeProvenance(p: any): CopilotProvenance | undefined {
   return prov;
 }
 
-/** A dataset name the out-of-scope card names: one line, as a dataset's name is cut. */
-function sanitizeOutside(raw: unknown): { dataset: string } | undefined {
-  const d = (raw as { dataset?: unknown } | null)?.dataset;
-  const dataset = typeof d === 'string' ? d.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
-  return dataset ? { dataset } : undefined;
-}
-
-/** A turn's `factsFrom`: its dataset ids, once each. */
-function sanitizeIds(raw: unknown): string[] | undefined {
-  const ids = Array.isArray(raw) ? [...new Set(raw.filter(isValidId))] : [];
-  return ids.length ? ids : undefined;
-}
-
 // Re-sanitize a stored turn list (drop non-object turns, clamp role, coerce text
 // to string, keep/repair id + createdAt, whitelist provenance), then ring-cap.
 export function normalizeTurns(raw: any): CopilotTurn[] {
@@ -308,6 +303,10 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     if (dashboardsFrom) turn.dashboardsFrom = dashboardsFrom;
     const research = role === 'assistant' ? sanitizeResearch(t.research) : undefined;
     if (research) turn.research = research;
+    const feedback = role === 'assistant' ? sanitizeFeedback(t.feedback) : undefined;
+    if (feedback) turn.feedback = feedback;
+    const route = role === 'assistant' ? sanitizeRoute(t.route) : undefined;
+    if (route) turn.route = route;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -426,7 +425,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
 function ownerNow(): string | undefined {
   return serverDataDir() === null ? undefined : ctx().user.email;
 }
-function mine(threads: CopilotThread[]): CopilotThread[] {
+export function mine(threads: CopilotThread[]): CopilotThread[] {
   const who = ownerNow();
   return who === undefined ? threads : threads.filter((t) => t.owner === who);
 }
@@ -534,7 +533,7 @@ export async function createThread(projectId: string, agentId?: string | null): 
 
 // Every change reads, changes and writes copilot.json under its record lock (recordFs.locked, every
 // pod): one file holds every member's conversations, so two unlocked appends lost one of them.
-function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => Promise<T>): Promise<T> {
+export function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => Promise<T>): Promise<T> {
   return recordFs.locked(copilotFilePath(projectId), async () => fn(await loadThreads(projectId)));
 }
 
@@ -542,7 +541,7 @@ function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => P
 // in recency order (appendTurn moves what it touched to the end), so the ones that
 // drop are the LEAST RECENTLY USED — a conversation you came back to last week is
 // not the one to evict just because you started it first.
-async function writeThreads(projectId: string, threads: CopilotThread[]): Promise<CopilotThread[]> {
+export async function writeThreads(projectId: string, threads: CopilotThread[]): Promise<CopilotThread[]> {
   const capped = capThreads(threads);
   keepSnapshotBudget(capped);
   const file: CopilotFile = { projectId, threads: capped, schemaVersion: 2 };
@@ -624,6 +623,8 @@ export async function appendTurn(
   if (dashboardsFrom) record.dashboardsFrom = dashboardsFrom;
   const research = role === 'assistant' ? sanitizeResearch(turn && turn.research) : undefined;
   if (research) record.research = research;
+  const route = role === 'assistant' ? sanitizeRoute(turn && turn.route) : undefined;
+  if (route) record.route = route;
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {

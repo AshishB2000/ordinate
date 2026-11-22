@@ -66,6 +66,8 @@ import { askThread, openTitle, openTurns } from './turnsOpen';
 import { indexFolders } from '../server/authz/folderGate';
 import { homeFacts } from './homeFacts';
 import { askSourceTables } from './sourceAnswers';
+import { autoRoute } from './agentRoute';
+import { sanitizeRoute } from '../ai/routeTurn';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -484,7 +486,7 @@ export function register() {
   // independent of the reply text — neither derives a chip or a number from a
   // token.
   // Its reads are kept for the length of the question (./askMemo): every list and the catalog once, not four to sixty times.
-  ipcMain.handle('copilot:ask', keepReads(async (event, { projectId, context, question, threadId, askId, share, agentId, skipVerified }: any = {}) => {
+  ipcMain.handle('copilot:ask', keepReads(async (event, { projectId, context, question, threadId, askId, share, agentId, auto, skipVerified }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -520,21 +522,36 @@ export function register() {
       const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
       // The conversation this lands in decides who answers (docs/assistant-agents rule 11): the one named, else the
       // caller's latest; with none yet, the one this ask starts, with the agent asked for (./agentAsk.ts decides).
-      const { into, stored } = await askThread(projectId, tid); // the one named when it is the caller's, else their latest; none when every turn of it is hidden from them (./turnsOpen)
+      const opened = await askThread(projectId, tid);
+      const { stored } = opened;
+      let into = opened.into; // the one named when it is the caller's, else their latest; none when every turn of it is hidden from them (./turnsOpen)
+      // AUTO (docs/agent-router): a conversation with no turns yet is with the agent the router picks from the question, among the
+      // agents the caller may use. Two close ones are offered instead, and nothing is asked. A follow-up keeps its conversation's agent.
+      const blank = auto === true && !sharing && !!into && (stored ?? await copilot.loadHistory(projectId, into.id)).length === 0;
+      const routed = auto === true && !sharing ? await autoRoute(projectId, q, into, blank) : null;
+      if (routed && 'choose' in routed) return { ok: true, choose: routed.choose };
+      const swap = routed && into && blank && into.id === tid && (into.agentId ?? null) !== routed.agentId ? into.id : null; // the blank conversation NAMED is with another agent: a new one replaces it once the answer is stored (never the caller's latest, which a stale id falls back to)
+      if (swap) into = null;
       const named = !!tid && into?.id === tid;
-      const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : agentId);
+      const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : routed ? routed.agentId : agentId);
+      const route = scope.agent ? (routed?.why && scope.agent.id === routed.agentId ? { why: routed.why } : sanitizeRoute({ why: context?.routed })) : undefined; // `context.routed`: Slack's (server-set; the contract has no such field)
       // The agent the conversation is stored with, as the reply names it: none for a token or a share, which keep the Project assistant (rule 13).
       const kept = scope === PROJECT_SCOPE ? null : into ? (into.agentId ?? null) : (scope.agent?.id ?? null);
       // Pinned BEFORE the first append, so a question and its answer land in the SAME conversation — the one whose agent
       // answered — even if something else creates a newer one between the two writes, and the reply can say which it was.
-      const pin = async (): Promise<string | undefined> => (named ? tid : into?.id) ?? (await copilot.createThread(projectId, scope.agent?.id))?.id;
+      const pin = async (): Promise<string | undefined> => {
+        const id = (named ? tid : into?.id) ?? (await copilot.createThread(projectId, scope.agent?.id))?.id;
+        // Only while still blank: another tab may have asked into it since.
+        if (swap && id && (await copilot.loadHistory(projectId, swap)).length === 0) await copilot.deleteThread(projectId, swap).catch(() => false);
+        return id;
+      };
       const asked = await scopedContext(projectId, scope, context || {}); // an agent's topic, unless the screen is inside it
       // A verified question, word for word, on what is open, inside the agent's topic (./verifiedAsk): no model call.
       // "Not what I asked" on such an answer (`skipVerified`) sends the question to the model instead, without that
       // verified question as an example and without the answer it gave as the chart a follow-up continues.
       const only = sharing ? null : await verifiedScope(projectId, asked, scope.only);
       const passed = skipVerified === true && !sharing ? await verifiedMatch(projectId, q, only) : null;
-      const hit = sharing || skipVerified === true ? null : await verifiedAsk(projectId, q, pin, { ...scope, only });
+      const hit = sharing || skipVerified === true ? null : await verifiedAsk(projectId, q, pin, { ...scope, only, ...(route ? { route } : {}) });
       if (hit) return { ...hit, agent: await agentRef(projectId, kept) };
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
       const turns = withoutAnswer(await openTurns(projectId, stored ?? await copilot.loadHistory(projectId, tid)), passed?.id); // replayed: never an answer on a closed folder's dataset
@@ -574,7 +591,7 @@ export function register() {
         const target = await pin(); // after the out-of-scope lookup, so one that fails leaves no new conversation behind
         if (outside) {
           await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
-          const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, outside: outside.outside, guidance: guided.used }, target);
+          const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, outside: outside.outside, guidance: guided.used, ...(route ? { route } : {}) }, target);
           return {
             ok: true, answer: outside.text, provenance: facts.provenance, turns: await turnsForBrowser(projectId, stored || []), threadId: target || null, suggestedAction: NO_ACTION,
             ledger, numberAudit: { ok: true, violations: [] }, guidance: (await withDocumentTitles(projectId, [{ guidance: guided.used }]))[0].guidance, agent: await agentRef(projectId, kept),
@@ -632,6 +649,7 @@ export function register() {
           // A name nobody defined (docs/metric-proposals): the turn offers "Propose a definition".
           ...(answer && !answer.ok && 'define' in answer && answer.define ? { define: true as const } : {}),
           guidance: guided.used,
+          ...(route ? { route } : {}),
           factsFrom,
           dashboardsFrom: asked.kind === 'analysis' && facts.provenance.kind === 'analysis' && asked.id ? [asked.id] : undefined, // the dashboard page it was read off (./turnsOpen)
         }, target);
@@ -652,6 +670,7 @@ export function register() {
           numberAudit: guarded.audit,
           guidance: (await withDocumentTitles(projectId, [{ guidance: guided.used }]))[0].guidance,
           agent: await agentRef(projectId, kept),
+          ...(refused !== null ? { refused: true } : {}), // the chart was refused (a suite run tells a refusal from prose, src/server/evals/ask.ts)
         };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
