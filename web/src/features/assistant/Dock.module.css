@@ -162,14 +162,11 @@
   background-size: auto, auto, auto, 22px 22px;
   background-repeat: no-repeat, no-repeat, no-repeat, repeat;
 }
+/* Dark is black: no accent washes, only the lattice on the page ground. */
 :global([data-theme='dark']) .lattice {
-  background:
-    radial-gradient(80% 22% at 14% 3%, var(--accent-soft), transparent 68%),
-    radial-gradient(66% 19% at 88% 10%, var(--accent-soft), transparent 72%),
-    radial-gradient(140% 30% at 50% -9%, var(--accent-line), transparent 76%),
-    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px), var(--surface);
-  background-size: auto, auto, auto, 22px 22px;
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  background: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px), var(--bg);
+  background-size: 22px 22px;
+  background-repeat: repeat;
 }
 .stage {
   composes: lattice;
@@ -488,7 +485,7 @@
     right: 0;
     bottom: 0;
     z-index: 49;
-    background: rgba(15, 23, 42, 0.45);
+    background: rgba(0, 0, 0, 0.45);
   }
 }
 

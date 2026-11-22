@@ -218,21 +218,21 @@
 
 [data-theme="dark"],
 [data-theme="dark"] [data-canvas="slate"] {
-  /* Dark is a navy slate whose planes STEP UP in lightness — chrome (--titlebar) →
+  /* Dark is true black whose planes STEP UP in lightness — chrome (--titlebar) →
      canvas → card → floating. On a dark ground a card cannot be separated
      by a shadow (a shadow on black is invisible), so lightness is the only
      channel left, and it has to actually be used. */
-  --bg: #0b111c;
-  --surface: #101826;
-  --surface-2: #172134;
-  --surface-3: #1f2b41;
-  --inset: #080d17;
+  --bg: #0a0a0a;
+  --surface: #121212;
+  --surface-2: #1c1c1c;
+  --surface-3: #262626;
+  --inset: #070707;
 
-  --text: #e6ecf6;
+  --text: #ededed;
   --text-strong: #ffffff;
-  --muted: #98a4b9;
-  --text-dim: #8f9bb0;
-  --text-faint: #76839a;
+  --muted: #a3a3a3;
+  --text-dim: #9c9c9c;
+  --text-faint: #808080;
 
   --accent: var(--user-dk-accent, var(--brand-dk-accent, #3b82f6));
   --accent-2: var(--user-dk-accent-2, var(--brand-dk-accent-2, #2f6fe0));
@@ -262,21 +262,21 @@
   --warn-text: #f5b53d;
   --error-text: #fca5a5;
 
-  --titlebar: #060a12;
+  --titlebar: #000000;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.65);
 
   /* The elevation ramp, one step apart each time. */
-  --surface-1: #101826;
-  --surface-float: #172134;
-  /* 8% of a pale blue (white, per the dark spec, tinted to the slate) — on a dark ground a border tinted with
+  --surface-1: #121212;
+  --surface-float: #1c1c1c;
+  /* 8% white — on a dark ground a border tinted with
      the TEXT colour (near-white) is the one that reads as a hairline;
      tinting it with the background just paints the background. */
-  --border-hairline: rgba(160, 190, 255, 0.08);
-  --border: #1b2538;
-  --border-2: #26324a;
-  --border-3: #36445f;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border: #232323;
+  --border-2: #2e2e2e;
+  --border-3: #404040;
 
   --focus-ring: var(--user-dk-focus, var(--brand-dk-focus, rgba(59, 130, 246, 0.4)));
   color-scheme: dark;
