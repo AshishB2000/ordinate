@@ -79,7 +79,7 @@ const checks: typeof import('../src/ai/evalChecks') = require('../src/ai/evalChe
     const claimed = await store.claim(owner1, 250);
     ok('claim: the queued run, running, with an attempt counted', claimed?.id === run.id && claimed.state === 'running' && claimed.attempts === 1);
     ok('claim: nothing else is due while its lease holds', (await store.claim('pod-b/2/bbbb', 250)) === null);
-    const res = (n: number) => ({ caseId: ids[n], position: n + 1, question: 'q', outcome: 'pass' as const, checks: [], judged: { state: 'none' as const }, calls: 1, errorCode: null, reply: 'REPLY_CANARY', why: null, datasetIds: [] });
+    const res = (n: number) => ({ caseId: ids[n], position: n + 1, question: 'q', outcome: 'pass' as const, checks: [], judged: { state: 'none' as const }, calls: 1, errorCode: null, reply: 'REPLY_CANARY', why: null, datasetIds: [], caseDatasetIds: [] });
     ok('result: the lease\'s holder stores one, and the run\'s counts follow', (await store.recordResult('acme', run.id, owner1, res(0))) === true && (await store.getRun('acme', run.id))?.casesDone === 1 && (await store.getRun('acme', run.id))?.passed === 1);
     await store.recordResult('acme', run.id, owner1, res(0));
     ok('result: once per case — a repeat changes nothing', (await store.resultsOf('acme', run.id)).length === 1 && (await store.getRun('acme', run.id))?.modelCalls === 1);
@@ -138,9 +138,11 @@ const checks: typeof import('../src/ai/evalChecks') = require('../src/ai/evalChe
     await W.pool.query(`UPDATE assistant_threads SET updated_at = now() - interval '2 hours' WHERE id = $1`, [old]);
     const turn = (await W.pool.query<{ id: string }>(`SELECT id::text FROM assistant_turns WHERE thread_id = $1`, [T.hidden])).rows[0].id;
     await W.pool.query(`INSERT INTO assistant_feedback (org_id, project_id, turn_id, thread_id, owner, value, question) VALUES ('acme', $1, $2, $3, 'ed@acme.test', 'down', 'kept while its turn lives'), ('acme', $1, 'gone-turn', $4, 'ed@acme.test', 'down', 'goes with its conversation'), ('acme', $1, 'gone-owner', $4, 'left@acme.test', 'down', 'goes with its person')`, [P, turn, T.hidden, randomUUID()]);
+    const fresh = await W.as('ed', () => hidden.createHidden(P, null)); // a case being asked right now
     const swept = await store.sweep('acme');
     const left = async (sql: string, args: unknown[]) => (await W.pool.query(sql, args)).rowCount;
     ok('sweep: a hidden conversation a crash left is deleted', swept.threads === 1 && (await left('SELECT 1 FROM assistant_threads WHERE id = $1', [T.hidden])) === 0);
+    ok('NEGATIVE CONTROL: a hidden conversation made just now (a case in flight) is kept', (await left('SELECT 1 FROM assistant_threads WHERE id = $1', [fresh])) === 1);
     ok('NEGATIVE CONTROL: an ordinary old conversation is kept', (await left('SELECT 1 FROM assistant_threads WHERE id = $1', [old])) === 1);
     const qs = (await W.pool.query<{ turn_id: string; question: string | null }>(`SELECT turn_id, question FROM assistant_feedback WHERE value = 'down' ORDER BY turn_id`)).rows;
     ok('sweep: a thumbs-down\'s question goes when its conversation (or its person) is gone; the count stays', qs.find((x) => x.turn_id === 'gone-turn')?.question === null && qs.find((x) => x.turn_id === 'gone-owner')?.question === null && swept.questions >= 2);
@@ -155,7 +157,9 @@ const checks: typeof import('../src/ai/evalChecks') = require('../src/ai/evalChe
     // runs past 30 a suite
     const s2 = (await store.createSuite('acme', { id: randomUUID(), projectId: projects[0], name: 'many', agentId: null, by: 'ed' }))!;
     for (let i = 0; i < 35; i++) await W.pool.query(`INSERT INTO eval_runs (org_id, project_id, id, suite_id, started_by, state, started_at) VALUES ('acme', $1, $2, $3, 'ed', 'done', now() - ($4 || ' minutes')::interval)`, [projects[0], randomUUID(), s2.id, String(i + 1)]);
-    ok('sweep: the oldest runs past 30 of a suite go', (await store.sweep('acme')).runs === 5 && (await store.listRuns('acme', projects[0], s2.id, 100)).length === 30);
+    const active = randomUUID();
+    await W.pool.query(`INSERT INTO eval_runs (org_id, project_id, id, suite_id, started_by, state, started_at) VALUES ('acme', $1, $2, $3, 'ed', 'running', now() - interval '3 days')`, [projects[0], active, s2.id]); // the oldest of all, and going
+    ok('sweep: the oldest runs past 30 of a suite go, but a queued or running one survives', (await store.sweep('acme')).runs === 5 && (await store.listRuns('acme', projects[0], s2.id, 100)).length === 31 && (await store.getRun('acme', active)) !== null);
 
     // ── the judge setting ───────────────────────────────────────────────────────────────────────────────────────────────────
     await store.saveJudge('acme', { provider: 'anthropic', model: 'm1' });

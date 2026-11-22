@@ -60,10 +60,37 @@ const context: typeof import('../src/server/context') = require('../src/server/c
     ok('the runner sees their own answer\'s words while the data it read is open to them', mineOpen.reply === 'LEAD_REPLY');
     ok('NEGATIVE CONTROL: once the answer read a dataset closed to them, the words are withheld even from the runner', mineClosed.reply === undefined && mineClosed.outcome === 'pass');
 
+    // A case deleted after the run: its result still hides from a caller closed to the datasets it read.
+    const run3 = randomUUID();
+    const dead = randomUUID();
+    const get3 = (who: F.Person) => W.call(who, 'eval:runGet', { projectId: P, runId: run3 });
+    await W.pool.query(`INSERT INTO eval_runs (org_id, project_id, id, suite_id, started_by, state, case_ids, cases_total, cases_done, passed) VALUES ('acme', $1, $2, $3, 'padmin@acme.test', 'done', $4::jsonb, 1, 1, 1)`, [P, run3, suite, JSON.stringify([dead])]);
+    await W.pool.query(`INSERT INTO eval_results (org_id, run_id, case_id, position, question, outcome, case_dataset_ids) VALUES ('acme', $1, $2, 1, 'HR DELETED CANARY', 'pass', $3::jsonb)`, [run3, dead, JSON.stringify([W.hr.ds])]);
+    ok('a case deleted since the run: the project admin still sees its result', (await get3('padmin')).text.includes('HR DELETED CANARY'));
+    ok('NEGATIVE CONTROL: an editor closed to its dataset does not, nor does it count', !(await get3('opsLead')).text.includes('HR DELETED CANARY') && (await get3('opsLead')).body.run.casesTotal === 0);
+
+    // editing and deleting a case on a closed dataset is as for a missing one
+    const edit = await W.call('opsLead', 'eval:caseSave', { projectId: P, suiteId: suite, id: hrCase.caseId, question: 'hijack', say: 'x' });
+    const del = await W.call('opsLead', 'eval:caseDelete', { projectId: P, suiteId: suite, id: hrCase.caseId });
+    const nothing = await W.call('opsLead', 'eval:caseDelete', { projectId: P, suiteId: suite, id: randomUUID() });
+    ok('NEGATIVE CONTROL: an editor closed to HR cannot edit or delete its case: the answer is the missing one\'s', edit.body?.ok === false && del.body?.ok === false && del.body.error === nothing.body.error && (await list('padmin')).cases.some((c: { id: string; question: string }) => c.id === hrCase.caseId && c.question !== 'hijack'));
+
+    // The thumbs-down inbox: a question before an answer on a closed dataset is hidden, as in History.
+    const mkTurn = async (text: string) => { const t = randomUUID(); await W.pool.query(`INSERT INTO assistant_feedback (org_id, project_id, turn_id, thread_id, owner, value, question, dataset_ids) VALUES ('acme', $1, $2, $3, 'x@acme.test', 'down', $4, $5::jsonb)`, [P, t, randomUUID(), text, JSON.stringify(text.startsWith('HR') ? [W.hr.ds] : [W.ops.ds])]); return t; };
+    const hrT = await mkTurn('HR bonus inbox question');
+    const opsT = await mkTurn('Ops inbox question');
+    const inboxOf = async (who: F.Person) => JSON.stringify((await W.call(who, 'feedback:inbox', { projectId: P })).body);
+    ok('the inbox: the project admin sees both questions', (await inboxOf('padmin')).includes('HR bonus') && (await inboxOf('padmin')).includes('Ops inbox'));
+    ok('NEGATIVE CONTROL: an editor closed to HR sees the Ops question and not the HR one', (await inboxOf('opsLead')).includes('Ops inbox') && !(await inboxOf('opsLead')).includes('HR bonus'));
+    const viaCase = await W.call('opsLead', 'eval:caseFrom', { projectId: P, suiteId: suite, from: { kind: 'inbox', turnId: hrT, say: 'x' } });
+    const dismissHr = await W.call('opsLead', 'feedback:dismiss', { projectId: P, turnId: hrT });
+    ok('NEGATIVE CONTROL: the HR question cannot be made a case or dismissed by that editor (as if absent)', viaCase.body?.ok === false && dismissHr.body?.ok === false && (await inboxOf('padmin')).includes('HR bonus'));
+    ok('…while the open one can', (await W.call('opsLead', 'eval:caseFrom', { projectId: P, suiteId: suite, from: { kind: 'inbox', turnId: opsT, say: 'x' } })).body?.ok === true);
+
     // What a run of theirs asks.
     const started = await W.call('opsLead', 'eval:runStart', { projectId: P, suiteId: suite });
     const ids = started.body?.ok ? ((await W.pool.query('SELECT case_ids FROM eval_runs WHERE id = $1', [started.body.runId])).rows[0].case_ids as string[]) : [];
-    ok('a run by an editor closed to HR asks the cases they may open and no others', started.body?.ok === true && ids.length === 1 && ids[0] === opsCase.caseId, started.text.slice(0, 200));
+    ok('a run by an editor closed to HR asks the cases they may open and no others', started.body?.ok === true && !ids.includes(hrCase.caseId) && ids.includes(opsCase.caseId), started.text.slice(0, 200));
     await W.call('opsLead', 'eval:runStop', { projectId: P, runId: started.body.runId });
   } finally {
     execConfig.executionReady = real.ready;

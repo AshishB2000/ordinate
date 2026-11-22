@@ -120,7 +120,7 @@ const WEST = [{ column: 'region', op: '=', value: 'West' }];
     const wRun = async (...replies: string[]) => { stub.calls.judge = 0; stub.judge = replies; return (await results(await S.drive(await runOf('ed', sj)).then((r) => r!.id)))[0]; };
     const j5 = await wRun('{"score":5,"why":"says it"}');
     ok('judge: a 5 passes; the model call count is the ask and the judge', j5.outcome === 'pass' && j5.score === 5 && j5.judged === 'scored' && j5.calls === 2 && stub.calls.judge === 1, JSON.stringify(j5));
-    ok('judge: it reads the question, the reply and the words, fenced', /QUESTION\n<<<\nWhy is revenue net\?\n>>>/.test(stub.seen.judgeUser[0]) && /ANSWER\n<<<\nRevenue is net of refunds\.\n>>>/.test(stub.seen.judgeUser[0]) && /SHOULD SAY\n<<<\nsays revenue is net of refunds\n>>>/.test(stub.seen.judgeUser[0]));
+    ok('judge: it reads the question, the reply and the words, each as one JSON string', /QUESTION: "Why is revenue net\?"/.test(stub.seen.judgeUser[0]) && /ANSWER: "Revenue is net of refunds\."/.test(stub.seen.judgeUser[0]) && /SHOULD SAY: "says revenue is net of refunds"/.test(stub.seen.judgeUser[0]));
     const j2 = await wRun('{"score":2,"why":"misses it"}');
     ok('judge: a 2 fails', j2.outcome === 'fail' && j2.score === 2);
     const jbad = await wRun('I think it is great');
@@ -175,12 +175,29 @@ const WEST = [{ column: 'region', op: '=', value: 'West' }];
     for (const q of ['p1?', 'p2?', 'p3?']) ids.push((await W.call('ed', 'eval:caseSave', { projectId: W.P, suiteId: cr3, question: q, refuse: true })).body.id);
     const idCrash = await runOf('ed', cr3);
     const claimed = await store.claim('pod-a/1/aaaa', 300);
-    const mkResult = (caseId: string, position: number) => ({ caseId, position, question: 'x', outcome: 'pass' as const, checks: [], judged: { state: 'none' as const }, calls: 1, errorCode: null, reply: null, why: null, datasetIds: [] });
+    const mkResult = (caseId: string, position: number) => ({ caseId, position, question: 'x', outcome: 'pass' as const, checks: [], judged: { state: 'none' as const }, calls: 1, errorCode: null, reply: null, why: null, datasetIds: [], caseDatasetIds: [] });
     ok('crash: pod A claims the run and finishes the first case', claimed?.id === idCrash && (await store.recordResult('acme', idCrash, 'pod-a/1/aaaa', mkResult(ids[0], 1))) === true);
     await sleep(450); // pod A's lease lapses: it died
     const crashed = await S.drive(idCrash);
     ok('crash: another pod retakes it and asks only the two cases with no result', crashed?.state === 'done' && crashed.casesDone === 3 && stub.calls.ask === 2 && stub.seen.questions.join() === 'p2?,p3?', `${crashed?.state} ${stub.calls.ask} ${stub.seen.questions}`);
     ok('NEGATIVE CONTROL (the fence): a late result from the pod that died applies nothing', (await store.recordResult('acme', idCrash, 'pod-a/1/aaaa', mkResult(ids[1], 2))) === false && (await results(idCrash)).length === 3);
+
+    // ── The time limit: a case in flight is dropped, not recorded, and asked again on resume ─────────────────────────────────
+    stub.reset();
+    const sd = await S.suite('ed', 'Deadline');
+    for (const q of ['d1?', 'd2?']) await W.call('ed', 'eval:caseSave', { projectId: W.P, suiteId: sd, question: q, refuse: true });
+    stub.asks['d2?'] = async () => { await sleep(1500); return { text: 'late' }; };
+    runMod.tuneForTest({ runMs: 700 });
+    const dl = await S.drive(await runOf('ed', sd));
+    ok('deadline: the run ends partial (deadline), not failed', dl?.state === 'partial' && dl.errorCode === 'deadline', `${dl?.state} ${dl?.errorCode}`);
+    ok('deadline: the case it interrupted is NOT recorded (never a fake failure), the finished one is', (await results(dl!.id)).length === 1 && dl!.casesDone === 1);
+    runMod.tuneForTest({ runMs: 30 * 60_000 });
+    stub.asks['d2?'] = { text: 'ok' };
+    const asksBefore = stub.calls.ask;
+    ok('deadline: resume asks the interrupted case again and only it', (await W.call('ed', 'eval:runResume', { projectId: W.P, runId: dl!.id })).body?.ok === true && (await S.drive(dl!.id))?.state === 'done' && stub.calls.ask - asksBefore === 1 && (await results(dl!.id)).length === 2);
+
+    // A result keeps the datasets of its case's spec (the folder gate of a case deleted since: test-evalFolders).
+    ok('a result written by a real run holds the datasets of the expected spec', (await results(id2)).find((r) => r.caseId === c1)?.caseDatasetIds.includes(W.plain) === true);
 
     // ── A dataset that is gone, a provider that fails ───────────────────────────────────────────────────────────────────────
     stub.reset();

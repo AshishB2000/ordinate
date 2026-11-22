@@ -21,6 +21,7 @@ import * as projects from '../../app/projects';
 import * as execConfig from '../../app/execConfig';
 import * as analyze from '../../ai/analyze';
 import { askScope } from '../../ipc/agentAsk';
+import { relatedIds } from '../../ai/answerJoin';
 import { exactChecks, verdict, type Check, type Judged } from '../../ai/evalChecks';
 import { JUDGE_SYSTEM, judgeUser, parseJudge } from '../../ai/evalJudge';
 import { underBudget } from '../slack/ask';
@@ -37,8 +38,8 @@ export class LeaseLost extends Error {
 
 /** The most one run may take, in minutes. */
 export const RUN_MINUTES = 30;
-const tune = { budgetPollMs: 2_000, budgetTries: 30 };
-/** Test hook: how often a run re-asks for its person's request budget, and how many times. */
+const tune = { budgetPollMs: 2_000, budgetTries: 30, runMs: RUN_MINUTES * 60_000 };
+/** Test hook: how often a run re-asks for its person's request budget, how many times, and the run's time limit. */
 export function tuneForTest(o: Partial<typeof tune>): void {
   Object.assign(tune, o);
 }
@@ -76,13 +77,15 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 export async function execute(pool: Pool, run: store.Run, owner: string, lease: AbortSignal): Promise<void> {
   const org = run.orgId;
   const alive = (): void => { if (lease.aborted) throw new LeaseLost(); };
+  /** The time limit fired (not a lost lease): what was in flight is dropped and NOT recorded, so a resume asks it again. */
+  const timedOut = (): boolean => ac.signal.aborted && !lease.aborted;
   const account = await accountOf(org, run.startedBy);
   if (!account || account.mustChangePassword) {
     await store.finish(org, run.id, owner, 'failed', 'access');
     return push(run, 'failed');
   }
   await orgConfig.fresh(org);
-  const left = await store.setDeadline(org, run.id, owner, RUN_MINUTES * 60_000);
+  const left = await store.setDeadline(org, run.id, owner, tune.runMs);
   const deadline = Date.now() + left;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(new Error('evaluation time limit')), Math.max(0, left));
@@ -100,6 +103,7 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
       if (underBudget(org, run.startedBy)) return true;
       await sleep(tune.budgetPollMs, ac.signal);
       alive();
+      if (timedOut()) return false;
     }
     return false;
   };
@@ -133,32 +137,41 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
       if ((await asRunner(async () => mayRun(pool, (await accountOf(org, run.startedBy))?.who ?? account.who, run))) !== true) return await end('failed', 'access');
       const c = cases.get(id);
       if (!c) { // deleted after the run started
-        if (!(await store.recordResult(org, run.id, owner, { caseId: id, position, question: '', outcome: 'error', checks: [], judged: { state: 'none' }, calls: 0, errorCode: 'gone', reply: null, why: null, datasetIds: [] }))) throw new LeaseLost();
+        if (!(await store.recordResult(org, run.id, owner, { caseId: id, position, question: '', outcome: 'error', checks: [], judged: { state: 'none' }, calls: 0, errorCode: 'gone', reply: null, why: null, datasetIds: [], caseDatasetIds: [] }))) throw new LeaseLost();
         continue;
       }
-      if (!(await budget())) return await end('partial', 'limited');
+      if (!(await budget())) return await end('partial', timedOut() ? 'deadline' : 'limited');
       const who = (await accountOf(org, run.startedBy))?.who;
       if (!who) return await end('failed', 'access');
-      const asked = await askCase(pool, who, reqId, { projectId: run.projectId, agentId: run.agentId, question: c.question }, ac.signal);
+      let asked: Awaited<ReturnType<typeof askCase>>;
+      try {
+        asked = await askCase(pool, who, reqId, { projectId: run.projectId, agentId: run.agentId, question: c.question }, ac.signal);
+      } catch (err) {
+        if (timedOut()) return await end('partial', 'deadline');
+        throw err;
+      }
       alive();
+      if (timedOut()) return await end('partial', 'deadline');
       if (!asked.ok && asked.code === 'not_ready') return await end('failed', 'model');
       if (!asked.ok && (asked.code === 'denied' || asked.code === 'agent')) return await end('failed', 'access');
+      const caseDatasetIds = c.expect.compute ? [c.expect.compute.datasetId, ...relatedIds(c.expect.compute)] : [];
       let result: store.NewResult;
       if (!asked.ok) {
-        result = { caseId: c.id, position, question: c.question, outcome: 'error', checks: [], judged: { state: 'none' }, calls: 0, errorCode: asked.code, reply: null, why: null, datasetIds: [] };
+        result = { caseId: c.id, position, question: c.question, outcome: 'error', checks: [], judged: { state: 'none' }, calls: 0, errorCode: asked.code, reply: null, why: null, datasetIds: [], caseDatasetIds };
       } else {
         const exp = c.expect;
         const expected = exp.compute;
         const comp = asked.got.computed;
         const sides = expected && comp?.kind === 'chart' ? await asRunner(() => untilAborted(sidesOf(run.projectId, expected, comp.spec), ac.signal)).catch((): null => null) : null;
         alive();
+        if (timedOut()) return await end('partial', 'deadline'); // an interrupted side would read as "expected_failed"
         const checks: Check[] = exactChecks(exp, asked.got, sides);
         let judged: Judged = { state: 'none' };
         let why = '';
         let calls = asked.calls;
         // The judge reads the words only when every exact check passed: a case that already failed costs no second model call.
         if (exp.say && checks.every((k) => k.ok)) {
-          if (!(await budget())) return await end('partial', 'limited');
+          if (!(await budget())) return await end('partial', timedOut() ? 'deadline' : 'limited');
           const reply = await asRunner(async () => {
             if (!(await ready())) return null;
             try {
@@ -169,6 +182,7 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
             }
           });
           alive();
+          if (timedOut()) return await end('partial', 'deadline'); // an interrupted judge would read as "not scored"
           calls += 1;
           const parsed = reply ? parseJudge(reply) : { judged: { state: 'not_scored' } as Judged, why: '' };
           judged = parsed.judged;
@@ -176,7 +190,7 @@ export async function execute(pool: Pool, run: store.Run, owner: string, lease: 
         }
         result = {
           caseId: c.id, position, question: c.question, outcome: verdict(checks, judged), checks, judged, calls, errorCode: null,
-          reply: asked.text, why: why || null, datasetIds: asked.datasetIds,
+          reply: asked.text, why: why || null, datasetIds: asked.datasetIds, caseDatasetIds,
         };
       }
       if (!(await store.recordResult(org, run.id, owner, result))) throw new LeaseLost();

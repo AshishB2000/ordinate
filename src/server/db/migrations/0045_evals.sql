@@ -28,6 +28,8 @@ CREATE TABLE assistant_feedback (
   value      text        NOT NULL CHECK (value IN ('up', 'down')),
   reason     text        CHECK (reason IN ('wrong_number', 'wrong_data', 'didnt_answer', 'other')),
   question   text,                                          -- a thumbs-down only; null once its conversation is gone
+  dataset_ids   jsonb    NOT NULL DEFAULT '[]'::jsonb,      -- what the answer showed (turnsOpen shows()): the inbox hides the question from an editor closed to any of them
+  dashboard_ids jsonb    NOT NULL DEFAULT '[]'::jsonb,      -- the dashboards it was asked about
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   handled_at timestamptz,                                   -- an editor added it to a suite or dismissed it
@@ -115,6 +117,7 @@ CREATE TABLE eval_results (
   reply       text,                                         -- the answer's words: the runner's alone
   why         text,                                         -- the judge's line: the runner's alone
   dataset_ids jsonb       NOT NULL DEFAULT '[]'::jsonb,     -- what the answer read, for the closed-folder check
+  case_dataset_ids jsonb  NOT NULL DEFAULT '[]'::jsonb,     -- what the CASE's expected spec reads (a case deleted since still hides from a caller closed to them)
   created_at  timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (org_id, run_id, case_id),
   FOREIGN KEY (org_id, run_id) REFERENCES eval_runs (org_id, id) ON DELETE CASCADE

@@ -256,8 +256,8 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'research:resume': 'OWN', // the caller's own run, queued again
   'research:start': 'OWN', // the caller's own run and conversation turn; its steps run through the doors, as the starter
   'research:stop': 'OWN', // the caller's own run
-  'feedback:inbox': 'PROJECT', // a thumbs-down's question text (Q1): project-level words, no dataset, figure or answer
-  'feedback:dismiss': 'PROJECT',
+  'feedback:inbox': 'LIST', // a thumbs-down's question (Q1), never the answer; one whose answer showed a dataset or dashboard closed to the caller is left out (turnsOpen's rule, stored on the row)
+  'feedback:dismiss': 'ITEM', // as missing for an inbox item closed to the caller
   'eval:suites': 'LIST', // a case whose spec reads a dataset closed to the caller is left out of its counts (src/server/evals/view.ts caseGate)
   'eval:cases': 'LIST', // as verified:list: a case on a closed dataset is left out
   'eval:caseSave': 'PROJECT', // a typed case: words or "should refuse", no dataset

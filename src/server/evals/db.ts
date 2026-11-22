@@ -218,16 +218,16 @@ export async function requeue(org: string, id: string): Promise<boolean> {
 
 export interface NewResult {
   caseId: string; position: number; question: string; outcome: Outcome; checks: Check[]; judged: Judged; calls: number; errorCode: string | null;
-  reply: string | null; why: string | null; datasetIds: string[];
+  reply: string | null; why: string | null; datasetIds: string[]; caseDatasetIds: string[];
 }
 /** Stores one case's result and recounts the run, fenced by the lease. False: the lease is no longer this owner's (nothing applied). Once per case: a repeat changes nothing. */
 export async function recordResult(org: string, runId: string, owner: string, r: NewResult): Promise<boolean> {
   return scoped('system', async (c) => {
     const held = await c.query('SELECT 1 FROM eval_runs WHERE org_id = $1 AND id = $2 AND lease_owner = $3 FOR UPDATE', [org, runId, owner]);
     if (!held.rowCount) return false;
-    await c.query(`INSERT INTO eval_results (org_id, run_id, case_id, position, question, outcome, checks, judged, score, calls, error_code, reply, why, dataset_ids)
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14::jsonb) ON CONFLICT DO NOTHING`,
-      [org, runId, r.caseId, r.position, r.question, r.outcome, JSON.stringify(r.checks), r.judged.state, r.judged.state === 'scored' ? r.judged.score : null, r.calls, r.errorCode, r.reply, r.why, JSON.stringify(r.datasetIds)]);
+    await c.query(`INSERT INTO eval_results (org_id, run_id, case_id, position, question, outcome, checks, judged, score, calls, error_code, reply, why, dataset_ids, case_dataset_ids)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb) ON CONFLICT DO NOTHING`,
+      [org, runId, r.caseId, r.position, r.question, r.outcome, JSON.stringify(r.checks), r.judged.state, r.judged.state === 'scored' ? r.judged.score : null, r.calls, r.errorCode, r.reply, r.why, JSON.stringify(r.datasetIds), JSON.stringify(r.caseDatasetIds)]);
     await c.query(`UPDATE eval_runs SET cases_done = s.n, passed = s.p, failed = s.f, not_scored = s.ns, model_calls = s.calls
         FROM (SELECT count(*)::int AS n, (count(*) FILTER (WHERE outcome = 'pass'))::int AS p, (count(*) FILTER (WHERE outcome IN ('fail', 'error')))::int AS f,
                      (count(*) FILTER (WHERE outcome = 'not_scored'))::int AS ns, coalesce(sum(calls), 0)::int AS calls FROM eval_results WHERE org_id = $1 AND run_id = $2) s
@@ -237,10 +237,10 @@ export async function recordResult(org: string, runId: string, owner: string, r:
 }
 export interface Result {
   caseId: string; position: number; question: string; outcome: Outcome; checks: Check[]; judged: Judged['state']; score: number | null; calls: number; errorCode: string | null;
-  reply: string | null; why: string | null; datasetIds: string[];
+  reply: string | null; why: string | null; datasetIds: string[]; caseDatasetIds: string[];
 }
 export async function resultsOf(org: string, runId: string): Promise<Result[]> {
-  return (await q<Result>({ org }, `SELECT case_id::text AS "caseId", position, question, outcome, checks, judged, score, calls, error_code AS "errorCode", reply, why, dataset_ids AS "datasetIds"
+  return (await q<Result>({ org }, `SELECT case_id::text AS "caseId", position, question, outcome, checks, judged, score, calls, error_code AS "errorCode", reply, why, dataset_ids AS "datasetIds", case_dataset_ids AS "caseDatasetIds"
     FROM eval_results WHERE org_id = $1 AND run_id = $2 ORDER BY position, case_id`, [org, runId])).rows;
 }
 export async function doneCaseIds(org: string, runId: string): Promise<Set<string>> {

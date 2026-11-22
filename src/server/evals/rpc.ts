@@ -16,7 +16,7 @@ import { caseFrom } from './cases';
 import * as feedback from './feedback';
 import * as store from './db';
 import { push } from './run';
-import { caseGate, runView } from './view';
+import { caseGate, runView, shownIds } from './view';
 import { changedParts, versionOf } from './version';
 import * as say from '../evalMessages';
 import { MAX_CASES, sanitizeExpect, type Expect } from '../../ai/evalChecks';
@@ -31,8 +31,9 @@ type Gate = Awaited<ReturnType<typeof caseGate>>;
 /** A run's counts as the caller may see them: the run row's own when no folder restricts them, else recounted over the cases they may open. */
 async function countsOf(org: string, run: store.Run, gate: Gate, byId: ReadonlyMap<string, store.Case>) {
   if (!gate.level) return { casesDone: run.casesDone, casesTotal: run.casesTotal, passed: run.passed, failed: run.failed, notScored: run.notScored };
-  const open = new Set(run.caseIds.filter((id) => { const c = byId.get(id); return !c || gate.visible(c); }));
-  const done = (await store.resultsOf(org, run.id)).filter((r) => open.has(r.caseId));
+  const all = await store.resultsOf(org, run.id);
+  const open = shownIds(run, all, byId, gate.level, gate.visible);
+  const done = all.filter((r) => open.has(r.caseId));
   const n = (f: (o: string) => boolean): number => done.filter((r) => f(r.outcome)).length;
   return { casesDone: done.length, casesTotal: open.size, passed: n((o) => o === 'pass'), failed: n((o) => o === 'fail' || o === 'error'), notScored: n((o) => o === 'not_scored') };
 }
@@ -117,14 +118,17 @@ export function register(): void {
       return added === 'ok' ? { ok: true as const, id } : fail(added === 'full' ? say.suiteFull(String(MAX_CASES)) : say.notFound());
     }
     const cur = (await store.listCases(org.id, p.projectId, p.suiteId)).find((c) => c.id === p.id);
-    if (!cur) return fail(say.notFound());
+    if (!cur || !(await caseGate(p.projectId)).visible(cur)) return fail(say.notFound()); // a case on a closed dataset is as missing
     const next: Expect | null = sanitizeExpect({ compute: cur.expect.compute, refuse: cur.expect.compute ? undefined : p.refuse ? true : undefined, say: p.say });
     if (!next) return fail(say.badCase());
     return (await store.updateCase(org.id, p.projectId, p.suiteId, p.id, { question: p.question, expect: next })) ? { ok: true as const, id: p.id } : fail(say.notFound());
   });
   ipcMain.handle('eval:caseDelete', async (_e, p: { projectId: string; suiteId: string; id: string }) => {
     if (!store.dbOrNull()) return needsDb();
-    return (await store.deleteCase(ctx().org.id, p.projectId, p.suiteId, p.id)) ? { ok: true as const } : fail(say.notFound());
+    const { org } = ctx();
+    const cur = (await store.listCases(org.id, p.projectId, p.suiteId)).find((c) => c.id === p.id);
+    if (!cur || !(await caseGate(p.projectId)).visible(cur)) return fail(say.notFound());
+    return (await store.deleteCase(org.id, p.projectId, p.suiteId, p.id)) ? { ok: true as const } : fail(say.notFound());
   });
   ipcMain.handle('eval:caseFrom', async (_e, p: Parameters<typeof caseFrom>[0]) => (store.dbOrNull() ? caseFrom(p) : needsDb()));
 

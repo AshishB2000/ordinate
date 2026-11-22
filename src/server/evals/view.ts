@@ -17,6 +17,17 @@ export async function caseGate(projectId: string): Promise<{ level: Level; visib
   return { level, visible: (c) => !level || !c.expect.compute || [c.expect.compute.datasetId, ...relatedIds(c.expect.compute)].every((id) => level(id) !== 'none') };
 }
 
+/** The run's cases the caller may see: a case still there by its spec; one deleted since by the datasets its result recorded (never shown by default). */
+export function shownIds(run: Run, results: readonly Result[], cases: ReadonlyMap<string, Case>, level: Level, visible: (c: Pick<Case, 'expect'>) => boolean): Set<string> {
+  const byCase = new Map(results.map((r) => [r.caseId, r]));
+  return new Set(run.caseIds.filter((id) => {
+    const c = cases.get(id);
+    if (c) return visible(c);
+    const r = byCase.get(id);
+    return !r || !level || !r.caseDatasetIds.some((d) => level(d) === 'none');
+  }));
+}
+
 export interface CaseLine {
   caseId: string; position: number; question: string;
   /** 'pending' until the case has a result. */
@@ -43,7 +54,7 @@ export interface RunView {
  */
 export function runView(me: string, run: Run, results: readonly Result[], cases: ReadonlyMap<string, Case>, level: Level, visible: (c: Pick<Case, 'expect'>) => boolean, prev: { run: Run; results: readonly Result[] } | null): RunView {
   const mine = run.startedBy === me;
-  const shown = new Set(run.caseIds.filter((id) => { const c = cases.get(id); return !c || visible(c); })); // a case deleted since is not hidden by a folder
+  const shown = shownIds(run, results, cases, level, visible);
   const done = new Map(results.filter((r) => shown.has(r.caseId)).map((r) => [r.caseId, r]));
   const mineOpen = (r: Result): boolean => mine && !(level && r.datasetIds.some((d) => level(d) === 'none'));
   const nowLines = [...done.values()].map((r) => ({ caseId: r.caseId, outcome: r.outcome, score: r.score }));
