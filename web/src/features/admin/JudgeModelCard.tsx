@@ -43,7 +43,7 @@ function Form({ saved, models }: { saved: Pick; models: AiAdmin['models'] }) {
       <Select label="Judge model" value={choice} options={options} hint="Scores only the words a test case should say. A model grading its own replies can be softer on them." onValueChange={(v) => { setError(''); setChoice(v); }} />
       {error && <p className={s.lead} role="alert">{error}</p>}
       <div className={s.aiFormActions}>
-        <Button type="submit" variant="primary" icon="check" disabled={choice === keyOf(saved)} loading={save.isPending}>
+        <Button type="submit" variant="primary" icon="check" disabled={choice === keyOf(saved)} loading={save.isPending} aria-label="Save judge model">
           Save
         </Button>
       </div>

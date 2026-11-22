@@ -57,7 +57,7 @@ export function useSuites(projectId: string | null | undefined, enabled = true) 
     queryKey: suitesKey(projectId),
     enabled,
     queryFn: projectId ? async () => (await rpc('eval:suites', { projectId })) as SuitesReply : skipToken,
-    refetchInterval: (q) => (q.state.data?.suites.some((s) => s.runningId) ? 4000 : false),
+    refetchInterval: (q) => (q.state.data?.suites?.some((s) => s.runningId) ? 4000 : false),
     refetchOnWindowFocus: true,
   });
 }
@@ -86,7 +86,7 @@ export function useRun(projectId: string | undefined, runId: string | undefined)
       if (!r.ok) throw new Error(r.error || 'This run could not be found.');
       return r;
     } : skipToken,
-    refetchInterval: (q) => (q.state.data && isActive(q.state.data.run.state) ? 4000 : false),
+    refetchInterval: (q) => (q.state.data?.run && isActive(q.state.data.run.state) ? 4000 : false),
     retry: false,
   });
 }

@@ -1,6 +1,7 @@
 // The model provider the evaluation-suites e2e talks to (./evals.e2e.ts): an Anthropic Messages API look-alike on loopback, in this
 // process — no real network call is made. It answers the Assistant's own ask (a chart of the Sales dataset for the revenue question,
-// plain words for anything else) and the judge (a 5 for any reply), told apart by the judge's system prompt.
+// plain words for anything else) and the judge (a 5 for any reply), told apart by the judge's system prompt. The dock's ask streams
+// (server-sent events); a suite run's asks and the judge's are plain JSON.
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -21,7 +22,7 @@ const stub = http.createServer((req, res) => {
       res.end(JSON.stringify({ data: [{ id: 'claude-sonnet-stub', display_name: 'Claude Sonnet Stub', created_at: 2 }] }));
       return;
     }
-    const json = JSON.parse(body || '{}') as { system?: unknown; messages?: { content: unknown }[] };
+    const json = JSON.parse(body || '{}') as { stream?: boolean; system?: unknown; messages?: { content: unknown }[] };
     const system = JSON.stringify(json.system ?? '');
     const asked = JSON.stringify(json.messages?.at(-1)?.content ?? '');
     let text = 'OK';
@@ -31,6 +32,12 @@ const stub = http.createServer((req, res) => {
     } else {
       calls.ask += 1;
       text = asked.includes(REVENUE) ? `West leads revenue.${CHART}` : 'Okay, I did that.';
+    }
+    if (json.stream) { // the dock's own ask streams; a suite run's does not
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      for (const part of [text.slice(0, 8), text.slice(8)]) res.write(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: part } })}\n\n`);
+      res.end('event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n');
+      return;
     }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ content: [{ type: 'text', text }], stop_reason: 'end_turn' }));

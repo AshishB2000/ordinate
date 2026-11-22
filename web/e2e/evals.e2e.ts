@@ -135,7 +135,7 @@ if (!dbUrl) {
     await row.getByRole('link', { name: /2 passed, 1 failed/ }).click();
     const results = page.getByTestId('eval-results');
     await results.waitFor();
-    await results.getByText('Finished').first().waitFor();
+    await page.getByText('Finished', { exact: true }).first().waitFor();
     const lines = results.getByTestId('result-row');
     assert.deepEqual(await lines.evaluateAll((els) => els.map((e) => e.getAttribute('data-outcome'))), ['pass', 'pass', 'fail']);
     await results.getByText(/The Assistant’s own model judged the words/).waitFor();

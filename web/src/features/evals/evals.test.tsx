@@ -349,7 +349,7 @@ describe('Admin → AI → Judge model', () => {
     expect(select.textContent).toContain('The Assistant’s own model');
     fireEvent.click(select);
     fireEvent.click(screen.getByRole('option', { name: 'Claude Haiku 4.5' }));
-    fireEvent.click(within(card).getByRole('button', { name: 'Save' }));
+    fireEvent.click(within(card).getByRole('button', { name: 'Save judge model' }));
     await waitFor(() => expect(sent(calls, 'eval:setJudge')).toEqual([{ pick: { provider: 'anthropic', model: 'claude-haiku-4-5' } }]));
   });
 
