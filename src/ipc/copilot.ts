@@ -19,6 +19,7 @@ import { followedEncoding } from '../analysis/metricMeasures';
 import { followedMeasureTexts } from './copilotMeasures';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
+import { GUARD_NOTE } from '../ai/numberAuditNote';
 import { listInsights } from './insights';
 import { isSharePath, type SharePath } from '../app/privacyStore';
 import { resolveChartOverlays } from './visualsAnalytics';
@@ -124,7 +125,6 @@ function plural(n: number, one: string, many = one + 's'): string {
 // turn is persisted: it then survives a reload, appears in the composer, the
 // dock and the stored transcript with no renderer change, and cannot be styled
 // away. The user sees it, which is the entire point.
-const GUARD_NOTE = 'Contains a figure the app did not compute: ';
 
 // Once per process, residentTrace-style: the failure this catches is systematic
 // (a prompt that invites derived figures), so the thousandth line says nothing
