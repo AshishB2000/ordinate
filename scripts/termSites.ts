@@ -93,8 +93,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   // door: the figure entry. Expands a term (expandTerms), or refuses it typed; the row lock keeps one.
   'src/analysis/termExpand.ts': { count: 2, how: 'door' },
   // withLockSteps keeps a term; only the door that expanded it may drop it
-  // + embedLock's sanitizeSteps(raw.steps): the record's prepare steps, read only to hash their writers of the lock column (as ruleState does); no filter list is cleaned.
-  'src/data/rowAccess.ts': { count: 3, how: 'door' },
+  // + embedLock's and embedMarkCheck's sanitizeSteps(raw.steps), and pinWriters' sanitizeSteps(raw.steps): the record's prepare steps, read only to hash their writers of the lock column (as ruleState does); no filter list is cleaned.
+  'src/data/rowAccess.ts': { count: 4, how: 'door' },
   'src/ipc/rowDoors.ts': { count: 2, how: 'door' },
   // throws: an engine after the door. A term that reaches it throws TermNotExpandedError, never skipped.
   'src/ai/answerSpec.ts': { count: 1, how: 'throws' },

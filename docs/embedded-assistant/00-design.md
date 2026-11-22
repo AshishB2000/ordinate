@@ -192,6 +192,23 @@ read that goes through `getDataset` outside a lock scope is refused for an embed
 Phase 3 adds `GET /embed/ask/<token>`: the small page (its own bundle, CSP `frame-ancestors` = the org's
 origins). Phase 4 adds the admin section and the snippets.
 
+## Phases 3 and 4 (round 2)
+
+- **The page:** `GET /embed/ask/<token>` (`src/server/embed/askRoute.ts`) checks the token as the ask does (header, MAC, claims,
+  embedding on, the marking, the asker, a Referer from a listed site) and serves `web/dist/embed-ask.html` with its own CSP:
+  `script-src 'self'; style-src 'self'; connect-src 'self'`, and `frame-ancestors` = the org's origins (none before the MAC held),
+  no X-Frame-Options, `Referrer-Policy: no-referrer` (the token is in its URL). It is a second Vite entry (`web/embed-ask.html`,
+  `web/src/embedAsk/`): React and a small SVG chart, not the app's chart engine (bars, or lines for a line or area answer; every
+  value is in the table under it). Its budget is its own, 90 KB gzip of initial JS (`npm --prefix web run size`; now 71.8 KB; the
+  app's stays 300 KB). It stores nothing (no cookie, no storage), sends the token in the body, and shows a held-back question
+  with the wait the server named.
+- **Admin → Embedding → Assistant:** five admin-only, org-scoped channels (`src/api/embedAssistant.ts`, `src/ipc/embedAssistant.ts`):
+  `settings`, `options`, `save`, `remove`, `setLimits`. `save` checks each dataset as the ask does (`embedMarkCheck`) and pins the
+  writers' hash. The screen states the metadata ceiling, flags a lock whose steps changed, and holds the caps and the signing
+  snippets. No new migration: 0049 holds everything.
+- **Open points:** a 429 is a console error in a browser; the page shows it as designed text, the e2e asks for the cap from
+  outside the page. A project admin who is not an org admin cannot mark an agent (embedding is an org-level switch).
+
 ## Files (round 1)
 
 New: `src/server/embed/askToken.ts`, `asker.ts`, `assistants.ts` (the store), `askRoute.ts`;
