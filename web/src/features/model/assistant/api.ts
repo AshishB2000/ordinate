@@ -40,6 +40,7 @@ export function useChangeInstruction(projectId: string) {
       }
       if (!r.ok) return r.error || 'Could not save the instruction.';
       await client.invalidateQueries({ queryKey: keyOf(projectId) });
+      void client.invalidateQueries({ queryKey: ['eval:suites', projectId] }); // the project's tests may now be out of date
       return null;
     },
   });
