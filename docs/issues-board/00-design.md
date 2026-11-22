@@ -139,20 +139,25 @@ questions (those open to the caller).
 
 ## Tests
 
-- `test-issueSignals`: the extractor on fixed turns, each signal, hidden and research turns skipped, the audit marker found without its
-  tokens, asked-again at 59 and 61 seconds, equal text not counted.
-- `test-issueGroups`: keyed groups, word clusters, the join of an unkeyed question to a named group, under 3 hidden, growth, the key of a
-  group stays when a word is added, meaning similarity (injected vectors), a negative control (unrelated questions stay apart).
-- `test-issueName`: prompt shape, no digit in a reply, one call per group.
-- `test-issuesStore` (DB, ordinary role): forced RLS and a negative control, the primary key's idempotence, reopen only on a newer
-  signal, ignored stays ignored.
-- `test-issuesJob` (DB): the whole check on seeded conversations; **no engine query** (spies on `queryAsync`, `execAsync`, `getDataset`);
-  a canary (a planted figure and row value in answers, snapshots and the audit note) never in the prompt or the board; off by default; a
-  second run adds nothing; the folder rule.
-- `test-issuesAccess` (DB): viewer refused; editor reads; only the project admin switches; propose calls #7 as the editor; folders.
-- `test-trackers`: stub provider for both; one ticket per issue; secret canary (plant the token, grep every reply, the log and the
-  database rows); SSRF host rules and `redirect: 'error'`; **no transport call** from the job or a refused Send; admin-only.
-- Vitest for the board and Integrations; Playwright `web/e2e/issues.e2e.ts`.
+Every guard has a negative control. Scratch Postgres worlds come from `scripts/evalHarness.ts` and `scripts/folderHarness.ts`; conversations are
+seeded straight into the tables (`scripts/issuesHarness.ts`).
+
+- `test-issueSignals` (pure): each signal read off stored turns, hidden and research turns skipped, the audit marker found without its
+  figures, asked-again at 59 and 61 seconds, equal text not counted; grouping by key, by words, a question joining a named group, meaning
+  similarity with injected vectors, matching a new group to an existing issue.
+- `test-issueName` (pure): the prompt, and every way a reply is refused (digit, line break, length, extra key, prose).
+- `test-issuesJob` (DB): off by default; the pass makes **no engine query** (a spy on the DuckDB modules and `getDataset`, with a control
+  that it sees one); groups, hidden under three, growth, a rerun adds nothing; reopen only on a newer signal, ignored stays ignored;
+  hidden conversations and research turns skipped; a model that fails or breaks the rules; **the canary** (a planted figure and row value in
+  answers, snapshots, ledgers and the audit note never reach the prompt or any board row); forced RLS on all five tables as an ordinary role.
+- `test-issuesAccess` (DB): a viewer is refused every channel; an editor reads and works; only the project admin switches and checks; propose
+  calls #7 as the editor with the board's questions, raises one card, and again raises the same one.
+- `test-issuesFolders` (folders): an issue with any signal closed to the caller is hidden whole; status, propose and send answer "not found".
+- `test-trackers` (DB, stub provider): connect admin-only; the token in the secrets store, in no reply, row, log or audit row; one ticket per
+  issue and tracker; the ticket holds no question text and no email; a failing tracker frees the slot; Jira's default issue type;
+  the host rules and `redirect: 'error'`; no transport call from the job or a refused Send.
+- Vitest (`web/src/features/issues/issues.test.tsx`) for the notice, the board and Admin → Integrations; Playwright
+  `web/e2e/issues.e2e.ts` for the whole path.
 
 ## Open points
 

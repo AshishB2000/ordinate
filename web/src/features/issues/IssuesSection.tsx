@@ -2,6 +2,7 @@
 // (no new query), grouped by cause, with a suggested fix. Editors read and work it; the project's admin switches the check on.
 // Editors see question text and the reason, never an answer (the owner's answer to Q1).
 
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -48,14 +49,30 @@ function Bar({ projectId, st }: { projectId: string; st: Settings }) {
   );
 }
 
+/** True once the element has come near the viewport (always true where IntersectionObserver is missing): the board loads when it is about to be seen, not with the tab. */
+function useNearView<T extends Element>(): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T | null>(null);
+  const [near, setNear] = useState(typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = ref.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) setNear(true); }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+  return [ref, near];
+}
+
 export function IssuesSection({ projectId }: { projectId: string }) {
-  const q = useBoard(projectId);
+  const [ref, near] = useNearView<HTMLElement>();
+  const q = useBoard(projectId, near);
   const [params] = useSearchParams();
   const asked = params.get('issue') ?? '';
   const board = q.data && q.data.ok ? q.data : null;
   if (board && !board.available) return null; // without a database there is no board
   let body;
-  if (q.isPending) body = <SkeletonRows rows={2} label="Loading the issues" />;
+  if (!near) body = <div className={s.skel} aria-hidden="true" />; // not asked for yet: a quiet space, not a busy skeleton
+  else if (q.isPending) body = <SkeletonRows rows={2} label="Loading the issues" />;
   else if (q.isError || (q.data && !q.data.ok)) body = <ErrorState heading={3} title="The issues could not be loaded" message={q.error?.message || 'Try again.'} onRetry={() => void q.refetch()} />;
   else if (board && !board.issues.length) {
     body = (
@@ -72,7 +89,7 @@ export function IssuesSection({ projectId }: { projectId: string }) {
   }
   const open = board?.issues.filter((i) => i.status === 'open').length ?? 0;
   return (
-    <section className={a.section} aria-labelledby="issues-h">
+    <section ref={ref} className={a.section} aria-labelledby="issues-h">
       <div className={a.head}>
         <div>
           <div className={a.titleRow}>

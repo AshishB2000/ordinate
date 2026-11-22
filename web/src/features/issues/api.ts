@@ -29,8 +29,8 @@ export const PROVIDER_LABEL: Record<Provider, string> = { linear: 'Linear', jira
 
 const boardKey = (projectId: string) => ['issues:list', projectId] as const;
 
-export function useBoard(projectId: string) {
-  return useQuery({ queryKey: boardKey(projectId), queryFn: async () => (await rpc('issues:list', { projectId })) as Board | Failed });
+export function useBoard(projectId: string, enabled = true) {
+  return useQuery({ queryKey: boardKey(projectId), enabled, queryFn: async () => (await rpc('issues:list', { projectId })) as Board | Failed });
 }
 /** One board call, and the lists it makes stale. A refusal is the reply `{ ok: false, error }`. */
 export function useIssueCall(projectId: string) {
