@@ -202,6 +202,11 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     }
     const third = mk('acme', 'east@acme.test');
     await ins(third);
+    // The worker's own timer ticks every pollMs too, and a tick's "claim while fewer than 2 run" is check-then-claim across awaits: two ticks
+    // in flight (the timer's and this test's) can each pass the check and claim 3 runs between them, so the third is no longer queued. Only
+    // tests tick by hand (production's loop is serial), so the timer is held off (its pending one fires paused, then waits a minute).
+    worker.tuneForTest({ pollMs: 60_000 });
+    await sleep(350);
     const w = worker.latestForTest();
     worker.pauseForTest(false);
     const started = (await w?.tick()) ?? 0;
@@ -210,6 +215,7 @@ const worker: typeof import('../src/server/research/worker') = require('../src/s
     ok('2 per pod: a further tick starts none while both are held', (await (async () => { worker.pauseForTest(false); const n2 = (await w?.tick()) ?? 0; worker.pauseForTest(true); return n2; })()) === 0);
     release();
     await until(async () => (await W.pool.query(`SELECT 1 FROM research_runs WHERE state IN ('running', 'writing') AND id = ANY($1)`, [ids])).rowCount === 0);
+    worker.tuneForTest({ pollMs: 100 });
     ok('2 per pod: they finish once released', (await W.pool.query(`SELECT 1 FROM research_runs WHERE state IN ('running', 'writing') AND id = ANY($1)`, [ids])).rowCount === 0);
   } finally {
     await S.close();
