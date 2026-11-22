@@ -58,6 +58,7 @@ export function resetForTest(): void {
   if (timer) clearInterval(timer);
   timer = null;
   flushing = null;
+  failedAt = 0;
   warned = false;
 }
 
@@ -65,6 +66,10 @@ export function resetForTest(): void {
 export const pending = (): number => buf.size;
 
 const utcDay = (): string => new Date(clock()).toISOString().slice(0, 10);
+
+/** After a failed write no new write is kicked off by a full buffer for this long. */
+const RETRY_MS = 5_000;
+let failedAt = 0;
 
 function add(e: Entry): void {
   const key = `${e.org}\u0000${e.projectId}\u0000${e.kind}\u0000${e.id}\u0000${e.day}`;
@@ -74,7 +79,20 @@ function add(e: Entry): void {
     have.computes += e.computes;
     have.totalMs += e.totalMs;
     have.maxMs = Math.max(have.maxMs, e.maxMs);
-  } else if (buf.size < MAX_ENTRIES) buf.set(key, e);
+    return;
+  }
+  if (buf.size >= MAX_ENTRIES) {
+    // Full (a flood of made-up ids, or the database is down). Write what is waiting: the flush drops ids that are not records, so a
+    // flood empties out. While a write is running or just failed, an open still wins a place over a compute-only row.
+    if (!flushing && Date.now() - failedAt > RETRY_MS) void flushUsage();
+    if (buf.size >= MAX_ENTRIES) {
+      if (!e.opened) return;
+      const victim = [...buf].find(([, v]) => !v.opened);
+      if (!victim) return;
+      buf.delete(victim[0]);
+    }
+  }
+  buf.set(key, e);
 }
 
 function arm(): void {
@@ -179,7 +197,8 @@ export function flushUsage(): Promise<void> {
         if (!orgDb()) continue; // un-wired meanwhile (a test, a shutdown): nothing to write to
         await writeOrg(org, rows);
       } catch (err) {
-        for (const r of rows) add(r);
+        failedAt = Date.now();
+        for (const r of [...rows].sort((a, b) => Number(b.opened) - Number(a.opened))) add(r); // opens first: they are what a cleanup cannot do without
         if (!warned) {
           warned = true;
           logger.warn(`[autopilot] usage could not be written (${String((err as { code?: unknown })?.code ?? 'error')}); it is retried on the next tick. Further failures are not logged.`);
@@ -194,5 +213,6 @@ export function flushUsage(): Promise<void> {
 export async function stopUsage(): Promise<void> {
   if (timer) clearInterval(timer);
   timer = null;
+  if (flushing) await flushing; // a write already running holds an older batch: wait for it, then write what arrived since
   await flushUsage();
 }

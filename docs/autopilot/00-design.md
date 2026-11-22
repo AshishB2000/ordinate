@@ -62,7 +62,7 @@ The rule: when unsure, count it. A spurious open only delays a cleanup; a missed
 | Where | Counted? | Hook |
 |---|---|---|
 | `visual:get` (the chart page, the editor's re-read) with a non-null reply | open | `src/ipc/visuals.ts`, `usage.opened` |
-| `visual:data` / `visual:dataBatch` / `analysis:tiles` naming a saved visual (`visualId`; the web already sends it for every saved chart): a dashboard tile, a Story, a scheduled report, a Slack answer | open + a timed compute | `usage.timedViz` around `vizData` |
+| `visual:data` / `visual:dataBatch` / `analysis:tiles` naming a saved visual (`visualId`; the web sends it for every saved chart, and a Story or report page sends it through `pageDeps.vizData`): a dashboard tile, a Story, a scheduled report, a Slack answer | open + a timed compute | `usage.timedViz` around `vizData` |
 | the same, when the server's own build path says `publish` or `bundle` | timed compute, **not** an open | same |
 | `analysis:open` answering `ok` (an editor's draft, a viewer's published copy, Duplicate) | dashboard open | `src/ipc/analysesServer.ts`, `usage.openWhenOk` |
 | `/p/<id>/<page>` for a dashboard page | dashboard open | `src/server/published.ts`, `noteSiteOpen` |
@@ -92,7 +92,7 @@ refused at once.
 `source` when the source column itself was edited, `step` when a `rename_column` step was appended (a step reads the column, or the
 column is made by a step). `updateDataset` hands them to `logRenames` **after `persist` succeeded**: a logged rename that never landed would make a
 wrong "exact" repair, while a lost entry degrades to "flagged". The write is tracked work, never throws, and does not make the edit wait.
-`datasets.ts` is at 800 lines, so the hook is one added import and the call rides an existing line.
+`updateDataset` moved to `src/data/datasetEdit.ts` (re-exported by `datasets.ts`, which was at the 800-line cap), so the hook sits on its own lines. Each row carries the dataset's own `updatedAt` (`dataset_at`); the rows are written on separate connections, so a repair orders by `(dataset_at, seq)`, never by arrival.
 
 ### Contracts and screens
 
@@ -113,8 +113,9 @@ Phase 2's job prunes usage rows older than 400 days and rows of deleted items pe
 ## Open points
 
 1. **No MCP tool reads a saved chart or dashboard by id.** The server's tools (`registry.ts`) list, query and create; `export_dashboard` and `run_report` are desktop-only, and `create_visual` computes the chart it just made, which is not an open. So there is no MCP hook to add. An API token or MCP client that calls the RPC channels (`visual:get`, `visual:data`, `analysis:open`) is counted by the hooks above. If a read-by-id tool is added later, it must call the same channels or `noteOpen`.
-2. **A rename_column step added directly in Prepare** (`updateSteps`) is outside the two kinds the plan lists, and is not logged. It renames a column in the output exactly as the editor's step does, so charts break the same way. Proposed: log it in a later change (the diff of the steps' `rename_column` entries is exact) if the owner wants it; until then such a chart is flagged, not repaired.
+2. **Prepare-step renames are logged too** (review). `updateSteps` (the Prepare screen, an AI plan apply, a version restore) diffs the old and new `rename_column` steps after `persist`: an added step is logged as kind `step`, a removed one (an edit, a plan, a restore that goes back) is logged **reversed** (to to from), so a later repair never replays a rename that was undone. The diff is `src/data/stepRenames.ts`.
 3. **A dashboard's compute time** is known only where the server builds the whole page (an embed). In the app a dashboard is computed tile by tile, so its slowness is attributed to its charts (which is what Autopilot flags).
 4. **Charts drawn only in the builder** (`visual:preview`, which names no saved visual) have no compute figure; their open is the `visual:get`.
 5. **A site published before this change** has no page id, so a page of it counts every dashboard of the link (an over-count, the safe side) until it is re-published.
-6. **Coverage:** phase 3 must treat the window as covered only from the day after the org's first recorded row (`min(day)`), because a rolling deploy has pods that do not record yet.
+6. **Phase 3 must check before an exact repair** that the rename's `new_name` still exists in the dataset's current columns, and that no later row of the log renames it again: a re-import, a Replace or a Live schema sync can bring an old name back or drop the new one. A rename whose target is gone is flagged, not repaired.
+7. **Coverage:** phase 3 must treat the window as covered only from the day after the org's first recorded row (`min(day)`), because a rolling deploy has pods that do not record yet.

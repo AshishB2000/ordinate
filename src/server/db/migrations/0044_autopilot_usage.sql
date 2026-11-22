@@ -11,8 +11,9 @@
 -- column_renames: every column rename the app made through the column editor (src/data/columnEdit.ts), with the old and the
 --   new name, so a later repair is exact. `kind`: 'source' (the source column itself was renamed) or 'step' (a
 --   rename_column step was appended to the prepare steps, because a step reads the column). `edit_id` groups the rows of one
---   edit; `seq` orders all rows of the org, so a swap (a to b and b to a in one edit) or a chain (a to b, later b to c)
---   replays exactly. A rename made before this migration is not here: it is flagged, never repaired.
+--   edit; `dataset_at` is the dataset's own updatedAt of that edit and `seq` breaks ties, so a swap (a to b and b to a
+--   in one edit) or a chain (a to b, later b to c) replays exactly even when two quick edits are written out of order (they are
+--   written on separate connections). Order by (dataset_at, seq). A rename made before this migration is not here: it is flagged, never repaired.
 --
 -- Additive only: two new tables. Forced row-level security as in 0012 and 0035: a statement sees a row only inside a
 -- transaction that set ordinate.org. A superuser or BYPASSRLS role skips RLS: run the app as an ordinary role.
@@ -41,9 +42,10 @@ CREATE TABLE column_renames (
   old_name   text        NOT NULL,
   new_name   text        NOT NULL,
   at         timestamptz NOT NULL DEFAULT now(),
+  dataset_at timestamptz NOT NULL,
   PRIMARY KEY (org_id, seq)
 );
-CREATE INDEX column_renames_dataset ON column_renames (org_id, project_id, dataset_id, seq);
+CREATE INDEX column_renames_dataset ON column_renames (org_id, project_id, dataset_id, dataset_at, seq);
 
 ALTER TABLE item_usage_daily ENABLE ROW LEVEL SECURITY;
 ALTER TABLE item_usage_daily FORCE ROW LEVEL SECURITY;

@@ -28,7 +28,7 @@ const at = (day: string, h = 12) => () => Date.parse(`${day}T${String(h).padStar
   inOrgMod.useOrgDb(null);
   usage.noteOpen('visual', randomUUID(), randomUUID(), 'acme');
   usage.noteCompute('visual', randomUUID(), randomUUID(), 5, { org: 'acme' });
-  renames.logRenames(randomUUID(), randomUUID(), [{ from: 'a', to: 'b', kind: 'source' }]);
+  renames.logRenames(randomUUID(), randomUUID(), [{ from: 'a', to: 'b', kind: 'source' }], new Date().toISOString());
   await usage.flushUsage();
   ok('no database: nothing is buffered, nothing throws', usage.pending() === 0);
   inOrgMod.useOrgDb(saved);
@@ -89,9 +89,9 @@ const at = (day: string, h = 12) => () => Date.parse(`${day}T${String(h).padStar
     await flush();
     r = await rowsOf(v2.id);
     ok('a publish or bundle build is timed but is not an open', r[0].computes === 5 && r[0].opened === false, JSON.stringify(r));
-    await W.as('boss', () => door({ projectId: P, visualId: v2.id, share: 'report' }));
+    await W.call('boss', 'story:figures', { projectId: P, blocks: [{ id: 'b1', kind: 'visual', visualId: v2.id }] });
     await flush();
-    ok('control: a scheduled report\'s read of the chart is an open', (await rowsOf(v2.id))[0].opened === true);
+    ok('a Story\'s read of the chart (story:figures, the report path) is an open and a timed compute', (await rowsOf(v2.id))[0].opened === true && (await rowsOf(v2.id))[0].computes === 6, JSON.stringify(await rowsOf(v2.id)));
 
     // ── dashboards ──────────────────────────────────────────────────────────────────────────────────────────────
     await reset();
@@ -121,8 +121,39 @@ const at = (day: string, h = 12) => () => Date.parse(`${day}T${String(h).padStar
     ok('a bad id is dropped at once; a well-formed made-up one waits for the flush', usage.pending() === 1);
     await flush();
     ok('negative control: the made-up id is not a record, so it is never written', (await rowsOf(ghost)).length === 0);
-    for (let i = 0; i < usage.MAX_ENTRIES + 50; i += 1) usage.noteOpen('visual', P, randomUUID());
-    ok('a flood of ids cannot grow the buffer past its cap', usage.pending() <= usage.MAX_ENTRIES);
+    // a flood of made-up ids fills the buffer: a real open still lands (the full buffer is written, the flush drops the junk)
+    await reset();
+    for (let i = 0; i < usage.MAX_ENTRIES; i += 1) usage.noteOpen('visual', P, randomUUID(), 'acme');
+    ok('a flood of ids cannot grow the buffer past its cap', usage.pending() === usage.MAX_ENTRIES);
+    usage.noteOpen('visual', P, v1.id, 'acme');
+    await flush();
+    await flush();
+    ok('S4: past the cap a real open is NOT dropped (the full buffer is written first)', (await rowsOf(v1.id)).length === 1 && (await rowsOf(v1.id))[0].opened === true);
+    ok('S4 (control): the junk of the flood was never written', (await q('SELECT count(*)::int AS n FROM item_usage_daily'))[0].n === 1);
+    // the database is down and the buffer is full of compute rows: an open still gets a place
+    await reset();
+    const down = { connect: () => Promise.reject(new Error('down')), on: () => undefined } as unknown as Pool;
+    const live = inOrgMod.orgDb();
+    inOrgMod.useOrgDb(down);
+    usage.noteCompute('visual', P, randomUUID(), 3, { opened: false, org: 'acme' });
+    await usage.flushUsage(); // fails: a full buffer will not hammer the database for a few seconds
+    for (let i = 1; i < usage.MAX_ENTRIES; i += 1) usage.noteCompute('visual', P, randomUUID(), 3, { opened: false, org: 'acme' });
+    usage.noteOpen('visual', P, v1.id, 'acme');
+    usage.noteCompute('visual', P, randomUUID(), 3, { opened: false, org: 'acme' });
+    ok('S4: with the database down the buffer stays at its cap', usage.pending() === usage.MAX_ENTRIES);
+    inOrgMod.useOrgDb(live);
+    await flush();
+    ok('S4: and the open survived the compute rows', (await rowsOf(v1.id)).length === 1 && (await rowsOf(v1.id))[0].opened === true);
+    await reset();
+
+    // S2: what was noted while a write was running is written at shutdown too
+    const slowWrite = usage.flushUsage; // (the real one)
+    usage.noteOpen('visual', P, v1.id, 'acme');
+    const inFlight = slowWrite();
+    usage.noteOpen('visual', P, v2.id, 'acme');
+    await usage.stopUsage();
+    await inFlight;
+    ok('S2: stopUsage writes the open that arrived after the running write began', (await rowsOf(v1.id)).length === 1 && (await rowsOf(v2.id)).length === 1);
     await reset();
 
     // ── forced row-level security, as an ordinary role with a password ──────────────────────────────────────────
@@ -143,7 +174,7 @@ const at = (day: string, h = 12) => () => Date.parse(`${day}T${String(h).padStar
     await flush();
     ok('written through the ordinary role (the app\'s own path)', (await rowsOf(v1.id)).length === 1);
     await q(`INSERT INTO item_usage_daily (org_id, project_id, kind, item_id, day, opened) VALUES ('other', $1, 'visual', $2, $3, true)`, [P, randomUUID(), DAY]);
-    await q(`INSERT INTO column_renames (org_id, project_id, dataset_id, edit_id, kind, old_name, new_name) VALUES ('other', $1, $2, $3, 'source', 'a', 'b')`, [P, randomUUID(), randomUUID()]);
+    await q(`INSERT INTO column_renames (org_id, project_id, dataset_id, edit_id, kind, old_name, new_name, dataset_at) VALUES ('other', $1, $2, $3, 'source', 'a', 'b', now())`, [P, randomUUID(), randomUUID()]);
     const count = async (table: string, org: string | null): Promise<number> => {
       const c = await R.connect();
       try {
@@ -164,7 +195,7 @@ const at = (day: string, h = 12) => () => Date.parse(`${day}T${String(h).padStar
     try {
       await c.query('BEGIN');
       await c.query(`SELECT set_config('ordinate.org', 'acme', true)`);
-      await c.query(`INSERT INTO column_renames (org_id, project_id, dataset_id, edit_id, kind, old_name, new_name) VALUES ('other', $1, $2, $3, 'source', 'a', 'b')`, [P, randomUUID(), randomUUID()]);
+      await c.query(`INSERT INTO column_renames (org_id, project_id, dataset_id, edit_id, kind, old_name, new_name, dataset_at) VALUES ('other', $1, $2, $3, 'source', 'a', 'b', now())`, [P, randomUUID(), randomUUID()]);
     } catch (e) { refused = /row-level security/.test((e as Error).message); } finally { await c.query('ROLLBACK').catch(() => undefined); c.release(); }
     ok('RLS: a write for another org is refused by the policy', refused);
     ok('the tables have no user column (per item, never per person)', (await q(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'item_usage_daily' AND column_name ~ '(user|email|actor|who)'`))[0].n === 0);
@@ -202,6 +233,29 @@ const at = (day: string, h = 12) => () => Date.parse(`${day}T${String(h).padStar
     await W.call('boss', 'dataset:update', { projectId: P, datasetId: W.plain, columns: now3 });
     await W.as('boss', async () => { await new Promise((res) => setTimeout(res, 300)); });
     ok('negative control: an edit that renames nothing (a same-name patch) logs nothing', (await W.as('boss', () => renames.renamesOf(W.plain))).length === before);
+
+    // ── a prepare step edit is a rename too (Prepare, a plan, a version restore all go through updateSteps) ─────────────────────
+    await q('DELETE FROM column_renames');
+    const base = (await W.as('boss', () => datasets.getDataset(P, W.plain)))!.steps ?? [];
+    const step = { type: 'rename_column', from: 'quantity', to: 'units' };
+    await W.as('boss', () => datasets.updateSteps(P, W.plain, [...base, step]));
+    await W.as('boss', async () => { await new Promise((res) => setTimeout(res, 300)); });
+    let slog = await W.as('boss', () => renames.renamesOf(W.plain));
+    ok('S1: a rename_column step added in Prepare is logged as kind "step"', slog.length === 1 && slog[0].from === 'quantity' && slog[0].to === 'units' && slog[0].kind === 'step', JSON.stringify(slog));
+    await W.as('boss', () => datasets.updateSteps(P, W.plain, [...base, step]));
+    await W.as('boss', async () => { await new Promise((res) => setTimeout(res, 300)); });
+    ok('S1 (control): saving the same steps again logs nothing', (await W.as('boss', () => renames.renamesOf(W.plain))).length === 1);
+    await W.as('boss', () => datasets.updateSteps(P, W.plain, base)); // a version restore that removes the step
+    await W.as('boss', async () => { await new Promise((res) => setTimeout(res, 300)); });
+    slog = await W.as('boss', () => renames.renamesOf(W.plain));
+    ok('S1: removing the step (a restore) is logged reversed, units back to quantity', slog.length === 2 && slog[1].from === 'units' && slog[1].to === 'quantity' && slog[1].kind === 'step', JSON.stringify(slog));
+    // two quick edits written out of order still replay in the dataset's own order (a to b, then b to c)
+    await q('DELETE FROM column_renames');
+    const ins = (from: string, to: string, at: string) => q(`INSERT INTO column_renames (org_id, project_id, dataset_id, edit_id, kind, old_name, new_name, dataset_at) VALUES ('acme', $1, $2, $3, 'source', $4, $5, $6)`, [P, W.plain, randomUUID(), from, to, at]);
+    await ins('b', 'c', '2026-03-10T12:00:00.002Z'); // written first, but the later edit
+    await ins('a', 'b', '2026-03-10T12:00:00.001Z');
+    slog = await W.as('boss', () => renames.renamesOf(W.plain));
+    ok('S5: renames replay by the dataset\'s updatedAt, not by arrival', slog.map((x) => `${x.from}>${x.to}`).join() === 'a>b,b>c', JSON.stringify(slog));
 
     // ── a hung database never makes an open wait ────────────────────────────────────────────────────────────────
     await reset();

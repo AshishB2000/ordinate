@@ -112,6 +112,11 @@ const names = (cols: { name: string }[]) => cols.map((c) => c.name).join(',');
   const rMade = edit.resolveColumnEdit(cc('a', 'm'), cc('a'), cc('a', 'n'), []);
   ok('renames: a step-made column\'s rename is kind "step"', JSON.stringify(rMade.renames) === JSON.stringify([{ from: 'm', to: 'n', kind: 'step' }]), JSON.stringify(rMade.renames));
   ok('renames (negative control): an unchanged patch renames nothing', edit.resolveColumnEdit(cc('a', 'b'), cc('a', 'b'), cc('a', 'b'), null).renames.length === 0);
+  const sr: typeof import('../src/data/stepRenames') = require('../src/data/stepRenames');
+  const rn = (from: string, to: string) => ({ type: 'rename_column', from, to });
+  ok('step renames: an added step is a rename', JSON.stringify(sr.stepRenameChanges([], [rn('a', 'b')])) === JSON.stringify([{ from: 'a', to: 'b', kind: 'step' }]));
+  ok('step renames: a removed step is the rename reversed', JSON.stringify(sr.stepRenameChanges([rn('a', 'b')], [])) === JSON.stringify([{ from: 'b', to: 'a', kind: 'step' }]));
+  ok('step renames (negative control): the same steps in another order, or other step types, change nothing', sr.stepRenameChanges([rn('a', 'b'), { type: 'sort', column: 'x' }], [{ type: 'sort', column: 'y' }, rn('a', 'b')]).length === 0 && sr.stepRenameChanges(undefined, undefined).length === 0);
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
   .finally(() => {

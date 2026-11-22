@@ -64,7 +64,14 @@ if (!adminUrl) {
     await page.goto(`/dashboards/${pid}/${aid}`);
     await settled(page);
     assert.ok(channels.includes('analysis:open'), 'the page opened the dashboard');
-    assert.deepEqual(channels.filter((c) => /autopilot|usage|record|telemetry/i.test(c)), [], 'no request of the browser is made for the record');
+    const tally: Record<string, number> = {};
+    for (const c of channels) tally[c] = (tally[c] ?? 0) + 1;
+    // The baseline is what this dashboard cost before Autopilot (the web code is unchanged): 12 requests, one per channel. Any
+    // request added for the record is a new channel or a second call, and breaks this.
+    assert.deepEqual(tally, {
+      'jobs:list': 1, 'projects:overview': 1, 'prefs:get': 1, 'analysis:open': 1, 'projects:roles': 1, 'folder:tree': 1,
+      'dashboard:asOfStamps': 1, 'fx:get': 1, 'comment:list': 1, 'themes:list': 1, 'analysis:tiles': 1, 'metric:list': 1,
+    }, 'opening a dashboard makes exactly the requests it made before, none for the record');
 
     let rows: Array<{ kind: string; opened: boolean; computes: number }> = [];
     for (let i = 0; i < 60 && !rows.some((r) => r.kind === 'dashboard'); i += 1) {
