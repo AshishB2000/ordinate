@@ -74,6 +74,7 @@ const WHOLE_PROJECT: Readonly<Record<string, number>> = {
   'src/ipc/metrics.ts': 1, // metric:ensureDefaults proposes only when the project (not the caller) has no metric
   'src/ipc/verified.ts': 1, // a verified question's words are unique in the project
   'src/server/authz/folderGate.ts': 1, // what a question reads (the doors)
+  'src/server/autopilot/read.ts': 1, // Autopilot's scan: a chart in a folder the admin cannot open still counts as used (else it would be called unused and moved)
   'src/server/subscriptions/figureDatasets.ts': 2, // figureDatasets, datasetsOfRoot
 };
 const SPARED: Person[] = ['opsViewer', 'opsLead', 'opsEditorView', 'finViewer', 'ed'];

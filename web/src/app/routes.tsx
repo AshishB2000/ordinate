@@ -102,6 +102,8 @@ export const pages: RouteObject[] = [
   page('/requests/:projectId/:requestId', () => import('../features/dashboards/requests/RequestReviewPage')),
   // A deep-research report (docs/deep-research): private to the person who ran it, its charts drawn live.
   page('/research/:projectId/:runId', () => import('../features/assistant/research/ReportPage')),
+  // Autopilot (docs/autopilot): one weekly run's report, for org admins.
+  page('/autopilot/:projectId/:runId', () => import('../features/autopilot/ReportPage')),
   // A suite run's results (docs/eval-suites): every editor sees each case's outcome; the answer's words only the person who ran it.
   page('/evals/:projectId/:runId', () => import('../features/evals/ResultsPage')),
 ];

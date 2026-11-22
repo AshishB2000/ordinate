@@ -48,6 +48,8 @@ export interface TrashItem {
   deletedAt: string;
   /** The dataset whose delete took this visual along. */
   deletedWith?: string;
+  /** Autopilot moved it (docs/autopilot): not opened for `days` days, done as `by`. */
+  reason?: { kind: 'autopilot'; days: number; by: string };
   daysLeft: number;
 }
 
