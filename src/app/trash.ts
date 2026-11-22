@@ -26,7 +26,7 @@ import { randomUUID } from 'crypto';
 import { RECORD_DIR, projectDir, projectsBase, isValidId, isRecordType } from './recordKinds';
 import type { RecordType, FileRecordType } from './recordKinds';
 import * as store from './trashStore';
-import type { TrashEntry } from './trashStore';
+import type { TrashEntry, TrashReason } from './trashStore';
 import * as versions from './versions';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
@@ -66,10 +66,10 @@ function changed(projectId: string): void {
 }
 
 /** Whole days left before the purge takes it — 30 right after the delete. */
-export function daysLeft(deletedAt: string, now = Date.now()): number {
+export function daysLeft(deletedAt: string, now = Date.now(), keepDays = RETENTION_DAYS): number {
   const at = Date.parse(deletedAt);
   if (!Number.isFinite(at)) return 0;
-  return Math.max(0, Math.ceil((at + RETENTION_DAYS * DAY_MS - now) / DAY_MS));
+  return Math.max(0, Math.ceil((at + keepDays * DAY_MS - now) / DAY_MS));
 }
 
 function liveFile(projectId: string, type: FileRecordType, id: string): string {
@@ -92,7 +92,7 @@ async function move(from: string, to: string): Promise<void> {
   }
 }
 
-async function moveToTrash(projectId: string, type: FileRecordType, id: string, deletedWith?: string): Promise<string | null> {
+async function moveToTrash(projectId: string, type: FileRecordType, id: string, deletedWith?: string, keep?: Keep): Promise<string | null> {
   const file = liveFile(projectId, type, id);
   if (!file) return null;
   let rec: any; // ponytail: any stored record
@@ -101,7 +101,7 @@ async function moveToTrash(projectId: string, type: FileRecordType, id: string, 
   } catch (_) {
     return null;
   }
-  if (!(await store.stash(projectId, type, id, rec, { deletedWith }))) return null;
+  if (!(await store.stash(projectId, type, id, rec, { deletedWith, ...keep }))) return null;
   if (type === 'dataset') {
     const dir = store.trashDir(projectId, 'dataset');
     for (const n of await store.datasetFiles(path.dirname(file), id)) await move(path.join(path.dirname(file), n), path.join(dir, n));
@@ -109,6 +109,9 @@ async function moveToTrash(projectId: string, type: FileRecordType, id: string, 
   await recordFs.rm(file, { force: true });
   return store.recordName(rec);
 }
+
+/** What Autopilot's move changes about a trash entry: how long it stays, and why it is there. */
+export interface Keep { keepDays: number; reason: TrashReason }
 
 /**
  * Move a record to the trash. `cascaded` counts what went with it (a dataset's
@@ -118,6 +121,7 @@ export async function trashRecord(
   projectId: string,
   type: RecordType,
   id: string,
+  keep?: Keep,
 ): Promise<{ ok: boolean; name?: string; cascaded?: number }> {
   if (!isRecordType(type) || !isValidId(projectId) || !isValidId(id)) return { ok: false };
   if (type === 'alert') {
@@ -134,7 +138,7 @@ export async function trashRecord(
       if (v.datasetId === id && (await moveToTrash(projectId, 'visual', v.id, id)) !== null) cascaded++;
     }
   }
-  const name = await moveToTrash(projectId, type, id);
+  const name = await moveToTrash(projectId, type, id, undefined, keep);
   if (name === null && !cascaded) return { ok: false };
   changed(projectId);
   return { ok: true, name: name || '', cascaded };
@@ -143,7 +147,10 @@ export async function trashRecord(
 async function moveBack(projectId: string, type: RecordType, id: string): Promise<Restored | null> {
   const rec = await store.readEntry(projectId, type, id);
   if (!rec) return null;
-  const { deletedAt: _at, deletedWith: _with, ...live } = rec;
+  const { deletedAt: _at, deletedWith: _with, ...kept } = rec;
+  // Autopilot's stamps (how long it stays, why it is here) are the Trash's, not the record's: a restore drops them.
+  const { keepDays: _days, ...unstamped } = kept;
+  const live = unstamped.reason && unstamped.reason.kind === 'autopilot' ? (({ reason: _reason, ...r }) => r)(unstamped) : unstamped;
   const name = store.recordName(live);
   if (type === 'alert') {
     if (!(await alertStore.restoreRule(projectId, live))) return null;
@@ -238,7 +245,7 @@ export async function empty(projectId: string): Promise<number> {
 }
 
 export async function list(projectId: string, now = Date.now()): Promise<TrashItem[]> {
-  return (await store.listEntries(projectId)).map((e) => ({ ...e, daysLeft: daysLeft(e.deletedAt, now) }));
+  return (await store.listEntries(projectId)).map((e) => ({ ...e, daysLeft: daysLeft(e.deletedAt, now, e.keepDays) }));
 }
 
 /**
@@ -258,7 +265,7 @@ export async function purgeExpired(now = Date.now()): Promise<number> {
     let here = 0;
     const gone: Array<{ kind: string; id: string }> = [];
     for (const e of await store.listEntries(pid)) {
-      if (daysLeft(e.deletedAt, now) > 0) continue;
+      if (daysLeft(e.deletedAt, now, e.keepDays) > 0) continue;
       await store.removeEntry(pid, e.type, e.id);
       if (e.type !== 'alert') await versions.forget(pid, e.type, e.id);
       gone.push({ kind: e.type, id: e.id });

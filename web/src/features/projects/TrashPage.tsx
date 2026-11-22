@@ -113,6 +113,7 @@ function Trash({ projectId, projectName }: { projectId: string; projectName: str
                       </span>
                       <span className={s.nameText}>
                         <span className={s.name}>{it.name || 'Untitled'}</span>
+                        {it.reason && <span className={s.sub}>{`Autopilot: not opened in ${plural(it.reason.days, 'day')}`}</span>}
                         {it.deletedWith && <span className={s.sub}>{parent ? `Deleted with “${parent.name}”` : 'Deleted with its dataset'}</span>}
                       </span>
                     </span>
