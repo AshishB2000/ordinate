@@ -122,6 +122,17 @@ describe('Connections', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Connections' })).toBeTruthy();
     expect(await screen.findByText('No connections yet. Pick a source below to add one.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Databases (1)' })).toBeTruthy();
+    // Popular leads (PostgreSQL there and in its group); tiles carry no blurb.
+    expect(screen.getByRole('heading', { name: 'Popular' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'PostgreSQL' })).toHaveLength(2);
+    expect(screen.queryByText('Read-only access to a PostgreSQL database.')).toBeNull();
+    expect(screen.getByRole('link', { name: /Upload a file/ }).getAttribute('href')).toBe('/data/import?source=file');
+    // A chip narrows to one category and drops the lead rows.
+    fireEvent.click(screen.getByRole('button', { name: 'Files & local' }));
+    expect(screen.queryByRole('heading', { name: 'Popular' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'PostgreSQL' })).toBeNull();
+    expect(screen.getByText('1 of 2 sources')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Search data sources' }), { target: { value: 'zz' } });
     expect(screen.getByText('No data sources match that search.')).toBeTruthy();
     expect(screen.getByText('0 of 2 sources')).toBeTruthy();

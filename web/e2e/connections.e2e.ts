@@ -123,7 +123,9 @@ e2e('connections: picker, generated form, required fields, a failed test, secret
   const ids = await tiles.evaluateAll((els) => els.map((e) => e.getAttribute('data-connector')));
   for (const local of ['duckdb-file', 'parquet-folder', 'csv-folder']) assert.ok(!ids.includes(local), `${local} is not offered on a server`);
   assert.ok(ids.includes('url') && ids.includes('postgres'), 'URL and PostgreSQL are offered');
-  await page.getByText(`${ids.length} sources`, { exact: true }).waitFor();
+  // Popular repeats a few sources above their groups, so count each once.
+  const total = new Set(ids).size;
+  await page.getByText(`${total} sources`, { exact: true }).waitFor();
   await screens(page, 'connections-picker');
 
   // Search, the no-match state, and the arrow keys across tiles.
@@ -131,14 +133,14 @@ e2e('connections: picker, generated form, required fields, a failed test, secret
   await search.fill('zzzz');
   await page.getByText('No data sources match that search.').waitFor();
   await search.fill('postgres');
-  await page.getByText(new RegExp(`^\\d+ of ${ids.length} sources$`)).waitFor();
+  await page.getByText(new RegExp(`^\\d+ of ${total} sources$`)).waitFor();
   await search.fill('');
   await tiles.first().focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-connector')), ids[1]);
 
   // The form, generated from PostgreSQL's fields.
-  await page.locator('button[data-connector="postgres"]').click();
+  await page.locator('button[data-connector="postgres"]').first().click();
   await page.getByRole('heading', { name: 'PostgreSQL', level: 2 }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get('source'), 'postgres');
   await page.getByLabel('Host *').fill('');
