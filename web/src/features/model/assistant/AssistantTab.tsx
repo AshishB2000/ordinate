@@ -11,6 +11,7 @@ import { InstructionsList } from './InstructionsList';
 import { KnowledgeSection } from './KnowledgeSection';
 import { Inbox } from '../../evals/Inbox';
 import { TestsSection } from '../../evals/TestsSection';
+import { IssuesSection } from '../../issues/IssuesSection';
 import { TestChat } from './TestChat';
 import { VerifiedList } from './VerifiedList';
 import a from './Assistant.module.css';
@@ -47,6 +48,7 @@ export function AssistantTab({ projectId }: { projectId: string }) {
       <VerifiedList projectId={projectId} canEdit={canEdit} />
       {canEdit && <TestsSection projectId={projectId} agentId={null} />}
       {canEdit && <Inbox projectId={projectId} />}
+      {canEdit && <IssuesSection projectId={projectId} />}
       {canEdit && <TestChat projectId={projectId} />}
     </div>
   );

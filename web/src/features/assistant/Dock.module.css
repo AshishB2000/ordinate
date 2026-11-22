@@ -415,6 +415,14 @@
   color: var(--text-dim);
   cursor: not-allowed;
 }
+/* One line under the box: editors may see the questions that got no good answer (docs/issues-board). */
+.shareNotice {
+  margin: 0;
+  padding: 0 var(--sp-4);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text-dim);
+}
 /* The composer's last row: which model answers you on the left (DockParts
    ModelPicker — a quiet select, or its name when there is one), then `@`, add
    data and send on the right. */
