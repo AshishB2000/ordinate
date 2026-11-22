@@ -90,7 +90,8 @@ if (!dbUrl) {
     // ── Off by default; on; Check now ───────────────────────────────────────────────────────────────────────────────────────
     await page.goto(`/model/${pid}?tab=assistant`);
     const section = page.getByRole('region', { name: 'Issues' });
-    await section.scrollIntoViewIfNeeded(); // the board loads when it comes near the viewport
+    await section.getByText(/The board is closed/).waitFor(); // closed until asked: the tab stays light
+    await section.getByRole('button', { name: 'Show issues' }).click();
     await section.getByText('No issues yet').waitFor();
     await section.getByText(/Off\. Turn it on/).waitFor();
     assert.equal(calls.name, 0, 'no model call before the check is on');
@@ -114,7 +115,7 @@ if (!dbUrl) {
 
     // ── Propose a definition (#7), resolve, reopen (a fresh page load: the RPC budget counts a load) ───────────────────────────────────────────────────────────────────────────
     await page.goto(`/model/${pid}?tab=assistant`);
-    await page.getByRole('region', { name: 'Issues' }).scrollIntoViewIfNeeded();
+    await page.getByRole('region', { name: 'Issues' }).getByRole('button', { name: 'Hide issues' }).waitFor(); // remembered: open again
     const again = page.getByRole('region', { name: 'Issues' }).getByTestId('issue');
     await again.waitFor();
     await again.getByRole('button', { name: 'Propose a definition' }).click();

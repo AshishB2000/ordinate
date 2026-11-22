@@ -1,12 +1,17 @@
 // The issues board in the web (docs/issues-board/00-design.md): the composer's notice, the board for an editor (counts, fix, examples as
 // words, never an answer), its actions, the admin's switch, and Admin → Integrations. Every reply is canned: counts and text are the server's.
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
 import { setDockOpen } from '../assistant/dockState';
 
+beforeEach(() => {
+  localStorage.setItem('ordinate.issues.open', '1'); // the board is open, as an editor who opened it once leaves it
+});
+
 afterEach(() => {
+  localStorage.clear();
   act(() => setDockOpen(false));
   cleanup();
   vi.unstubAllGlobals();
@@ -154,9 +159,8 @@ describe('the Issues board', () => {
 });
 
 describe('a ticket\'s link back', () => {
-  it('opens the issue: the board loads at once (not when scrolled near) and the issue is scrolled into view and marked', async () => {
-    const seenByObserver: Element[] = [];
-    vi.stubGlobal('IntersectionObserver', class { observe(e: Element) { seenByObserver.push(e); } disconnect() {} unobserve() {} });
+  it('opens the issue even when the board is closed: it loads at once, the issue is scrolled into view and marked', async () => {
+    localStorage.clear(); // closed
     const scrolled: string[] = [];
     const real = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); };
@@ -174,21 +178,34 @@ describe('a ticket\'s link back', () => {
     }
   }, 30_000);
 
-  it('NEGATIVE CONTROL: without the link, the board waits until it is near the viewport, and scrolls nothing', async () => {
-    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} unobserve() {} }); // never intersects
+  it('NEGATIVE CONTROL: with no link and no earlier choice the board is closed: nothing is asked of the server and nothing scrolls', async () => {
+    localStorage.clear();
     const scrolled: string[] = [];
     const real = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); };
     try {
       const calls = serveRpc(common('editor', { 'issues:list': BOARD() }));
       tab();
-      await screen.findByRole('heading', { name: 'Issues' }, LAZY);
+      await screen.findByRole('button', { name: 'Show issues' }, LAZY);
       await new Promise((r) => setTimeout(r, 300));
       expect(sent(calls, 'issues:list')).toHaveLength(0);
       expect(scrolled).toEqual([]);
     } finally {
       Element.prototype.scrollIntoView = real;
     }
+  }, 30_000);
+
+  it('Show issues loads the board once and is remembered in this browser; Hide closes it', async () => {
+    localStorage.clear();
+    const calls = serveRpc(common('editor', { 'issues:list': BOARD() }));
+    tab();
+    fireEvent.click(await screen.findByRole('button', { name: 'Show issues' }, LAZY));
+    await screen.findByTestId('issue', {}, LAZY);
+    expect(sent(calls, 'issues:list')).toHaveLength(1);
+    expect(localStorage.getItem('ordinate.issues.open')).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide issues' }));
+    expect(await screen.findByRole('button', { name: 'Show issues' })).toBeTruthy();
+    expect(localStorage.getItem('ordinate.issues.open')).toBe('0');
   }, 30_000);
 
   it('a ticket with an unsafe URL is shown as text, never as a link', async () => {

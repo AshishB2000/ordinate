@@ -2,7 +2,7 @@
 // (no new query), grouped by cause, with a suggested fix. Editors read and work it; the project's admin switches the check on.
 // Editors see question text and the reason, never an answer (the owner's answer to Q1).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -49,25 +49,26 @@ function Bar({ projectId, st }: { projectId: string; st: Settings }) {
   );
 }
 
-/** True once the element has come near the viewport (at once when `now`, and where IntersectionObserver is missing): the board loads when it is about to be seen, not with the tab. */
-function useNearView<T extends Element>(now: boolean): [React.RefObject<T | null>, boolean] {
-  const ref = useRef<T | null>(null);
-  const [near, setNear] = useState(now || typeof IntersectionObserver === 'undefined');
-  useEffect(() => {
-    const el = ref.current;
-    if (near || !el) return;
-    const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) setNear(true); }, { rootMargin: '200px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [near]);
-  return [ref, near];
-}
+const OPEN_KEY = 'ordinate.issues.open';
+/** The editor's own choice, kept in this browser only (a convenience: every read and write is guarded, and it works without it). */
+const remembered = (): boolean => {
+  try {
+    return localStorage.getItem(OPEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const remember = (on: boolean): void => {
+  try {
+    localStorage.setItem(OPEN_KEY, on ? '1' : '0');
+  } catch { /* private window, blocked storage: the choice lasts until the page is left */ }
+};
 
 export function IssuesSection({ projectId }: { projectId: string }) {
   const [params] = useSearchParams();
   const asked = params.get('issue') ?? ''; // a ticket's link back: load the board now and bring that issue into view
-  const [ref, near] = useNearView<HTMLElement>(!!asked);
-  const q = useBoard(projectId, near);
+  const [shown, setShown] = useState(() => !!asked || remembered()); // closed until asked: the Assistant tab is already one of the busiest pages
+  const q = useBoard(projectId, shown);
   const board = q.data && q.data.ok ? q.data : null;
   const found = !!asked && !!board?.issues.some((i) => i.id === asked);
   useEffect(() => {
@@ -75,8 +76,14 @@ export function IssuesSection({ projectId }: { projectId: string }) {
   }, [found, asked]);
   if (board && !board.available) return null; // without a database there is no board
   let body;
-  if (!near) body = <div className={s.skel} aria-hidden="true" />; // not asked for yet: a quiet space, not a busy skeleton
-  else if (q.isPending) body = <SkeletonRows rows={2} label="Loading the issues" />;
+  if (!shown) {
+    body = (
+      <div className={s.closed}>
+        <p className={s.barNote}>The board is closed. Open it to see where the Assistant struggled and what to fix.</p>
+        <Button size="sm" icon="chevron-down" aria-expanded={false} onClick={() => { remember(true); setShown(true); }}>Show issues</Button>
+      </div>
+    );
+  } else if (q.isPending) body = <SkeletonRows rows={2} label="Loading the issues" />;
   else if (q.isError || (q.data && !q.data.ok)) body = <ErrorState heading={3} title="The issues could not be loaded" message={q.error?.message || 'Try again.'} onRetry={() => void q.refetch()} />;
   else if (board && !board.issues.length) {
     body = (
@@ -93,7 +100,7 @@ export function IssuesSection({ projectId }: { projectId: string }) {
   }
   const open = board?.issues.filter((i) => i.status === 'open').length ?? 0;
   return (
-    <section ref={ref} className={a.section} aria-labelledby="issues-h">
+    <section className={a.section} aria-labelledby="issues-h">
       <div className={a.head}>
         <div>
           <div className={a.titleRow}>
@@ -102,6 +109,7 @@ export function IssuesSection({ projectId }: { projectId: string }) {
           </div>
           <p className={a.sub}>Where the Assistant struggled, from stored answers. You see the questions and why, never the answers.</p>
         </div>
+        {shown && <Button size="sm" variant="ghost" icon="chevron-up" aria-expanded onClick={() => { remember(false); setShown(false); }}>Hide issues</Button>}
       </div>
       {board && <Bar projectId={projectId} st={board.settings} />}
       {body}

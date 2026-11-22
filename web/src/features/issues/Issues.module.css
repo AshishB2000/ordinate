@@ -29,3 +29,4 @@
 .link:hover { text-decoration: underline; }
 .problem { margin: 0; font-size: var(--t-13); color: var(--error-text); }
 .skel { height: 112px; }
+.closed { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-12); padding: var(--sp-12) var(--sp-16); background: var(--surface-1); border: 1px dashed var(--border-2); border-radius: var(--r-lg); }

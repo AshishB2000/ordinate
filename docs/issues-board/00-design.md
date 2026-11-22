@@ -178,4 +178,4 @@ seeded straight into the tables (`scripts/issuesHarness.ts`).
 5. **A refusal's missing name is only kept when the turn stored one.** A turn keeps `suggest.said` only when the app had "Did you mean"
    options; a `define` turn with none stores no name. Those questions group by words, and join a named group when their question holds its
    name. Reading the refusal's own sentence for the name was left out: it can quote the model's words.
-6. **The board loads when it comes near the viewport**, so the Assistant tab stays inside the e2e RPC budget (25) on the specs that load it.
+6. **The board is closed until asked** ("Show issues", remembered in that browser; a ticket's link opens it), so the Assistant tab stays inside the e2e RPC budget (25): with #584 merged the tab is already at it (`model` spec, "assistant test chat").
