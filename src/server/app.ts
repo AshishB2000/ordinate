@@ -268,6 +268,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // Deep research: its runs are rows (0043), the worker below claims them; a job per org sweeps the runs of people who left and old unadded ones.
       (require('./research/db') as typeof import('./research/db')).useResearchDb(pool);
       (require('./research/sweep') as typeof import('./research/sweep')).wireResearchSweep();
+      // Autopilot's weekly job, once per org (docs/autopilot): it acts as the admin who switched it on.
+      (require('./autopilot/job') as typeof import('./autopilot/job')).wireAutopilot();
       // Evaluation suites (0045): suites, cases, runs and thumbs are rows; the worker below claims runs; a job per org sweeps what a crash left.
       (require('./evals/db') as typeof import('./evals/db')).useEvalsDb(pool);
       (require('./evals/sweep') as typeof import('./evals/sweep')).wireEvalSweep();
@@ -310,6 +312,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     app.addHook('preClose', async () => {
       if (isDraining()) return;
       await evalWorker?.stop();
+      await (require('./autopilot/usage') as typeof import('./autopilot/usage')).stopUsage();
       await researchWorker?.stop();
       await slackWorker?.stop();
       await jobs?.stop();
@@ -730,4 +733,6 @@ export function registerHandlers(): void {
   (require('./proposals/rpc') as typeof import('./proposals/rpc')).register();
   // The data issues board (docs/issues-board): the board, proposals from it, tickets to Linear and Jira.
   (require('./issues/rpc') as typeof import('./issues/rpc')).register();
+  // Autopilot (docs/autopilot): per-project settings, the weekly run's reports, Run now and Undo.
+  (require('./autopilot/rpc') as typeof import('./autopilot/rpc')).register();
 }

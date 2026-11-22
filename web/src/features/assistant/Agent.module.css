@@ -164,3 +164,100 @@
 .lineAgentOn {
   color: var(--accent-text);
 }
+
+/* Auto (docs/agent-router): two or three agents fit a question about equally, so the person picks. */
+.choose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.chooseLine {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.chooseRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.chooseBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: var(--t-13);
+  font-weight: 600;
+  cursor: pointer;
+}
+.chooseBtn:hover {
+  background: var(--surface-2);
+}
+.chooseBtn:focus-visible,
+.chooseNo:focus-visible,
+.routedChange:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+.chooseBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.chooseNo {
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-13);
+  cursor: pointer;
+}
+
+/* "Answered by Finance agent · Change", and why Auto picked it, above the answer. */
+.routed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.routedBy {
+  font-weight: 600;
+  color: var(--text);
+}
+.routedChange {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.routedChange:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.routedWhy {
+  flex-basis: 100%;
+}
+.routedList {
+  display: flex;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  gap: var(--sp-8);
+}

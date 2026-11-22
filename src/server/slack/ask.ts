@@ -22,12 +22,14 @@ import { untilAborted } from '../limits';
 import * as copilot from '../../ai/copilot';
 import { agentsFor, preselect } from '../../ai/agentAccess';
 import { askScope } from '../../ipc/agentAsk';
+import { routeAsk } from '../../ipc/agentRoute';
 import { openTurns, shows } from '../../ipc/turnsOpen';
 import * as projects from '../../app/projects';
 import { inOrg } from '../db/inOrg';
 import { slackLimits } from './db';
 
-export interface Target { projectId: string; agentId: string | null; threadId?: string }
+/** `why`: the router's reason for `agentId` (a direct message with Auto), kept on the answer's turn. */
+export interface Target { projectId: string; agentId: string | null; threadId?: string; why?: string }
 
 /** A card as the browser gets it (src/ipc/answerSnapshots.ts): a chart's, or an SQL answer's table. Read, never written. */
 export type Card = Record<string, any>; // any: AnswerCard | SqlCard, told apart by `kind`
@@ -90,10 +92,11 @@ export async function mayAsk(pool: Pool, who: Identity, projectId: string): Prom
 
 /**
  * A direct message has no project: the project of the person's latest conversation they may still ask in, else the
- * first project they may ask in (the newest updated). The agent is the composer's preselection (src/ai/agentAccess.ts).
- * Inside the person's request context.
+ * first project they may ask in (the newest updated). The agent is the router's pick for the question when the person may
+ * use two or more (docs/agent-router: nobody to click here, so a close call the model cannot settle takes the agent with more
+ * matches), else the composer's preselection (src/ai/agentAccess.ts). Inside the person's request context.
  */
-export async function directTarget(pool: Pool, who: Identity): Promise<Target | null> {
+export async function directTarget(pool: Pool, who: Identity, question: string): Promise<Target | null> {
   const mine = (await projects.listProjects()).filter((p) => !p.archivedAt);
   const latest = await inOrg(
     (c, org) => c.query<{ project_id: string; id: string }>('SELECT project_id, id FROM assistant_threads WHERE org_id = $1 AND owner = $2 AND NOT hidden ORDER BY updated_at DESC, touched DESC LIMIT 5', [org, who.user.email]),
@@ -104,7 +107,8 @@ export async function directTarget(pool: Pool, who: Identity): Promise<Target | 
     if (!mine.some((p) => p.id === projectId) || !(await mayAsk(pool, who, projectId))) continue;
     const { usable, teams } = await agentsFor(projectId);
     const thread = await copilot.threadFor(projectId);
-    return { projectId, agentId: preselect(usable, teams, thread?.agentId) };
+    const routed = await routeAsk(projectId, question, usable, 'best');
+    return routed.kind === 'agent' ? { projectId, agentId: routed.agentId, why: routed.why } : { projectId, agentId: preselect(usable, teams, thread?.agentId) };
   }
   return null;
 }
@@ -135,7 +139,7 @@ export async function ask(pool: Pool, who: Identity, requestId: string, question
     });
     if (!parsed.success) return { ok: false, reason: 'failed' };
     const data = parsed.data as { context: object };
-    const input = { ...data, context: { ...data.context, noSources: true } }; // server-only: never the project's source tables
+    const input = { ...data, context: { ...data.context, noSources: true, ...(target.why ? { routed: target.why } : {}) } }; // server-only: never the project's source tables; the router's reason for the agent
     const res = (await handler({}, input)) as { ok?: boolean; notReady?: boolean; threadId?: string | null; turns?: Array<{ role: string; card?: Card }>; agent?: { name?: string } | null };
     if (!res || res.ok !== true) return { ok: false, reason: res?.notReady ? 'not_ready' : 'failed' };
     const threadId = res.threadId;

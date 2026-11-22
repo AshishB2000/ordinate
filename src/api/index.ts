@@ -64,6 +64,7 @@ import { research } from './research';
 import { evals } from './evals';
 import { proposals } from './proposals';
 import { issues } from './issues';
+import { autopilot } from './autopilot';
 
 export const contracts = {
   ...projects,
@@ -129,6 +130,7 @@ export const contracts = {
   ...evals,
   ...proposals,
   ...issues,
+  ...autopilot,
 } as const;
 
 export type Channel = keyof typeof contracts;

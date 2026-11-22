@@ -10,7 +10,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Icon } from '../../ui/icons/Icon';
-import { OutsideCard } from './AgentPicker';
+import { OutsideCard, RoutedLine } from './AgentPicker';
 import { AnswerCard } from './AnswerCard';
 import { AnswerSql } from './AnswerSql';
 import type { ActivityStep, Provenance, Turn } from './api';
@@ -81,6 +81,9 @@ export function Transcript({
   onNotThis,
   aside,
   agentName,
+  agentId,
+  agents,
+  onChangeAgent,
   onAskProject,
   onAsk,
 }: {
@@ -98,6 +101,10 @@ export function Transcript({
   aside?: (t: Turn, asked?: Turn) => ReactNode;
   /** The Assistant agent this conversation is with, which an out-of-scope reply is signed by. */
   agentName?: string;
+  /** Who it is with and who else may answer: an Auto answer's "Change" (docs/agent-router) asks its question again with another agent. None: no Change. */
+  agentId?: string;
+  agents?: readonly { id: string; name: string }[];
+  onChangeAgent?: (question: string, id: string) => void;
   /** An out-of-scope reply's one click: the question before it, to the Project assistant in a new conversation. */
   onAskProject?: (question: string) => void;
   /** Ask a question again in this conversation: a checked link, once added, answers the question it was found for. */
@@ -115,6 +122,15 @@ export function Transcript({
       {turns.map((t, i) => (
         <div key={t.id} className={`${s.msg} ${t.role === 'assistant' ? s.assistant : s.user} ${i === 0 ? s.stageTop : ''}`} data-role={t.role}>
           {lastSteps && t.id === lastSteps.turnId && !pending && <ActivitySummary steps={lastSteps.steps} />}
+          {t.role === 'assistant' && t.route && (
+            <RoutedLine
+              agent={agentName || 'An assistant'}
+              why={t.route.why}
+              others={onChangeAgent && turns[i - 1]?.role === 'user' ? (agents ?? []).filter((x) => x.id !== agentId) : []}
+              busy={!!pending}
+              onChange={(id) => onChangeAgent?.(turns[i - 1].text, id)}
+            />
+          )}
           {t.role === 'assistant' && t.answer && (
             <AnswerCard
               projectId={projectId}

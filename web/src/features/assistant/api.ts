@@ -87,6 +87,8 @@ export interface Turn {
   define?: boolean;
   /** Outcome E for an editor: the link the server checked, which ./LinkCard offers to add. */
   link?: AnswerLink;
+  /** Auto picked the agent that answered this: why, in the app's words (src/ai/routeTurn.ts). */
+  route?: { why: string };
   /** A deep-research run's turn: the run id (src/ai/researchTurn.ts). Its text is a fixed sentence; the run card reads the rest from `research:get`. */
   research?: { runId: string };
   /** The asker's thumbs up or down on this answer (src/ai/feedback.ts): a value and a reason code, never words of the answer. */
@@ -135,8 +137,13 @@ export interface SuggestedAction {
   droppedSteps?: number;
 }
 
+/** An agent Auto could not tell apart from another for this question (src/ipc/agentRoute.ts): the person picks. */
+export interface AgentChoice { id: string; name: string; description?: string }
+
 export type AskReply =
   | { ok: true; answer: string; turns: Turn[]; threadId: string | null; suggestedAction?: SuggestedAction; agent?: ConversationAgent }
+  /** Auto: two or three agents fit about equally. Nothing was asked or stored. */
+  | { ok: true; choose: AgentChoice[] }
   | { ok: false; notReady?: boolean; error?: string };
 
 /** What the dock is looking at — resolved inside the project by the server (buildFacts). `offset`: a scorecard's period, in periods back. */
@@ -290,7 +297,7 @@ export async function deleteThread(projectId: string, threadId: string): Promise
  * `skipVerified`: "Not what I asked" on a verified answer, so the model takes the same question.
  */
 export async function ask(
-  projectId: string, context: Ask, question: string, threadId: string, askId: string, agentId?: string | null, skipVerified = false,
+  projectId: string, context: Ask, question: string, threadId: string, askId: string, agentId?: string | null, skipVerified = false, auto = false,
 ): Promise<AskReply> {
   return (await rpc('copilot:ask', {
     projectId,
@@ -298,7 +305,8 @@ export async function ask(
     question,
     ...(threadId ? { threadId } : {}),
     askId,
-    ...(!threadId && agentId ? { agentId } : {}),
+    ...(!threadId && agentId && !auto ? { agentId } : {}),
+    ...(auto ? { auto: true } : {}),
     ...(skipVerified ? { skipVerified: true } : {}),
   })) as AskReply;
 }

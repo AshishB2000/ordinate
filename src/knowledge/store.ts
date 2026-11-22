@@ -170,6 +170,16 @@ export async function titlesOf(projectId: string, ids: readonly string[]): Promi
     'SELECT id::text, title, agent_id::text AS "agentId" FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 AND id = ANY($3::uuid[])', [org, projectId, ids])).rows.map((r) => [r.id, { title: r.title, agentId: r.agentId }])));
 }
 
+/** The titles of the documents of `agentIds`, by agent, in ONE query (the router scores an agent by them: ../ipc/agentRoute). Titles only, never text. */
+export async function titlesByAgent(projectId: string, agentIds: readonly string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!agentIds.length || !knowledgeOn()) return out;
+  const rows = await inOrg(async (c, org) => (await c.query<{ agentId: string; title: string }>(
+    'SELECT agent_id::text AS "agentId", title FROM knowledge_docs WHERE org_id = $1 AND project_id = $2 AND agent_id = ANY($3::uuid[]) ORDER BY updated_at DESC, id', [org, projectId, agentIds])).rows);
+  for (const r of rows) out.set(r.agentId, [...(out.get(r.agentId) ?? []), r.title]);
+  return out;
+}
+
 /**
  * The best passages for `question` from the project's documents and the answering agent's, ranked IN POSTGRES: the score
  * is the pure ranking's (./rank.ts: 2 per question word in the title, 2 in the heading path, 1 in the text), from the
