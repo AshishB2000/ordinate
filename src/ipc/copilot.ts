@@ -668,6 +668,7 @@ export function register() {
           numberAudit: guarded.audit,
           guidance: (await withDocumentTitles(projectId, [{ guidance: guided.used }]))[0].guidance,
           agent: await agentRef(projectId, kept),
+          ...(refused !== null ? { refused: true } : {}), // the chart was refused (a suite run tells a refusal from prose, src/server/evals/ask.ts)
         };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };

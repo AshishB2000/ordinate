@@ -99,7 +99,7 @@ export async function mayAsk(pool: Pool, who: Identity, projectId: string): Prom
 export async function directTarget(pool: Pool, who: Identity, question: string): Promise<Target | null> {
   const mine = (await projects.listProjects()).filter((p) => !p.archivedAt);
   const latest = await inOrg(
-    (c, org) => c.query<{ project_id: string; id: string }>('SELECT project_id, id FROM assistant_threads WHERE org_id = $1 AND owner = $2 ORDER BY updated_at DESC, touched DESC LIMIT 5', [org, who.user.email]),
+    (c, org) => c.query<{ project_id: string; id: string }>('SELECT project_id, id FROM assistant_threads WHERE org_id = $1 AND owner = $2 AND NOT hidden ORDER BY updated_at DESC, touched DESC LIMIT 5', [org, who.user.email]),
     who.org.id,
   );
   const order = [...latest.rows.map((r) => r.project_id), ...mine.map((p) => p.id)];

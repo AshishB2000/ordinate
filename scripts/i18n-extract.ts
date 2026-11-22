@@ -416,6 +416,7 @@ export const MAIN_FILES = [
   'src/knowledge/knowledgeMessages.ts',
   'src/server/slackMessages.ts',
   'src/server/researchMessages.ts',
+  'src/server/evalMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
