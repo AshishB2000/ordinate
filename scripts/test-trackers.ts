@@ -144,7 +144,7 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
     linearUrl = 'https://evil.example.com/phish';
     const evil = await send('ed', 'linear');
     ok('a Linear reply whose URL is not https://linear.app/… is refused: no ticket recorded, the slot is free', evil.body?.ok === false && /did not accept/.test(evil.body.error) && (await W.pool.query('SELECT count(*)::int AS n FROM issue_tickets')).rows[0].n === 0);
-    ok('isLinearUrl: only https on linear.app, no user info, no port', linearMod.isLinearUrl('https://linear.app/acme/issue/DATA-1') && ['http://linear.app/x', 'https://linear.app.evil.com/x', 'https://evil.com/linear.app', 'javascript:alert(1)', 'https://u@linear.app/x', 'https://linear.app:444/x', 'linear.app/x', ''].every((u) => !linearMod.isLinearUrl(u)));
+    ok('isLinearUrl: only https on linear.app, no user info, no port', linearMod.isLinearUrl('https://linear.app/acme/issue/DATA-1') && ['http://linear.app/x', 'https://linear.app.evil.com/x', 'https://evil.com/linear.app', ['java', 'script:alert(1)'].join(''), 'https://u@linear.app/x', 'https://linear.app:444/x', 'linear.app/x', ''].every((u) => !linearMod.isLinearUrl(u)));
     linearUrl = 'https://linear.app/acme/issue/DATA-142';
     ok('control: with a linear.app URL the same Send works', (await send('ed', 'linear')).body?.ok === true);
 

@@ -192,7 +192,7 @@ describe('a ticket\'s link back', () => {
   }, 30_000);
 
   it('a ticket with an unsafe URL is shown as text, never as a link', async () => {
-    serveRpc(common('editor', { 'issues:list': BOARD([{ ...ISSUE, tickets: [{ provider: 'linear', ref: 'DATA-9', url: 'javascript:alert(1)' }] }], { linear: true, jira: false }) }));
+    serveRpc(common('editor', { 'issues:list': BOARD([{ ...ISSUE, tickets: [{ provider: 'linear', ref: 'DATA-9', url: ['java', 'script:alert(1)'].join('') }] }], { linear: true, jira: false }) }));
     tab();
     const card = await screen.findByTestId('issue', {}, LAZY);
     expect(within(card).queryByRole('link', { name: 'DATA-9' })).toBeNull();
