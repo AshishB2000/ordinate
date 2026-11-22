@@ -167,3 +167,7 @@ seeded straight into the tables (`scripts/issuesHarness.ts`).
    project does not wait up to a week for the next fixed day.
 3. **Jira's "default issue type"** has no field of that name in Jira Cloud: the rule above (Task, else the first non-sub-task).
 4. **`issues:checkNow`** is not in the plan. It lets an admin test the setup, and lets the e2e run the check.
+5. **A refusal's missing name is only kept when the turn stored one.** A turn keeps `suggest.said` only when the app had "Did you mean"
+   options; a `define` turn with none stores no name. Those questions group by words, and join a named group when their question holds its
+   name. Reading the refusal's own sentence for the name was left out: it can quote the model's words.
+6. **The board loads when it comes near the viewport**, so the Assistant tab stays inside the e2e RPC budget (25) on the specs that load it.

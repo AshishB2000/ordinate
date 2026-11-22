@@ -2,6 +2,7 @@
 
 import { registry } from '../rpc';
 import * as board from './board';
+import * as say from '../issueMessages';
 import * as store from './db';
 import * as trackers from './trackers/service';
 import { canStore } from './trackers/tokens';
@@ -14,6 +15,6 @@ export function register(): void {
   registry.handle('issues:propose', (_e, { projectId, id }: { projectId: string; id: string }) => board.propose(projectId, id));
   registry.handle('issues:send', (_e, { projectId, id, provider }: { projectId: string; id: string; provider: store.Provider }) => board.send(projectId, id, provider));
   registry.handle('tracker:status', async () => (store.dbOrNull() ? { ok: true as const, available: true, ...(await trackers.status()) } : { ok: true as const, available: false, canSave: canStore(), providers: [] }));
-  registry.handle('tracker:connect', (_e, p: trackers.Connect) => (store.dbOrNull() ? trackers.connect(p) : { ok: false as const, error: 'The server needs its database.' }));
+  registry.handle('tracker:connect', (_e, p: trackers.Connect) => (store.dbOrNull() ? trackers.connect(p) : { ok: false as const, error: say.needsDb() }));
   registry.handle('tracker:disconnect', (_e, { provider }: { provider: store.Provider }) => (store.dbOrNull() ? trackers.disconnect(provider) : { ok: true as const }));
 }
