@@ -69,5 +69,5 @@ export function embedAdminCaps(): string {
 }
 
 export function embedAdminFolder(dataset: string): string {
-  return `${dataset} is in a team folder. An embedded assistant can only use datasets in Everyone in the project.`;
+  return t('embedAskMessages.is_in_a_team_folder_an', { dataset });
 }

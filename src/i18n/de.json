@@ -326,6 +326,7 @@
   "embedAskMessages.at_most_datasets_for_one_assistant": "Höchstens {max} Datensätze pro Assistent.",
   "embedAskMessages.caps_are_whole_numbers_up_to": "Limits sind ganze Zahlen: bis zu 1.000.000 pro Tag und 600 pro Minute.",
   "embedAskMessages.has_row_access_rules_or_is": "{dataset} hat Zeilenzugriffsregeln oder basiert auf einem Datensatz mit solchen Regeln. Ein eingebetteter Assistent kann ihn nicht verwenden.",
+  "embedAskMessages.is_in_a_team_folder_an": null,
   "embedAskMessages.its_prepare_steps_compute_across_rows": "{dataset}: Seine Aufbereitungsschritte rechnen über Zeilen hinweg oder lesen einen Parameter, daher ist eine Kundensperre darauf nicht verlässlich.",
   "embedAskMessages.mark_at_least_one_dataset_with": "Markieren Sie mindestens einen Datensatz mit der Spalte, die jeder Link sperren muss.",
   "embedAskMessages.needs_a_database_and_ordinate_master": "Benötigt eine Datenbank und ORDINATE_MASTER_KEY auf dem Server.",

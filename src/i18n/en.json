@@ -323,6 +323,7 @@
   "embedAskMessages.at_most_datasets_for_one_assistant": "At most {max} datasets for one assistant.",
   "embedAskMessages.caps_are_whole_numbers_up_to": "Caps are whole numbers: up to 1,000,000 a day and 600 a minute.",
   "embedAskMessages.has_row_access_rules_or_is": "{dataset} has row access rules, or is built from a dataset that has them. An embedded assistant cannot use it.",
+  "embedAskMessages.is_in_a_team_folder_an": "{dataset} is in a team folder. An embedded assistant can only use datasets in Everyone in the project.",
   "embedAskMessages.its_prepare_steps_compute_across_rows": "{dataset}: its prepare steps compute across rows or read a parameter, so a customer lock on it cannot be trusted.",
   "embedAskMessages.mark_at_least_one_dataset_with": "Mark at least one dataset, with the column every link must lock.",
   "embedAskMessages.needs_a_database_and_ordinate_master": "Needs a database and ORDINATE_MASTER_KEY on the server.",
