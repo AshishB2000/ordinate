@@ -345,7 +345,7 @@ describe('Admin → AI → Judge model', () => {
     const calls = serveRpc(common('admin', { 'ai:admin': body(ai), 'research:limits': body({ ok: true, limits: { steps: 8, queries: 12, minutes: 10 }, ceilings: { steps: 20, queries: 30, minutes: 30 } }), 'eval:judge': body({ ok: true, pick: null }), 'eval:setJudge': body({ ok: true, pick: { provider: 'anthropic', model: 'claude-haiku-4-5' } }) }));
     renderApp('/admin?tab=ai');
     const card = (await screen.findByRole('heading', { name: 'Judge model' }, LAZY)).closest('div')!.parentElement as HTMLElement;
-    const select = await within(card).findByRole('combobox', { name: 'Judge model' });
+    const select = await within(card).findByRole('combobox', { name: 'Judged by' });
     expect(select.textContent).toContain('The Assistant’s own model');
     fireEvent.click(select);
     fireEvent.click(screen.getByRole('option', { name: 'Claude Haiku 4.5' }));
