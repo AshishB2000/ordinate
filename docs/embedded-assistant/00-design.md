@@ -80,9 +80,18 @@ already refuses `agent` and `sub`, and requires `pub`, so a token of one kind ne
 (tested both ways). A token is verified with the org's secret only, never the preview key.
 
 `sub` is the customer's id and a filter value is data, so neither is logged: a log line carries the token's
-fingerprint (its MAC prefix) and ids of our own records only. The token travels in the **body** of a `POST`
-(`/embed/ask`), never in a URL, so no access log has it; `maskEmbedUrl` and `maskEmbedTokens` are also taught
-`/embed/ask/<token>` (the page URL of phase 3), with a test.
+fingerprint (its MAC prefix) and ids of our own records only. The token travels in two places, and both are deliberate. The **question** is a `POST /embed/ask` with the token in its
+**body**, so no access log holds it. The **page** is `GET /embed/ask/<token>`: the token is in the iframe's path, the same
+form as a dashboard's `/embed/<token>`, because a host can only frame a URL. What keeps that acceptable is the 1 hour limit on
+every Assistant token, `Referrer-Policy: no-referrer` on the page (the token does not leave in a Referer), and the masking:
+`maskEmbedUrl` collapses repeated slashes (`//embed/ask//<token>`, which a trailing slash on the host's base URL makes) and then
+masks any token-shaped run, and `maskEmbedTokens` does the same for Fastify's own log lines, each with a test. The signing
+snippets strip a trailing slash from the server address. Both routes sit in the per-client-IP embed bucket
+(`RATE_LIMIT_RPC_IP_PER_MINUTE`, `src/server/limits.ts`), which runs before either route's reads.
+
+A marking is switched on and off by its own channel (`embedAssistant:setEnabled`), which never re-pins: only Edit → Save does,
+and the screen says that saving approves the current prepare steps of each lock column. A dataset in a team folder cannot be
+marked (the asker has no team, so every question would fail), and one moved there afterwards shows "Not open to everyone".
 
 ## What is embeddable (storage, migration 0049)
 
@@ -191,6 +200,23 @@ read that goes through `getDataset` outside a lock scope is refused for an embed
 
 Phase 3 adds `GET /embed/ask/<token>`: the small page (its own bundle, CSP `frame-ancestors` = the org's
 origins). Phase 4 adds the admin section and the snippets.
+
+## Phases 3 and 4 (round 2)
+
+- **The page:** `GET /embed/ask/<token>` (`src/server/embed/askRoute.ts`) checks the token as the ask does (header, MAC, claims,
+  embedding on, the marking, the asker, a Referer from a listed site) and serves `web/dist/embed-ask.html` with its own CSP:
+  `script-src 'self'; style-src 'self'; connect-src 'self'`, and `frame-ancestors` = the org's origins (none before the MAC held),
+  no X-Frame-Options, `Referrer-Policy: no-referrer` (the token is in its URL). It is a second Vite entry (`web/embed-ask.html`,
+  `web/src/embedAsk/`): React and a small SVG chart, not the app's chart engine (bars, or lines for a line or area answer; every
+  value is in the table under it). Its budget is its own, 90 KB gzip of initial JS (`npm --prefix web run size`; now 71.8 KB; the
+  app's stays 300 KB). It stores nothing (no cookie, no storage), sends the token in the body, and shows a held-back question
+  with the wait the server named.
+- **Admin → Embedding → Assistant:** six admin-only, org-scoped channels (`src/api/embedAssistant.ts`, `src/ipc/embedAssistant.ts`):
+  `settings`, `options`, `save`, `setEnabled`, `remove`, `setLimits`. `save` checks each dataset as the ask does (`embedMarkCheck`) and pins the
+  writers' hash. The screen states the metadata ceiling, flags a lock whose steps changed, and holds the caps and the signing
+  snippets. No new migration: 0049 holds everything.
+- **Open points:** a 429 is a console error in a browser; the page shows it as designed text, the e2e asks for the cap from
+  outside the page. A project admin who is not an org admin cannot mark an agent (embedding is an org-level switch).
 
 ## Files (round 1)
 

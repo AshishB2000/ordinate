@@ -7,6 +7,9 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { EmbeddingTab } from './EmbeddingTab';
 import { mount, serve } from '../subscriptions/testServer';
 
+// The Assistant section has its own suite (./assistantEmbed.test.tsx); this one is the dashboards' set-up.
+vi.mock('./AssistantEmbedCard', () => ({ AssistantEmbedCard: () => null }));
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

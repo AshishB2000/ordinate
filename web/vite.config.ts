@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import { appLicences } from './scripts/licenses.ts';
@@ -71,6 +72,8 @@ export default defineConfig({
     // stops syntax from being lowered.
     target: ['chrome149', 'edge149', 'firefox151', 'safari26'],
     rolldownOptions: {
+      // Two pages: the app, and the embedded Assistant's own small one (docs/embedded-assistant; web/scripts/bundle-size.ts holds each budget).
+      input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), 'embed-ask': fileURLToPath(new URL('./embed-ask.html', import.meta.url)) },
       // TanStack Query ships "use client" for RSC frameworks; meaningless in a
       // SPA, and rolldown warns once per file.
       onwarn(warning, warn) {

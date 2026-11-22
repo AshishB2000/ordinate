@@ -305,6 +305,27 @@ export async function pinWriters(projectId: string, datasetId: string, column: s
   return raw ? writersHash(sanitizeSteps(raw.steps), column) : null;
 }
 
+/**
+ * Can `datasetId` be marked embeddable on `column` (docs/embedded-assistant)? Its writers' pin, or the reason it cannot: no record,
+ * rules of its own or built from a dataset that has them, a column that is not a declared text column of it (or gone from the
+ * warehouse), a pipeline that stores a cross-row value or reads a parameter. The same checks `embedLock` makes on every ask.
+ */
+export async function embedMarkCheck(projectId: string, datasetId: string, column: string): Promise<{ ok: true; writers: string } | { ok: false; reason: RowPolicyReason }> {
+  if (!isValidId(projectId) || !isValidId(datasetId)) return { ok: false, reason: 'none' };
+  let eff: Effective;
+  try {
+    eff = await effective(projectId, datasetId);
+  } catch (err) {
+    return { ok: false, reason: isRowPolicyError(err) ? err.reason : 'unreadable' };
+  }
+  if (eff.kind !== 'none') return { ok: false, reason: 'derived' };
+  const raw = await readRaw(projectId, datasetId);
+  if (!raw) return { ok: false, reason: 'unreadable' };
+  const writers = (await pinWriters(projectId, datasetId, column)) ?? '';
+  const state = ruleState(raw, { column, rules: [], stepsHash: writers });
+  return state === 'ok' ? { ok: true, writers } : { ok: false, reason: state === 'column' ? 'column' : 'pipeline' };
+}
+
 /** Why the caller may not read `id`'s rows here, or null — the check only: nothing recorded, nothing thrown. `rowsOnly`: the row rules alone. */
 async function closedReason(projectId: string, id: string, rowsOnly = false): Promise<RowPolicyReason | null> {
   const scope = scopes.getStore();

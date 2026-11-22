@@ -84,6 +84,10 @@ ok('a marking with no dataset gives no asker: every lock is extra', !buildAsker(
 // Log masking.
 ok('the page URL of an Assistant token is masked', maskEmbedUrl('/embed/ask/aaa.bbb.ccc?x=1') === '/embed/ask/[redacted]?x=1');
 ok('control: the POST route has no token in its URL and is left as is', maskEmbedUrl('/embed/ask') === '/embed/ask');
+for (const u of ['/embed/ask//aaa.bbb.ccc', '//embed/ask/aaa.bbb.ccc', '//embed/ask//aaa.bbb.ccc?x=1', '/embed//aaa.bbb.ccc', '///embed/aaa.bbb.ccc/']) {
+  ok(`a doubled-slash spelling is masked too: ${u}`, !maskEmbedUrl(u).includes('aaa.bbb.ccc') && maskEmbedUrl(u).includes('[redacted]'), maskEmbedUrl(u));
+}
+ok('NEGATIVE CONTROL: the query string is kept, and a path that is no embed is left alone', maskEmbedUrl('//embed/ask/aaa.bbb.ccc?x=1').endsWith('?x=1') && maskEmbedUrl('/api/rpc/x') === '/api/rpc/x');
 ok('a dashboard URL is masked as before', maskEmbedUrl('/embed/aaa.bbb.ccc') === '/embed/[redacted]');
 ok('a Fastify "not found" line with an Assistant token is masked', maskEmbedTokens('Route GET:/embed/ask/aaa.bbb.ccc not found') === 'Route GET:/embed/ask/[redacted] not found' && maskEmbedTokens('GET:/embed/aaa.bbb.ccc') === 'GET:/embed/[redacted]');
 finish();

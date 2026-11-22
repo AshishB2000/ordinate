@@ -48,7 +48,13 @@ const SELF = "'self'";
 
 /** The request log's URL with an embed token masked — a token is a credential while it lives. */
 export function maskEmbedUrl(url: string): string {
-  return url.replace(/^(\/embed\/(?:ask\/)?)[^/?#]+/, (m, p: string) => (m === '/embed/ask' ? m : p + '[redacted]'));
+  // Repeated slashes collapse first (`//embed/ask//a.b.c`: a trailing slash on the host's base URL makes one), and any token-shaped
+  // run is masked wherever it sits, so no spelling of the path leaves a live token in the log.
+  const cut = url.search(/[?#]/);
+  const path = (cut < 0 ? url : url.slice(0, cut)).replace(/\/{2,}/g, '/');
+  const rest = cut < 0 ? '' : url.slice(cut);
+  const masked = path.replace(/^(\/embed\/(?:ask\/)?)[^/?#]+/, (m, p: string) => (m === '/embed/ask' ? m : p + '[redacted]'));
+  return maskEmbedTokens(masked) + rest;
 }
 
 /** Any embed token inside a log message (Fastify's own "Route GET:/embed/… not found"). */

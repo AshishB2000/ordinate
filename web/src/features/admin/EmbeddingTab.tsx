@@ -17,6 +17,7 @@ import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { normalizeOrigin, reason, useEmbedRotate, useEmbedSave, useEmbedSettings, type EmbedSettings } from '../embed/api';
 import { copy, EmbedSnippets } from '../embed/EmbedSnippets';
+import { AssistantEmbedCard } from './AssistantEmbedCard';
 import { EmbedPreviewCard } from './EmbedPreviewCard';
 import a from './Admin.module.css';
 import s from '../embed/Embed.module.css';
@@ -246,6 +247,7 @@ export function EmbeddingTab() {
         </div>
       </div>
       <EmbedPreviewCard canPreview={st.canStore && st.secretSet} />
+      <AssistantEmbedCard />
     </section>
   );
 }

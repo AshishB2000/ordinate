@@ -9,7 +9,8 @@
 //                                                        runs the same handlers, so it spends the same budget
 //   uploads   POST /api/files                            the per-user RPC bucket (NV-43), after sign-in
 //                                                        (./files.ts also caps uploads in flight per user)
-//   embed     GET /embed/<token>                         per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE, its own bucket,
+//   embed     GET /embed/<token>, GET /embed/ask/<token>, POST /embed/ask
+//                                                        per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE, its own bucket,
 //                                                        before any query; per token and per org in ./embed/route.ts
 //                                                        (RATE_LIMIT_EMBED_PER_MINUTE, RATE_LIMIT_EMBED_ORG_PER_MINUTE)
 //   hooks     /api/hooks/refresh/<token>                 per client IP   RATE_LIMIT_LOGIN_PER_MINUTE, its own
@@ -45,6 +46,7 @@ import type { LimitsEnv } from './env';
 import { HOOK_ROUTE } from './hooks/store';
 import { trackWork } from './lifecycle';
 import { EMBED_ROUTE } from './embed/route';
+import { EMBED_ASK_PAGE_ROUTE, EMBED_ASK_ROUTE } from './embed/askRoute';
 
 const MINUTE = 60_000;
 export const RPC_ROUTE = '/api/rpc/:channel';
@@ -108,7 +110,7 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
     } else if (route === RPC_ROUTE || (route === MCP_ROUTE && req.method === 'POST')) {
       rpcIp ??= app.createRateLimit({ max: cfg.rpcIpPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('rpc:') });
       await refused(rpcIp, req, reply);
-    } else if (route === EMBED_ROUTE) {
+    } else if (route === EMBED_ROUTE || route === EMBED_ASK_ROUTE || route === EMBED_ASK_PAGE_ROUTE) {
       embedIp ??= app.createRateLimit({ max: cfg.rpcIpPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('embed:') });
       await refused(embedIp, req, reply);
     } else if (route === HOOK_ROUTE) {
