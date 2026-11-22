@@ -167,7 +167,7 @@ async function seed(projectId: string) {
 async function main(): Promise<void> {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }), undefined, () => ALICE);
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev', RPC_TIMEOUT_SECONDS: '300' }), undefined, () => ALICE);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const base = `http://127.0.0.1:${(app.server.address() as import('net').AddressInfo).port}`;
   const call = async (channel: string, payload?: unknown) => {
