@@ -34,3 +34,21 @@ export function repairedDefinition(v: { encoding: Rec; filters: unknown }, map: 
   const filters = (Array.isArray(v.filters) ? (JSON.parse(JSON.stringify(v.filters)) as Rec[]) : []).map((f) => (f && typeof f === 'object' && 'column' in f ? { ...f, column: rename(f.column, map) } : f));
   return { encoding: e, filters };
 }
+
+/** The columns of the fields a repair does NOT rewrite but that name dataset columns: a map's, a facet's, a cohort's, a funnel's. */
+export function otherColumns(encoding: Rec): string[] {
+  const e = encoding ?? {};
+  const out: unknown[] = [];
+  for (const k of ['lat', 'lon', 'lat2', 'lon2', 'from', 'to', 'color']) out.push(e.geo?.[k]);
+  out.push(e.facet?.rows, e.facet?.cols, e.cohort?.entity, e.cohort?.date, e.cohort?.value);
+  for (const k of ['entity', 'event', 'time', 'breakdown']) out.push(e.eventFunnel?.[k]);
+  return [...new Set(out.filter((x): x is string => typeof x === 'string' && x !== ''))];
+}
+
+/** Does `name` appear anywhere in `value` as a string (an object's key does not count)? */
+export function namesString(value: unknown, name: string): boolean {
+  if (typeof value === 'string') return value === name;
+  if (Array.isArray(value)) return value.some((x) => namesString(x, name));
+  if (value && typeof value === 'object') return Object.values(value).some((x) => namesString(x, name));
+  return false;
+}

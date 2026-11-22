@@ -8,6 +8,7 @@ import { isDeepStrictEqual } from 'node:util';
 import * as trash from '../../app/trash';
 import * as versions from '../../app/versions';
 import * as visuals from '../../analysis/visuals';
+import { isRecordChanged } from '../../app/editConflict';
 import { ctx } from '../context';
 import * as store from './store';
 
@@ -29,10 +30,17 @@ export async function undoItem(projectId: string, runId: string, seq: number): P
     await store.markUsed(projectId, it.visualId, today);
   } else if (it.kind === 'repaired') {
     const undo = it.undo as { before: { encoding: unknown; filters: unknown }; after: { encoding: unknown; filters: unknown } } | null;
-    const now = await visuals.getVisual(projectId, it.visualId);
-    if (!now || !undo) return { ok: false, why: 'gone' };
+    const read = await visuals.readVisual(projectId, it.visualId);
+    if (!read || !undo) return { ok: false, why: 'gone' };
+    const now = read.rec;
     if (!same({ encoding: now.encoding, filters: now.filters }, undo.after)) return { ok: false, why: 'changed' };
-    const back = await visuals.updateVisual(projectId, it.visualId, undo.before);
+    let back: Awaited<ReturnType<typeof visuals.updateVisual>>;
+    try {
+      back = await visuals.updateVisual(projectId, it.visualId, undo.before, read.tag); // checked and written under the record's own lock: a save in between is kept
+    } catch (err) {
+      if (isRecordChanged(err)) return { ok: false, why: 'changed' };
+      throw err;
+    }
     if (!back) return { ok: false, why: 'failed' };
     await versions.record(projectId, 'visual', back, { before: now, by: `Autopilot undo (by ${by})` });
   } else {

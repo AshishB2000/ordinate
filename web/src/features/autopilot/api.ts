@@ -34,7 +34,7 @@ export interface Run {
 export interface OverviewProject { id: string; name: string; settings: Settings; latest: Run | null; firstCleanup: string | null }
 
 export type ItemKind = 'trashed' | 'repaired' | 'broken' | 'slow';
-export interface Gone { column: string; why: 'none' | 'again' | 'target_missing' | 'repair_off'; suggest?: string }
+export interface Gone { column: string; why: 'none' | 'again' | 'target_missing' | 'repair_off' | 'other_fields'; suggest?: string }
 export interface Item {
   seq: number;
   kind: ItemKind;
@@ -79,7 +79,7 @@ export function useRunNow(projectId: string, onRun: (runId: string) => void) {
   return useMutation({
     mutationFn: async () => {
       const r = (await rpc('autopilot:runNow', { projectId })) as { ok: true; runId: string } | Failed;
-      if (!r.ok) throw new Error(r.error === 'off' ? 'Switch Autopilot on first.' : 'The run did not finish.');
+      if (!r.ok) throw new Error(r.error === 'off' ? 'Switch Autopilot on first.' : r.error === 'busy' ? 'A run for this project is already going.' : 'The run did not finish.');
       return r.runId;
     },
     onSuccess: (runId) => {

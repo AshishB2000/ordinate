@@ -34,7 +34,9 @@ const same = (a: unknown, b: unknown): boolean => { try { assert.deepStrictEqual
     const encOn = (col: string) => ({ category: 'region', values: [{ column: col, aggregation: 'sum' }] });
     const mkVisual = async (name: string, col = 'sales'): Promise<string> => (await call('boss', 'visual:save', { projectId: P, datasetId: W.plain, name, chartType: 'bar', encoding: encOn(col) })).body.id;
     /** A chart older than any window: its record's createdAt moved back. */
-    const age = async (id: string) => q(`UPDATE records SET body = regexp_replace(body, '"createdAt": ?"[^"]*"', '"createdAt":"2025-01-01T00:00:00.000Z"') WHERE path = $1`, [`projects/${P}/visuals/${id}.json`]);
+    const oldCreated = async (id: string) => q(`UPDATE records SET body = regexp_replace(body, '"createdAt": ?"[^"]*"', '"createdAt":"2025-01-01T00:00:00.000Z"') WHERE path = $1`, [`projects/${P}/visuals/${id}.json`]);
+    /** Old createdAt, and Autopilot has watched it since long ago (a chart that has lived here, not one that was imported). */
+    const age = async (id: string) => { await oldCreated(id); await q(`INSERT INTO autopilot_seen (org_id, project_id, visual_id, first_seen) VALUES ('acme', $1, $2, $3) ON CONFLICT (org_id, project_id, visual_id) DO UPDATE SET first_seen = $3`, [P, id, daysAgo(200)]); };
     const today = new Date().toISOString().slice(0, 10);
     const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
     const items = async (runId: string) => (await call('boss', 'autopilot:run', { projectId: P, runId })).body.items as Array<{ seq: number; kind: string; visualId: string; state: string; detail: any }>; // any: the item's own detail
@@ -84,6 +86,48 @@ const same = (a: unknown, b: unknown): boolean => { try { assert.deepStrictEqual
     const r2 = (await call('boss', 'autopilot:runNow', { projectId: P })).body;
     ok('a chart that was brought back is not moved again next time', (await items(r2.runId)).filter((i) => i.kind === 'trashed').length === 0 && (await visual(unused)) !== null);
 
+    // ── a scan that cannot be completed moves nothing; what mentions a chart is read from the stored text ──────────────────────
+    const lone = await mkVisual('Lone and old'); await age(lone);
+    const real = store.scanMentions;
+    (store as any).scanMentions = async () => { throw new Error('the storage hiccuped'); }; // any: patched here
+    const hiccup = (await call('boss', 'autopilot:runNow', { projectId: P })).body;
+    (store as any).scanMentions = real; // any: restored
+    ok('NEGATIVE: when what mentions the charts cannot be read, the run FAILS and nothing is moved', hiccup.ok === false && (await q(`SELECT state FROM autopilot_runs WHERE project_id = $1 ORDER BY started_at DESC LIMIT 1`, [P]))[0]?.state === 'failed');
+    ok('…and the unused chart is still there, with no row for it', (await visual(lone)) !== null && (await q(`SELECT 1 FROM autopilot_items WHERE visual_id = $1`, [lone])).length === 0);
+    const brokenDash = randomUUID();
+    await q(`INSERT INTO records (org_id, path, body) VALUES ('acme', $1, $2)`, [`projects/${P}/analyses/${brokenDash}.json`, `{"id": "${brokenDash}", "sheets": [ {"cards": [{"visualId": "${lone}" `]); // corrupt: it does not parse
+    const rCorrupt = (await call('boss', 'autopilot:runNow', { projectId: P })).body;
+    ok('a corrupt dashboard record still protects the chart it names (the text is read, not the parse)', (await items(rCorrupt.runId)).every((i) => i.visualId !== lone) && (await visual(lone)) !== null);
+    await q(`DELETE FROM records WHERE path = $1`, [`projects/${P}/analyses/${brokenDash}.json`]);
+    // a dashboard in the Trash still protects its charts: bring it back and its cards are there
+    const keep = await mkVisual('Only on a trashed dashboard'); await age(keep);
+    const trashedDash = (await call('boss', 'analysis:create', { projectId: P, name: 'Gone for now', sheets: [{ name: 'S', cards: [{ id: randomUUID(), type: 'visual', visualId: keep, layout: { x: 0, y: 0, w: 6, h: 6 } }] }] })).body;
+    await call('boss', 'analysis:delete', { projectId: P, id: trashedDash.id });
+    ok('fixture: the dashboard is in the Trash', (await call('boss', 'trash:list', { projectId: P })).body.some((t: any) => t.id === trashedDash.id)); // any: a trash row
+    const rTrashDash = (await call('boss', 'autopilot:runNow', { projectId: P })).body;
+    ok('NEGATIVE: a chart on a dashboard that is in the Trash is not moved', (await items(rTrashDash.runId)).every((i) => i.visualId !== keep) && (await visual(keep)) !== null);
+    ok('…and the restored dashboard still has its card', (await call('boss', 'trash:restore', { projectId: P, type: 'dashboard', id: trashedDash.id })).body.ok === true && JSON.stringify((await call('boss', 'analysis:open', { projectId: P, id: trashedDash.id })).body.analysis).includes(keep));
+    await call('boss', 'analysis:delete', { projectId: P, id: trashedDash.id });
+    await call('boss', 'trash:purge', { projectId: P, type: 'dashboard', id: trashedDash.id });
+
+    // ── watched for the whole window: an import keeps its old createdAt and proves nothing ─────────────────────────────────────
+    const imported = await mkVisual('Imported last week'); await oldCreated(imported); // old createdAt, but Autopilot has never seen it
+    const rImp = (await call('boss', 'autopilot:runNow', { projectId: P })).body;
+    ok('NEGATIVE: a chart with an old createdAt that Autopilot first met today is not moved', (await items(rImp.runId)).every((i) => i.visualId !== imported) && (await visual(imported)) !== null);
+    ok('…and Autopilot now knows it from today', (await q(`SELECT first_seen::text AS d FROM autopilot_seen WHERE visual_id = $1`, [imported]))[0]?.d === today);
+    await q(`UPDATE autopilot_seen SET first_seen = $2 WHERE visual_id = $1`, [imported, daysAgo(200)]);
+    ok('control: once it has been watched for the whole window it is moved', (await items((await call('boss', 'autopilot:runNow', { projectId: P })).body.runId)).some((i) => i.visualId === imported && i.kind === 'trashed' && i.state === 'applied'));
+    // coverage is the project\'s own: another project has charts long watched, but nobody has used it since recording began
+    const P2 = (await call('boss', 'projects:create', { name: 'Second' })).body.id;
+    await call('boss', 'autopilot:save', { projectId: P2, enabled: true });
+    const ds2 = await W.as('boss', async () => (await datasets.saveDataset(P2, { name: 'T', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS.slice(0, 5) }))!.id);
+    const c2 = (await call('boss', 'visual:save', { projectId: P2, datasetId: ds2, name: 'Quiet project chart', chartType: 'bar', encoding: encOn('sales') })).body.id;
+    await q(`UPDATE records SET body = regexp_replace(body, '"createdAt": ?"[^"]*"', '"createdAt":"2025-01-01T00:00:00.000Z"') WHERE path = $1`, [`projects/${P2}/visuals/${c2}.json`]);
+    await q(`INSERT INTO autopilot_seen (org_id, project_id, visual_id, first_seen) VALUES ('acme', $1, $2, $3)`, [P2, c2, daysAgo(200)]);
+    const rP2 = (await call('boss', 'autopilot:runNow', { projectId: P2 })).body;
+    ok('NEGATIVE: a project with no usage of its own is not covered: its old, watched chart is not moved', rP2.ok === true && (await call('boss', 'visual:get', { projectId: P2, id: c2 })).body !== null && (await call('boss', 'autopilot:run', { projectId: P2, runId: rP2.runId })).body.items.length === 0);
+    await call('boss', 'autopilot:save', { projectId: P2, enabled: false });
+
     // ── a rename, an exact repair, the differential ───────────────────────────────────────────────────────────────
     const R = await mkVisual('Sales by region', 'sales');
     await q(`UPDATE records SET body = body WHERE path = $1`, [`projects/${P}/visuals/${R}.json`]);
@@ -123,6 +167,57 @@ const same = (a: unknown, b: unknown): boolean => { try { assert.deepStrictEqual
     ok('the chart is repaired again (it is broken again after the Undo)', fix4?.state === 'applied');
     await call('boss', 'visual:update', { projectId: P, id: R, encoding: { category: 'customer', values: [{ column: 'revenue', aggregation: 'sum' }] } });
     ok('NEGATIVE: Undo refuses once a person has edited the chart ("changed"), and leaves their edit', (await call('boss', 'autopilot:undo', { projectId: P, runId: r4.runId, seq: fix4!.seq })).body.error === 'changed' && (await visual(R)).encoding.category === 'customer');
+
+    // ── a person's save made while Autopilot works is never overwritten, by a repair or by Undo ───────────────────────────────
+    const visualsMod: any = require('../src/analysis/visuals'); // any: patched here to interleave a person's save
+    const realRead = visualsMod.readVisual;
+    const racing = async <T>(id: string, fn: () => Promise<T>): Promise<T> => {
+      let armed = true;
+      visualsMod.readVisual = async (pid: string, vid: string) => {
+        const got = await realRead(pid, vid);
+        if (armed && vid === id) { armed = false; await call('boss', 'visual:update', { projectId: P, id, name: 'Edited by a person meanwhile' }); } // after Autopilot read it, before it writes
+        return got;
+      };
+      try { return await fn(); } finally { visualsMod.readVisual = realRead; }
+    };
+    const X = await mkVisual('To be repaired', 'sales');
+    await call('boss', 'analysis:update', { projectId: P, id: dash.id, sheets: [{ name: 'S', cards: [{ id: randomUUID(), type: 'visual', visualId: X, layout: { x: 0, y: 0, w: 6, h: 6 } }] }] });
+    const rRace = await racing(X, async () => (await call('boss', 'autopilot:runNow', { projectId: P })).body);
+    const raced = (await items(rRace.runId)).find((i) => i.visualId === X);
+    ok('NEGATIVE: a person saved between Autopilot\'s read and its write: the repair is not made ("changed") and their save stays', raced?.kind === 'repaired' && raced.state === 'failed' && raced.detail.why === 'changed' && (await visual(X)).name === 'Edited by a person meanwhile' && (await visual(X)).encoding.values[0].column === 'sales');
+    const T = await mkVisual('To be undone', 'sales');
+    await call('boss', 'analysis:update', { projectId: P, id: dash.id, sheets: [{ name: 'S', cards: [{ id: randomUUID(), type: 'visual', visualId: T, layout: { x: 0, y: 0, w: 6, h: 6 } }] }] });
+    const rT = (await call('boss', 'autopilot:runNow', { projectId: P })).body;
+    const fixT = (await items(rT.runId)).find((i) => i.visualId === T && i.kind === 'repaired');
+    ok('fixture: the chart is repaired', fixT?.state === 'applied');
+    const undoRace = await racing(T, async () => (await call('boss', 'autopilot:undo', { projectId: P, runId: rT.runId, seq: fixT!.seq })).body);
+    ok('NEGATIVE: a person saved between Undo\'s read and its write: Undo refuses ("changed") and their save stays', undoRace.error === 'changed' && (await visual(T)).name === 'Edited by a person meanwhile' && (await visual(T)).encoding.values[0].column === 'revenue');
+
+    // ── one run of a project at a time ──────────────────────────────────────────────────────────────────────────────────────────
+    await q(`UPDATE autopilot_runs SET state = 'done' WHERE state = 'running'`);
+    const going = randomUUID();
+    await q(`INSERT INTO autopilot_runs (org_id, project_id, id, manual, window_days, state) VALUES ('acme', $1, $2, true, 90, 'running')`, [P, going]);
+    ok('NEGATIVE: Run now is refused while a run of the project is going', (await call('boss', 'autopilot:runNow', { projectId: P })).body.error === 'busy');
+    ok('NEGATIVE: and the weekly tick does not start beside it (and does not use the week up)', (await W.as('boss', () => store.claimWeek(P, '2031-01-06', 90))) === null && (await q(`SELECT 1 FROM autopilot_runs WHERE week = '2031-01-06'`)).length === 0);
+    await q(`UPDATE autopilot_runs SET state = 'done' WHERE id = $1`, [going]);
+    ok('control: when it ends, Run now works again', (await call('boss', 'autopilot:runNow', { projectId: P })).body.ok === true);
+    await q(`UPDATE autopilot_runs SET state = 'done' WHERE state = 'running'`);
+    const both = await W.as('boss', () => Promise.all([store.startManual(P, 90), store.startManual(P, 90), store.startManual(P, 90)]));
+    ok('three starts at once (a double click, two admins): exactly one gets the run', both.filter(Boolean).length === 1);
+    await q(`UPDATE autopilot_runs SET state = 'done' WHERE state = 'running'`);
+    const weekly = await W.as('boss', () => Promise.all([store.claimWeek(P, '2031-01-13', 90), store.startManual(P, 90)]));
+    ok('a weekly claim and a Run now at once: exactly one gets it', weekly.filter(Boolean).length === 1);
+    await q(`UPDATE autopilot_runs SET state = 'done' WHERE state = 'running'`);
+
+    // ── a run taken up again after a crash counts everything it did ──────────────────────────────────────────────────────────
+    const stale = (await W.as('boss', () => store.claimWeek(P, '2031-02-03', 90)))!;
+    await W.as('boss', () => store.addItem(stale, P, { kind: 'trashed', visualId: randomUUID(), name: 'Moved before the crash', state: 'applied', detail: { days: 90 }, undo: null }));
+    await q(`UPDATE autopilot_runs SET started_at = now() - interval '2 hours' WHERE id = $1`, [stale]);
+    const again = await W.as('boss', () => store.claimWeek(P, '2031-02-03', 90));
+    ok('the dead run is retaken under the same id', again === stale);
+    await W.as('boss', async () => { await (require('../src/server/autopilot/run') as typeof import('../src/server/autopilot/run')).runProject(stale, await store.getSettings(P), today); });
+    ok('its counts include what the first attempt did, not just this one\'s', (await W.as('boss', () => store.getRun(stale)))!.counts.trashed === 1);
+    await q(`UPDATE autopilot_runs SET state = 'done' WHERE state = 'running'`);
 
     // ── settings that shape a run ─────────────────────────────────────────────────────────────────────────────────────
     await call('boss', 'autopilot:save', { projectId: P, trashUnused: false });

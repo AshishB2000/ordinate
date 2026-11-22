@@ -8,7 +8,7 @@
 --   A manual "Run now" has no week. A claim left `running` is retaken after 30 minutes (a crashed pod).
 -- autopilot_items: the rows of a run's report, with what Undo needs.
 --
--- Additive only: three new tables, forced row-level security as in 0012, 0035 and 0044.
+-- Additive only: four new tables, forced row-level security as in 0012, 0035 and 0044.
 
 CREATE TABLE autopilot_settings (
   org_id         text        NOT NULL,
@@ -59,6 +59,23 @@ CREATE TABLE autopilot_items (
   PRIMARY KEY (org_id, run_id, seq)
 );
 CREATE INDEX autopilot_items_visual ON autopilot_items (org_id, project_id, visual_id, kind);
+
+-- autopilot_seen: the first day Autopilot knew each chart existed. A chart is only ever called unused when it has been watched for the
+--   whole window (this day, or its first usage row if earlier, is at or before the window's start), whatever its own `createdAt` says: an
+--   imported project keeps its old createdAt, and "created long ago" is not "observed for a long time".
+CREATE TABLE autopilot_seen (
+  org_id     text NOT NULL,
+  project_id uuid NOT NULL,
+  visual_id  uuid NOT NULL,
+  first_seen date NOT NULL,
+  PRIMARY KEY (org_id, project_id, visual_id)
+);
+
+ALTER TABLE autopilot_seen ENABLE ROW LEVEL SECURITY;
+ALTER TABLE autopilot_seen FORCE ROW LEVEL SECURITY;
+CREATE POLICY autopilot_seen_org ON autopilot_seen
+  USING (org_id = current_setting('ordinate.org', true))
+  WITH CHECK (org_id = current_setting('ordinate.org', true));
 
 ALTER TABLE autopilot_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE autopilot_settings FORCE ROW LEVEL SECURITY;

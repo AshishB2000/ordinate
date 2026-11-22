@@ -26,14 +26,14 @@ export function settingsView(s: store.Settings) {
 export function register(): void {
   ipcMain.handle('autopilot:overview', async () => {
     if (!orgDb()) return needsDatabase();
-    const [all, latest, first] = await Promise.all([store.allSettings(), store.latestRuns(), store.firstUsageDay()]);
+    const [all, latest, first] = await Promise.all([store.allSettings(), store.latestRuns(), store.firstUsageDays()]);
     const projects = (await listProjects()).filter((p) => !p.archivedAt);
     return {
       ok: true as const,
       projects: projects.map((p) => {
         const settings = all.get(p.id.toLowerCase()) ?? store.defaultsFor(p.id.toLowerCase());
         // The first day a chart can be called unused: usage is watched from the day after its first row, for a whole window.
-        return { id: p.id, name: p.name, settings: settingsView(settings), latest: latest.get(p.id.toLowerCase()) ?? null, firstCleanup: first === null ? null : addDays(first, 1 + settings.windowDays) };
+        return { id: p.id, name: p.name, settings: settingsView(settings), latest: latest.get(p.id.toLowerCase()) ?? null, firstCleanup: first.has(p.id.toLowerCase()) ? addDays(first.get(p.id.toLowerCase()) as string, 1 + settings.windowDays) : null };
       }),
     };
   });
@@ -53,7 +53,7 @@ export function register(): void {
     if (!projectId) return fail('not_found');
     if (!(await store.getSettings(projectId)).enabled) return fail('off');
     const runId = await runNow(projectId);
-    return runId ? { ok: true as const, runId } : fail('failed');
+    return runId === 'busy' ? fail('busy') : runId ? { ok: true as const, runId } : fail('failed');
   });
 
   ipcMain.handle('autopilot:runs', async (_e, p: { projectId: string }) => {

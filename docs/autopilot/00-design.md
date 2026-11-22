@@ -59,6 +59,7 @@ scan) and acts as an org admin, so the screen belongs to Admin, not to a project
   left `running` for 30 minutes (a crashed pod) is retaken, and its items are kept (acting is idempotent: a chart already in Trash is
   not unused any more). A manual **Run now** is a run with `manual = true` and no week: it does the same work, off the weekly key.
   `state` (`running`, `done`, `paused`, `failed`), `ran_as`, counts, and `covered_from`: the first day a chart could be called unused.
+- `autopilot_seen (org, project, visual)`: the first day Autopilot knew each chart.
 - `autopilot_items`: the report's rows, `(org, run, seq)`: `kind` (`trashed`, `repaired`, `broken`, `slow`), the visual, its name at that time,
   structured `detail` (the web words it; the web is English only), `undo` (what Undo needs) and `state` (`applied`, `listed`, `undone`, `failed`).
 
@@ -81,22 +82,23 @@ The plan is a **pure function** (`plan.ts`) of what the run read, so it is teste
 each visual, the usage rows, the rename log and the settings.
 
 1. **Unused.** A chart is unused when it has no `opened` usage row on or after `today - window_days`, and **all** of these hold, else it is never touched:
-   - not on a dashboard (draft or its published copy), not in a Story, not in a report or an alert: any record of those that mentions the chart's id (a UUID scan of the stored JSON, the most conservative reading);
+   - not mentioned by any record of the project that could mention a chart: dashboards (draft, published copy, **and those in the Trash**, so a restored dashboard keeps its cards), Stories, reports, alerts and the rest. The scan reads the **stored text** of every record under the project (`records`, paged), skipping only the charts' own records, their Trash copies, version history and datasets, and takes every UUID in it: a record that does not parse still counts. **A scan that cannot be completed ends the run `failed`, with nothing moved**: it never reads as "nothing mentions it";
    - not certified: charts carry no status of their own (only datasets, metrics and glossary terms are certified), so a chart is protected when **its dataset or a saved metric it uses is certified or needs review** (open point 8);
-   - not new: created before `today - window_days`;
-   - **usage covers the whole window**: `today - window_days >= first recorded day of the org + 1`. Until then the run lists nothing as unused (the settings card says "waiting for data: first cleanup in N days");
+   - created on or before `today - window_days` **and watched for the whole window**: `autopilot_seen` keeps the first day Autopilot knew each chart (or its first usage row, if sooner), and it must be on or before the window's start. An import keeps its old `createdAt`, which proves nothing about being observed;
+   - **usage covers the whole window, per project**: `today - window_days >= first recorded usage day of the project + 1`. Until then the run lists nothing as unused (the settings card says "waiting for data: first cleanup in N days");
    - not one Autopilot trashed before and the owner brought back (an `autopilot_items` row of kind `trashed` for it within the window), so Undo is not undone next week.
-   It moves to Trash through `trash.trashRecord`, as the acting admin (their folder access applies; a refusal is a `failed` row), with the structured reason
+   It moves to Trash through `trash.trashRecord`, as the acting admin (an org admin resolves to every folder, so a refusal is rare; one is a `failed` row), with the structured reason
    `{ kind: 'autopilot', days: window, by }` and **90 days of retention** (Q2: `keepDays` on the Trash entry; people's own deletes keep 30). With `trash_unused` off the chart is listed, not moved.
 2. **Broken.** A chart is broken when a column it names (`visualColumns`: category, split, measures, pivot fields, filters) is not among its dataset's current columns
    (a Live dataset's `missingColumns` counts as gone). A chart that joins a related dataset is not judged (its columns may belong to the other table).
 3. **Exact repair.** For a missing column `old`, the dataset's rename log is read in `(dataset_at, seq)` order. The repair is exact only if the **last** row naming `old` renames it to `new`,
    `new` **exists in the dataset's current columns**, and **no later row renames `new` again**. Anything else (no row, renamed twice, target gone, a re-import that brought the old name back) is
-   broken, not repaired, and says why. Charts broken by a rename made before 0044 have no row and are flagged. A repair rewrites exactly the fields `visualColumns` reads, nothing else;
+   broken, not repaired, and says why. Charts broken by a rename made before 0044 have no row and are flagged. A repair rewrites exactly the fields `visualColumns` reads, nothing else, and **only when the old name appears nowhere else** in the chart (a map's colour or coordinates, a facet, a cohort, an event funnel, the styling, an overlay): otherwise it is listed broken with the reason `other_fields`. A column those fields name that is missing is listed broken too (not repaired). The repair is written with the record's tag (`base`): a save made since the run read the chart is a person's, the repair becomes a `failed` row ("changed") and their save stays;
    the chart's previous version is kept in its history (`versions.record`, by "Autopilot (as <admin>)"). With `repair_renames` off the exact repair is shown as a suggestion on a broken row.
 4. **Slow.** The week's mean compute time (`total_ms / computes`, at least 3 computes) above `slow_ms`; the row says the typical and the slowest time, the dataset, and whether it is Live. Listed only.
-5. **Undo** is per row: a Trash move is `trash.restore`; a repair puts the stored previous definition back **only if the chart still equals what Autopilot wrote** (else refused with "changed since"), and records a version.
-   "Undo all repairs" does each. A restored chart counts as used today (usage row), so it is not trashed again.
+5. **Undo** is per row: a Trash move is `trash.restore`; a repair puts the stored previous definition back **only if the chart still equals what Autopilot wrote** (else refused with "changed since"); the write carries the tag it was checked against, so a save in between is kept and Undo is refused the same way. It records a version.
+   "Undo all repairs" does each.
+6. **One run of a project at a time.** A run starts under a per-project advisory lock that checks no run of the project is `running` (and not stale): a double click, a second admin or the weekly tick while one goes is refused (`busy`; the weekly claim leaves the week unused for the next poll). A run's counts are always taken from all its rows, so a retaken run counts what the first attempt did. A restored chart counts as used today (usage row), so it is not trashed again.
 
 No model is involved anywhere in this.
 
@@ -111,9 +113,7 @@ No model is involved anywhere in this.
 ### Tests
 
 `scripts/test-autopilotPlan.ts` (pure): unused, never-touched negative controls (dashboard, Story, report, alert, certified dataset, certified metric, new, window not covered, previously trashed), the exact-repair rule and its refusals (twice renamed, target gone, no row, swap), slow, and that the plan is the same function for every input order.
-`scripts/test-autopilotRepair.ts`: **differential**: a chart repaired from the rename log equals a chart authored by hand on a table that has the new name (stored definition and `visual:data` reply, `Object.is` per figure); the repair touches no other field; Undo restores the original; a changed chart refuses Undo.
-`scripts/test-autopilotStore.ts` (DB): forced RLS as an ordinary role for the three tables, settings validation (window bounds), the claim (two servers, one run per week; a crashed claim is retaken once), prune.
-`scripts/test-autopilotRun.ts` (DB, real server): the run end to end as the admin (Trash with reason and 90 days, repair, listed rows, Undo, the lost-admin pause, two servers racing a week).
+`scripts/test-autopilotRun.ts` (DB, real server): the run end to end as the admin (Trash with reason and 90 days, repair, listed rows, Undo, the lost-admin pause, two servers racing a week, a retaken claim, one run at a time, forced RLS as an ordinary role, pruning), with the **differential** (a chart repaired from the rename log equals one authored by hand on a table with the new name, in stored definition and in the `visual:data` reply), and negative controls: a scan that cannot complete fails the run, a corrupt or Trashed dashboard still protects its charts, an imported chart and a project with no usage of its own are not moved, a person's save between read and write is kept by a repair and by Undo.
 Vitest for the Admin tab and the report page; Playwright `web/e2e/autopilot-report.e2e.ts`: a column is renamed, Run now repairs the chart, the report says so, Undo puts it back.
 
 ## Phase 1 in detail

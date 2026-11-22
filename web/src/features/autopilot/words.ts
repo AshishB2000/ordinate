@@ -9,6 +9,7 @@ const WHY: Record<Gone['why'], (g: Gone) => string> = {
   none: () => 'No rename of it was recorded, so Autopilot cannot tell what it became.',
   again: () => 'It was renamed again since, so the first rename no longer explains it.',
   target_missing: () => 'The column it was renamed to is gone too.',
+  other_fields: () => 'Another part of the chart (a map\u2019s colour, a facet, a funnel or an overlay) uses it too, so Autopilot left it for you.',
   repair_off: (g) => `Autopilot would use ${g.suggest ?? 'the renamed column'}; repairs are switched off.`,
 };
 

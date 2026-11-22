@@ -83,27 +83,42 @@ export function mondayOf(day: string): string {
 
 export const STALE_CLAIM_MIN = 30;
 
+/** The project's runs are started one at a time: this lock is held only for the check and the insert, the `running` row is what lasts. */
+const lockProject = (c: PoolClient, org: string, projectId: string) => c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`autopilot:${org}:${projectId}`]);
+/** Is a run of the project going (and not a dead server's: running for over STALE_CLAIM_MIN minutes)? */
+const busy = async (c: PoolClient, org: string, projectId: string): Promise<boolean> =>
+  (await c.query(`SELECT 1 FROM autopilot_runs WHERE org_id = $1 AND project_id = $2 AND state = 'running' AND started_at > now() - $3 * interval '1 minute'`, [org, projectId, STALE_CLAIM_MIN])).rowCount === 1;
+
 /**
  * Claim this week's scheduled run of the project: exactly one caller gets an id, whatever the servers (the partial unique index
- * decides the race). A claim left `running` for STALE_CLAIM_MIN minutes (a pod that died) is retaken by the next caller. Null: taken.
+ * decides the race). A claim left `running` for STALE_CLAIM_MIN minutes (a pod that died) is retaken by the next caller. Null: the week
+ * is taken, or a run of the project is going now (a Run now): the week is not used up, the next poll tries again.
  */
 export async function claimWeek(projectId: string, week: string, windowDays: number): Promise<string | null> {
   const id = randomUUID();
-  const r = await inOrg((c, org) => c.query<{ id: string }>(
-    `INSERT INTO autopilot_runs AS u (org_id, project_id, id, week, window_days) VALUES ($1, $2, $3, $4::date, $5)
-     ON CONFLICT (org_id, project_id, week) WHERE week IS NOT NULL DO UPDATE SET started_at = now()
-       WHERE u.state = 'running' AND u.started_at < now() - $6 * interval '1 minute'
-     RETURNING id::text AS id`,
-    [org, projectId, id, week, windowDays, STALE_CLAIM_MIN],
-  ));
-  return r.rows[0]?.id ?? null;
+  const r = await inOrg(async (c, org) => {
+    await lockProject(c, org, projectId);
+    if (await busy(c, org, projectId)) return null;
+    return (await c.query<{ id: string }>(
+      `INSERT INTO autopilot_runs AS u (org_id, project_id, id, week, window_days) VALUES ($1, $2, $3, $4::date, $5)
+       ON CONFLICT (org_id, project_id, week) WHERE week IS NOT NULL DO UPDATE SET started_at = now()
+         WHERE u.state = 'running' AND u.started_at < now() - $6 * interval '1 minute'
+       RETURNING id::text AS id`,
+      [org, projectId, id, week, windowDays, STALE_CLAIM_MIN],
+    )).rows[0]?.id ?? null;
+  });
+  return r;
 }
 
-/** A manual "Run now": its own run, off the weekly key. */
-export async function startManual(projectId: string, windowDays: number): Promise<string> {
+/** A manual "Run now": its own run, off the weekly key. Null while a run of the project is going (a double click, a second admin, the weekly tick). */
+export async function startManual(projectId: string, windowDays: number): Promise<string | null> {
   const id = randomUUID();
-  await inOrg((c, org) => c.query('INSERT INTO autopilot_runs (org_id, project_id, id, manual, window_days) VALUES ($1, $2, $3, true, $4)', [org, projectId, id, windowDays]));
-  return id;
+  return inOrg(async (c, org) => {
+    await lockProject(c, org, projectId);
+    if (await busy(c, org, projectId)) return null;
+    await c.query('INSERT INTO autopilot_runs (org_id, project_id, id, manual, window_days) VALUES ($1, $2, $3, true, $4)', [org, projectId, id, windowDays]);
+    return id;
+  });
 }
 
 export async function finishRun(id: string, state: Exclude<RunState, 'running'>, o: { ranAs: string | null; coveredFrom: string | null; counts: Record<string, number> }): Promise<void> {
@@ -174,6 +189,7 @@ export async function handledIn(runId: string): Promise<Set<string>> {
 // ── What the run reads of phase 1 ───────────────────────────────────────────
 
 export interface UsageRead {
+  /** The first day THIS PROJECT has a usage row (null: none yet): coverage is the project's, not the org's. */
   firstDay: string | null;
   openedSince: Set<string>;
   week: Map<string, { computes: number; totalMs: number; maxMs: number }>;
@@ -182,7 +198,7 @@ export interface UsageRead {
 
 export async function readUsage(projectId: string, cutoff: string, today: string, windowDays: number): Promise<UsageRead> {
   return inOrg(async (c, org) => {
-    const first = await c.query<{ d: string | null }>(`SELECT to_char(min(day), 'YYYY-MM-DD') AS d FROM item_usage_daily WHERE org_id = $1`, [org]);
+    const first = await c.query<{ d: string | null }>(`SELECT to_char(min(day), 'YYYY-MM-DD') AS d FROM item_usage_daily WHERE org_id = $1 AND project_id = $2`, [org, projectId]);
     const opened = await c.query<{ id: string }>(`SELECT DISTINCT item_id::text AS id FROM item_usage_daily WHERE org_id = $1 AND project_id = $2 AND kind = 'visual' AND opened AND day >= $3::date`, [org, projectId, cutoff]);
     const week = await c.query<{ id: string; n: string; s: string; m: number }>(
       `SELECT item_id::text AS id, sum(computes)::text AS n, sum(total_ms)::text AS s, max(max_ms) AS m FROM item_usage_daily
@@ -220,10 +236,58 @@ export async function pruneUsage(): Promise<number> {
        SELECT 1 FROM records r WHERE r.org_id = u.org_id AND r.path IN (
          'projects/' || u.project_id || '/' || CASE u.kind WHEN 'visual' THEN 'visuals' ELSE 'analyses' END || '/' || u.item_id || '.json',
          'projects/' || u.project_id || '/trash/' || u.kind || '/' || u.item_id || '.json'))))`, [org]));
+  await inOrg((c, org) => c.query(
+    `DELETE FROM autopilot_seen s WHERE s.org_id = $1 AND s.first_seen < current_date - 100 AND NOT EXISTS (
+       SELECT 1 FROM records r WHERE r.org_id = s.org_id AND r.path IN (
+         'projects/' || s.project_id || '/visuals/' || s.visual_id || '.json', 'projects/' || s.project_id || '/trash/visual/' || s.visual_id || '.json'))`, [org]));
   return r.rowCount ?? 0;
 }
 
-/** The first day the org has a usage row, or null: usage is watched from the day after it. */
-export async function firstUsageDay(): Promise<string | null> {
-  return (await inOrg((c, org) => c.query<{ d: string | null }>(`SELECT to_char(min(day), 'YYYY-MM-DD') AS d FROM item_usage_daily WHERE org_id = $1`, [org]))).rows[0]?.d ?? null;
+/** Each project's first usage day: usage is watched from the day after it. */
+export async function firstUsageDays(): Promise<Map<string, string>> {
+  const r = await inOrg((c, org) => c.query<{ p: string; d: string }>(`SELECT project_id::text AS p, to_char(min(day), 'YYYY-MM-DD') AS d FROM item_usage_daily WHERE org_id = $1 GROUP BY project_id`, [org]));
+  return new Map(r.rows.map((x) => [x.p, x.d]));
+}
+
+/**
+ * Remember today as the first day Autopilot knew each of `ids` (kept if earlier), then return, per chart, the earliest day it can have been
+ * watched: that day, or its first usage row if sooner. A chart not in the map is unknown: never a candidate.
+ */
+export async function noteSeen(projectId: string, ids: readonly string[], today: string): Promise<Map<string, string>> {
+  return inOrg(async (c, org) => {
+    if (ids.length) {
+      await c.query(
+        `INSERT INTO autopilot_seen (org_id, project_id, visual_id, first_seen) SELECT $1, $2, u::uuid, $3::date FROM unnest($4::text[]) AS u ON CONFLICT DO NOTHING`,
+        [org, projectId, today, [...ids]],
+      );
+    }
+    const r = await c.query<{ id: string; d: string }>(
+      `SELECT s.visual_id::text AS id, to_char(least(s.first_seen, coalesce(min(u.day), s.first_seen)), 'YYYY-MM-DD') AS d
+         FROM autopilot_seen s LEFT JOIN item_usage_daily u ON u.org_id = s.org_id AND u.project_id = s.project_id AND u.kind = 'visual' AND u.item_id = s.visual_id
+        WHERE s.org_id = $1 AND s.project_id = $2 GROUP BY s.visual_id, s.first_seen`, [org, projectId]);
+    return new Map(r.rows.map((x) => [x.id, x.d]));
+  });
+}
+
+const UUID_G = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * Every chart-id-shaped string in every record of the project that could MENTION a chart, read from the stored text itself: dashboards (their
+ * published copies, and those in the Trash too: a dashboard brought back must still have its charts), Stories, reports, alerts, and the rest.
+ * The chart's own record, its version history, the Trash copy of a chart and the datasets are not mentions. A record that does not parse still
+ * counts: it is the text that is read. ANY database error propagates: a scan that cannot be completed must never read as "nothing mentions it".
+ */
+export async function scanMentions(projectId: string): Promise<Set<string>> {
+  const root = `projects/${projectId}/`;
+  const skip = ['visuals/', 'history/', 'datasets/', 'trash/visual/'].map((d) => `${root}${d}%`);
+  const found = new Set<string>();
+  let after = root;
+  for (;;) {
+    const page = await inOrg((c, org) => c.query<{ path: string; body: string }>(
+      `SELECT path, body FROM records WHERE org_id = $1 AND path > $2 AND path < $3 AND NOT (path LIKE ANY($4::text[])) ORDER BY path LIMIT 200`,
+      [org, after, `${root.slice(0, -1)}0`, skip])); // "…/" up to "…0": every path under the project directory
+    if (!page.rows.length) return found;
+    for (const r of page.rows) for (const m of r.body.match(UUID_G) ?? []) found.add(m.toLowerCase());
+    after = page.rows[page.rows.length - 1].path;
+  }
 }
