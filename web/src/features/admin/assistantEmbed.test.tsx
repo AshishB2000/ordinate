@@ -52,7 +52,7 @@ describe('Admin → Embedding → Assistant', () => {
     expect(await screen.findByText(/Embedding is off above/)).toBeTruthy();
   });
   it('lists a marked agent with its lock column, fills the snippet with its id and column, and turns it off', async () => {
-    const calls = serve({ 'embedAssistant:settings': settings({ agents: [marked()] }), 'embedAssistant:save': { body: { ok: true } } });
+    const calls = serve({ 'embedAssistant:settings': settings({ agents: [marked()] }), 'embedAssistant:setEnabled': { body: { ok: true } }, 'embedAssistant:save': { body: { ok: true } } });
     mount(<AssistantEmbedCard />);
     const list = await screen.findByRole('list', { name: 'Embeddable agents' });
     expect(within(list).getByText('Shipping helper')).toBeTruthy();
@@ -62,13 +62,30 @@ describe('Admin → Embedding → Assistant', () => {
     expect(screen.getByTestId('assistant-snippet-node').textContent).toContain(AGENT);
     expect(screen.getByTestId('assistant-snippet-node').textContent).toContain('"customer_id": [user.customerId]');
     fireEvent.click(screen.getByRole('switch', { name: 'Embeddable' }));
-    await waitFor(() => expect(calls.find((c) => c.channel === 'embedAssistant:save')?.payload).toEqual({ projectId: PROJECT, agentId: AGENT, enabled: false, datasets: [{ id: DS, column: 'customer_id' }] }));
+    // On or off only (the pins stay); the switch never goes through `save`, which re-approves the current steps.
+    await waitFor(() => expect(calls.find((c) => c.channel === 'embedAssistant:setEnabled')?.payload).toEqual({ agentId: AGENT, enabled: false }));
+    expect(calls.some((c) => c.channel === 'embedAssistant:save')).toBe(false);
   });
   it('a lock that no longer holds is flagged, with what to do', async () => {
     serve({ 'embedAssistant:settings': settings({ agents: [marked('changed')] }) });
     mount(<AssistantEmbedCard />);
     expect(await screen.findByText('Steps changed: save again')).toBeTruthy();
     expect(screen.getByText(/Questions are refused until you press Edit and Save/)).toBeTruthy();
+  });
+  it('flags a dataset in a team folder, and Edit says that saving approves the current steps', async () => {
+    serve({ 'embedAssistant:settings': settings({ agents: [marked('folder')] }), 'projects:list': { body: [] } });
+    mount(<AssistantEmbedCard />);
+    expect(await screen.findByText('Not open to everyone')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(await screen.findByText(/Saving approves the current prepare steps/)).toBeTruthy();
+  });
+  it('an agent whose dataset is gone can still be switched off', async () => {
+    const calls = serve({ 'embedAssistant:settings': settings({ agents: [{ ...marked('gone'), gone: true }] }), 'embedAssistant:setEnabled': { body: { ok: true } } });
+    mount(<AssistantEmbedCard />);
+    const sw = (await screen.findByRole('switch', { name: 'Embeddable' })) as HTMLInputElement;
+    expect(sw.disabled).toBe(false);
+    fireEvent.click(sw);
+    await waitFor(() => expect(calls.find((c) => c.channel === 'embedAssistant:setEnabled')?.payload).toEqual({ agentId: AGENT, enabled: false }));
   });
   it('stops embedding an agent', async () => {
     const calls = serve({ 'embedAssistant:settings': settings({ agents: [marked()] }), 'embedAssistant:remove': { body: { ok: true } } });

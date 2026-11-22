@@ -13,6 +13,8 @@ export const embedAssistant = {
   // The agents and the datasets (with their text columns) of one project, for the pickers.
   'embedAssistant:options': rpc({ access: 'admin', org: true, audit: 'denials', input: z.strictObject({ projectId: Uuid }) }),
   'embedAssistant:save': rpc({ access: 'admin', org: true, input: z.strictObject({ projectId: Uuid, agentId: Uuid, enabled: z.boolean(), datasets: z.array(Dataset).max(12) }) }),
+  // On or off, nothing else: it never re-pins the lock column's steps (only `save`, the admin's explicit Edit → Save, does), and off always works.
+  'embedAssistant:setEnabled': rpc({ access: 'admin', org: true, input: z.strictObject({ agentId: Uuid, enabled: z.boolean() }) }),
   'embedAssistant:remove': rpc({ access: 'admin', org: true, input: z.strictObject({ agentId: Uuid }) }),
   'embedAssistant:setLimits': rpc({ access: 'admin', org: true, input: z.strictObject({ daily: z.number().int().min(1).max(1_000_000), perMinute: z.number().int().min(1).max(600) }) }),
 } as const;

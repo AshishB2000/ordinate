@@ -36,7 +36,7 @@ async function suite(adminUrl: string): Promise<void> {
   pool.on('error', () => undefined);
   const cfg = envMod.parseEnv({
     LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', ORDINATE_MASTER_KEY: randomBytes(32).toString('base64'),
-    TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test',
+    TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test', ORDINATE_FOLDERS: 'on',
   });
   const app = appMod.buildApp(cfg);
   try {
@@ -71,10 +71,10 @@ async function suite(adminUrl: string): Promise<void> {
       rpc.registry.removeHandler(ch);
       rpc.registry.handle(ch, (e, ...args) => { calls.set(ch, (calls.get(ch) ?? 0) + 1); return real(e, ...args); });
     }
-    ok('contracts: five channels, every one admin and org-scoped', CHANNELS.length === 5 && CHANNELS.every((c) => (api.contracts as Record<string, { access: string; org?: boolean }>)[c].access === 'admin' && (api.contracts as Record<string, { org?: boolean }>)[c].org === true), CHANNELS.join());
+    ok('contracts: six channels, every one admin and org-scoped', CHANNELS.length === 6 && CHANNELS.every((c) => (api.contracts as Record<string, { access: string; org?: boolean }>)[c].access === 'admin' && (api.contracts as Record<string, { org?: boolean }>)[c].org === true), CHANNELS.join());
     const inputs: Record<string, unknown> = {
       'embedAssistant:settings': undefined, 'embedAssistant:options': { projectId: pid }, 'embedAssistant:save': { projectId: pid, agentId: agent.id, enabled: true, datasets: [D(ship)] },
-      'embedAssistant:remove': { agentId: agent.id }, 'embedAssistant:setLimits': { daily: 500, perMinute: 5 },
+      'embedAssistant:setEnabled': { agentId: agent.id, enabled: true }, 'embedAssistant:remove': { agentId: agent.id }, 'embedAssistant:setLimits': { daily: 500, perMinute: 5 },
     };
     for (const ch of CHANNELS) {
       for (const who of ['alice', 'bob', 'boss']) {
@@ -111,15 +111,46 @@ async function suite(adminUrl: string): Promise<void> {
     await pool.query('SELECT 1');
     ok('setup: a find/replace on the lock column (what would hand c1 the rows of c2)', w.status === 200, JSON.stringify(w.body).slice(0, 200));
     const v1 = await view();
-    ok('settings: the screen sees the change — "changed" (or the column no longer text), never "ok"', v1.agents[0].datasets[0].state !== 'ok', JSON.stringify(v1.agents[0].datasets));
+    ok('settings: the screen sees the change, as "changed"', v1.agents[0].datasets[0].state === 'changed', JSON.stringify(v1.agents[0].datasets));
     const options = await boss.call('embedAssistant:options', { projectId: pid });
     ok('options: the project\'s agents and datasets with their text columns', options.body.ok === true && options.body.agents.some((a: { id: string }) => a.id === agent.id) && options.body.datasets.find((d: { id: string }) => d.id === ship).textColumns.includes('customer_id'));
     ok('options: a project that does not exist is a sentence', (await boss.call('embedAssistant:options', { projectId: agent.id })).body.ok === false);
 
-    // Switch off, caps, remove.
-    // (the find/replace above changed the lock column's steps: re-marking pins the new ones, and the agent can be switched off)
-    const off = await save({ enabled: false, datasets: [D(ship)] });
-    ok('save can switch an agent off (re-pinning its steps)', off.body?.ok === true && (await view()).agents[0].enabled === false && (await view()).agents[0].datasets[0].state === 'ok', JSON.stringify(off.body));
+    // Switching off and on never re-approves a changed pipeline: only an explicit save (Edit → Save) re-pins.
+    const pinOf = async () => (await pool.query<{ datasets: Array<{ writers: string }> }>(`SELECT datasets FROM embed_agents WHERE agent_id = $1`, [agent.id])).rows[0].datasets[0].writers;
+    const pinned = await pinOf();
+    const off = await boss.call('embedAssistant:setEnabled', { agentId: agent.id, enabled: false });
+    ok('setEnabled: switches an agent off, and the saved datasets are untouched', off.body?.ok === true && (await view()).agents[0].enabled === false && (await pinOf()) === pinned && (await view()).agents[0].datasets[0].state === 'changed', JSON.stringify(off.body));
+    const on = await boss.call('embedAssistant:setEnabled', { agentId: agent.id, enabled: true });
+    ok('setEnabled: off then on keeps the old pin — the changed pipeline is NOT trusted again', on.body?.ok === true && (await pinOf()) === pinned && (await view()).agents[0].datasets[0].state === 'changed', JSON.stringify(await view()));
+    ok('setEnabled: an agent that is not marked is a sentence', (await boss.call('embedAssistant:setEnabled', { agentId: ship, enabled: false })).body.ok === false);
+    // NEGATIVE CONTROL: save is the explicit re-approval, and it does re-pin the current steps.
+    const resave = await save({ datasets: [D(ship)] });
+    ok('NEGATIVE CONTROL: Edit → Save re-pins the current steps (state back to ok, a new pin)', resave.body?.ok === true && (await pinOf()) !== pinned && (await view()).agents[0].datasets[0].state === 'ok', JSON.stringify(resave.body));
+
+    // A dataset that can no longer be marked still lets its agent be switched OFF (save would refuse it).
+    const rule2 = await boss.call('dataset:setRowPolicy', { projectId: pid, datasetId: ship, policy: { column: 'customer_id', rules: [{ userId: await uid('alice'), values: ['c1'] }] } });
+    ok('setup: row access rules now on the marked dataset', rule2.body?.ok === true, JSON.stringify(rule2.body).slice(0, 200));
+    ok('settings: it shows "rules"', (await view()).agents[0].datasets[0].state === 'rules');
+    ok('save refuses it now (the control)', (await save({ enabled: false, datasets: [D(ship)] })).body?.ok === false);
+    ok('…but setEnabled turns the agent off regardless', (await boss.call('embedAssistant:setEnabled', { agentId: agent.id, enabled: false })).body?.ok === true && (await view()).agents[0].enabled === false);
+    await boss.call('dataset:setRowPolicy', { projectId: pid, datasetId: ship, policy: null });
+
+    // Folders: an embed asker has no team, so a dataset in a team folder fails every question. Not markable; a marked one is flagged.
+    const folder = await boss.call('folder:create', { projectId: pid, parentId: null, name: 'Finance' });
+    const folderId: string = folder.body?.folder?.id ?? folder.body?.id;
+    ok('setup: a team folder', typeof folderId === 'string' && folderId.length === 36, JSON.stringify(folder.body).slice(0, 200));
+    const move = { projectId: pid, items: [{ kind: 'dataset', id: ship }], to: folderId };
+    const impact = await boss.call('folder:moveImpact', move);
+    const moved = await boss.call('folder:move', { ...move, hash: impact.body?.hash });
+    ok('setup: Shipments moved into it', moved.status === 200 && moved.body?.ok !== false, JSON.stringify(moved.body).slice(0, 200));
+    ok('settings: the marked dataset shows "folder", not Locked', (await view()).agents[0].datasets[0].state === 'folder', JSON.stringify((await view()).agents[0].datasets));
+    const inFolder = await save({ datasets: [D(ship)] });
+    ok('save refuses a dataset in a team folder, with a sentence', inFolder.body?.ok === false && /team folder/.test(inFolder.body.error), JSON.stringify(inFolder.body));
+    const back = await boss.call('folder:moveImpact', { projectId: pid, items: [{ kind: 'dataset', id: ship }], to: pid });
+    await boss.call('folder:move', { projectId: pid, items: [{ kind: 'dataset', id: ship }], to: pid, hash: back.body?.hash });
+    ok('NEGATIVE CONTROL: moved back to Everyone, the same save works', (await save({ datasets: [D(ship)] })).body?.ok === true && (await view()).agents[0].datasets[0].state === 'ok');
+
     const lim = async (daily: number, perMinute: number) => (await boss.call('embedAssistant:setLimits', { daily, perMinute })).body;
     ok('caps: saved and read back', (await lim(500, 5)).ok === true && (await view()).caps.daily === 500 && (await view()).caps.perMinute === 5);
     ok('caps: the contract refuses 0, 601 a minute, 1,000,001 a day and a fraction', (await boss.call('embedAssistant:setLimits', { daily: 0, perMinute: 5 })).status !== 200 && (await boss.call('embedAssistant:setLimits', { daily: 5, perMinute: 601 })).status !== 200

@@ -78,7 +78,7 @@ export function CardTable({ card }: { card: Card }) {
         {card.data.labels.map((l, i) => (
           <tr key={i}>
             <th scope="row">{String(l)}</th>
-            {series.map((s) => <td key={s.name}>{typeof s.values[i] === 'number' ? (s.values[i] as number).toLocaleString() : ''}</td>)}
+            {series.map((s) => <td key={s.name}>{typeof s.values[i] === 'number' ? (s.values[i] as number).toLocaleString(undefined, { maximumFractionDigits: 20 }) : ''}</td>)}
           </tr>
         ))}
       </tbody>

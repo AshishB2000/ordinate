@@ -67,3 +67,7 @@ export function embedAdminPipeline(dataset: string): string {
 export function embedAdminCaps(): string {
   return t('embedAskMessages.caps_are_whole_numbers_up_to');
 }
+
+export function embedAdminFolder(dataset: string): string {
+  return `${dataset} is in a team folder. An embedded assistant can only use datasets in Everyone in the project.`;
+}

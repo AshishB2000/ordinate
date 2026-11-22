@@ -77,6 +77,12 @@ export async function listEmbedAgents(org: string): Promise<EmbedAgentRow[]> {
   return r.rows.map((row) => ({ agentId: row.agent_id, projectId: row.project_id, datasets: sanitizeDatasets(row.datasets), enabled: row.enabled }));
 }
 
+/** Switches one marked agent on or off and nothing else: its datasets, columns and writers' pins stay exactly as they were saved. */
+export async function setEmbedEnabled(org: string, agentId: string, enabled: boolean): Promise<boolean> {
+  const r = await inOrg(pool(), org, (c) => c.query('UPDATE embed_agents SET enabled = $3, updated_at = now() WHERE org_id = $1 AND agent_id = $2', [org, agentId, enabled]));
+  return (r.rowCount ?? 0) > 0;
+}
+
 /** Stops embedding one agent: its marking is deleted, and every token for it is refused from the next ask on. */
 export async function removeEmbedAgent(org: string, agentId: string): Promise<boolean> {
   const r = await inOrg(pool(), org, (c) => c.query('DELETE FROM embed_agents WHERE org_id = $1 AND agent_id = $2', [org, agentId]));

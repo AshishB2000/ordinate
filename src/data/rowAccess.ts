@@ -321,7 +321,7 @@ export async function embedMarkCheck(projectId: string, datasetId: string, colum
   if (eff.kind !== 'none') return { ok: false, reason: 'derived' };
   const raw = await readRaw(projectId, datasetId);
   if (!raw) return { ok: false, reason: 'unreadable' };
-  const writers = writersHash(sanitizeSteps(raw.steps), column);
+  const writers = (await pinWriters(projectId, datasetId, column)) ?? '';
   const state = ruleState(raw, { column, rules: [], stepsHash: writers });
   return state === 'ok' ? { ok: true, writers } : { ok: false, reason: state === 'column' ? 'column' : 'pipeline' };
 }

@@ -167,8 +167,13 @@ async function suite(adminUrl: string): Promise<void> {
     const wrongSite = await page(t0, { referer: 'https://evil.example/page' });
     ok('page: a Referer from a site that is not listed is refused', wrongSite.status === 403 && !wrongSite.text.includes('id="root"'));
     ok('page: a Referer from a listed site passes', (await page(t0, { referer: `${PORTAL}/portal` })).status === 200);
-    const prev = await page(hostSign(SECRET, claims()), {});
-    ok('control: the same token on the POST route is answered', prev.status === 200 && (await post(t0)).status === 200);
+    // The page and the POST route agree: a token the page serves is answered by POST, and one the page refuses is refused by POST too.
+    const same = hostSign(SECRET, claims({ sub: 'agree-customer' }));
+    const pageSame = await page(same);
+    const askSame = await post(same);
+    ok('control: a token the page serves is answered by POST /embed/ask', pageSame.status === 200 && askSame.status === 200 && askSame.json?.ok === true, `${pageSame.status} ${askSame.status} ${askSame.text.slice(0, 120)}`);
+    const refusedTok = hostSign(SECRET, claims({ sub: 'agree-customer', params: { region: 'x' } }));
+    ok('…and one the page refuses (no required lock) is refused by POST too', (await page(refusedTok)).status === 403 && (await post(refusedTok)).status === 403);
     fs.rmSync(pageDir, { recursive: true, force: true });
     ok('page: the app not built is a 503 refusal, not a crash', (await page(t0)).status === 503);
     askRoute.setAskPageDirForTest();

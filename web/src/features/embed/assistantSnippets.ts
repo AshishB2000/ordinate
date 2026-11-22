@@ -10,13 +10,13 @@ export interface AssistantSnippetInput {
   columns?: string[];
 }
 
-const claims = (i: AssistantSnippetInput): string => `{ agent: ${JSON.stringify(i.agentId ?? '<agent id>')}, sub: user.id, params: { ${(i.columns?.length ? i.columns : ['customer_id']).map((c) => `${JSON.stringify(c)}: [user.customerId]`).join(', ')} } }`;
+const claims = (i: AssistantSnippetInput): string => `{ agent: ${JSON.stringify(i.agentId ?? '<agent id>')}, sub: String(user.id), params: { ${(i.columns?.length ? i.columns : ['customer_id']).map((c) => `${JSON.stringify(c)}: [user.customerId]`).join(', ')} } }`;
 
 export function nodeAssistantSnippet(i: AssistantSnippetInput): string {
   return `// Sign an Ordinate Assistant link on your server. Node 18+, no packages.
 const crypto = require('node:crypto');
 
-const ORDINATE = ${JSON.stringify(i.server)};
+const ORDINATE = ${JSON.stringify(i.server.replace(/\/+$/, ''))};
 const SECRET = process.env.ORDINATE_EMBED_SECRET; // from Admin → Embedding
 
 // Per page view, for the signed-in customer. \`sub\` is their id in your product; \`params\` locks every question to their own rows.
@@ -35,7 +35,7 @@ export function pythonAssistantSnippet(i: AssistantSnippetInput): string {
   return `# Sign an Ordinate Assistant link on your server. Python 3, standard library only.
 import base64, hashlib, hmac, json, os, time
 
-ORDINATE = ${JSON.stringify(i.server)}
+ORDINATE = ${JSON.stringify(i.server.replace(/\/+$/, ''))}
 SECRET = os.environ["ORDINATE_EMBED_SECRET"]  # from Admin → Embedding
 
 def b64(obj):
@@ -44,7 +44,7 @@ def b64(obj):
 # Per page view, for the signed-in customer. "sub" is their id in your product; "params" locks every question to their own rows.
 def assistant_url(user, minutes=30):
     head = b64({"alg": "HS256", "typ": "JWT", "kid": ${JSON.stringify(i.org)}})
-    body = b64({"agent": ${JSON.stringify(i.agentId ?? '<agent id>')}, "sub": user["id"], "params": {${params}}, "exp": int(time.time()) + minutes * 60})  # at most 60 minutes
+    body = b64({"agent": ${JSON.stringify(i.agentId ?? '<agent id>')}, "sub": str(user["id"]), "params": {${params}}, "exp": int(time.time()) + minutes * 60})  # at most 60 minutes
     sig = base64.urlsafe_b64encode(hmac.new(SECRET.encode(), (head + "." + body).encode(), hashlib.sha256).digest()).rstrip(b"=").decode()
     return ORDINATE + "/embed/ask/" + head + "." + body + "." + sig
 `;

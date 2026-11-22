@@ -24,6 +24,7 @@ import { embedExpired, embedInvalid, embedOrigin, embedTooLong } from '../embedM
 import { embedAskFailed, embedAskLimited, embedAskUnavailable } from '../embedAskMessages';
 
 export const EMBED_ASK_ROUTE = '/embed/ask';
+export const EMBED_ASK_PAGE_ROUTE = '/embed/ask/*';
 let askTimeoutMs = 120_000;
 
 /** Test seam (scripts/test-embedAskRoute): the time limit, in ms; no argument restores it. */
@@ -134,7 +135,7 @@ export function setAskPageDirForTest(dir: string = WEB_DIST): void {
 }
 
 export function registerEmbedAskPage(app: FastifyInstance): void {
-  app.get<{ Params: { '*': string } }>(`${EMBED_ASK_ROUTE}/*`, async (req, reply) => {
+  app.get<{ Params: { '*': string } }>(EMBED_ASK_PAGE_ROUTE, async (req, reply) => {
     reply.header('cache-control', 'no-store').header('x-robots-tag', 'noindex').header('referrer-policy', 'no-referrer');
     reply.removeHeader('set-cookie');
     const refuse = (code: number, message: string, ancestors: readonly string[]) => {

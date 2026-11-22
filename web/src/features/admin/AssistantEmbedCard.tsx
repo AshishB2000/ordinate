@@ -18,7 +18,7 @@ import { copy } from '../embed/EmbedSnippets';
 import { iframeSnippet, nodeAssistantSnippet, pythonAssistantSnippet } from '../embed/assistantSnippets';
 import { reason } from '../embed/api';
 import {
-  useAssistantLimits, useAssistantOptions, useAssistantRemove, useAssistantSave, useAssistantSettings, type AssistantSettings, type MarkedAgent, type MarkState,
+  useAssistantEnabled, useAssistantLimits, useAssistantOptions, useAssistantRemove, useAssistantSave, useAssistantSettings, type AssistantSettings, type MarkedAgent, type MarkState,
 } from '../embed/assistantApi';
 import s from '../embed/Embed.module.css';
 import m from './AssistantEmbed.module.css';
@@ -30,6 +30,7 @@ const STATE: Record<MarkState, { tone: 'ok' | 'warn' | 'error'; text: string }> 
   rules: { tone: 'error', text: 'Has row rules' },
   pipeline: { tone: 'error', text: 'Steps cross rows' },
   gone: { tone: 'error', text: 'Dataset gone' },
+  folder: { tone: 'error', text: 'Not open to everyone' },
 };
 
 /** The editor for one agent: its project, the agent, and each embeddable dataset with its lock column. */
@@ -75,6 +76,7 @@ function MarkForm({ st, initial, onDone }: { st: AssistantSettings; initial?: Ma
           ))}
         </fieldset>
       )}
+      {initial && <p className={s.formNote}>Saving approves the current prepare steps of each dataset’s lock column. Check what changed there first.</p>}
       {error && <p className={s.warn} role="alert"><Icon name="alert" size={12} /> {error}</p>}
       <div className={m.actions}>
         <Button type="submit" variant="primary" loading={save.isPending} disabled={!projectId || !agentId || !chosen.length || chosen.some(([, c]) => !c)}>Save</Button>
@@ -85,16 +87,16 @@ function MarkForm({ st, initial, onDone }: { st: AssistantSettings; initial?: Ma
 }
 
 function AgentRow({ a, onEdit }: { a: MarkedAgent; onEdit: () => void }) {
-  const save = useAssistantSave();
+  const enable = useAssistantEnabled();
   const remove = useAssistantRemove();
-  const toggle = (enabled: boolean) =>
-    save.mutate({ projectId: a.projectId, agentId: a.agentId, enabled, datasets: a.datasets.map((d) => ({ id: d.id, column: d.column })) }, { onSuccess: (r) => { if (!r.ok) toast(r.error, { kind: 'error' }); } });
+  // On or off only: the saved steps' pins are kept, so switching off and on never re-approves a changed pipeline (only Edit → Save does).
+  const toggle = (enabled: boolean) => enable.mutate({ agentId: a.agentId, enabled }, { onSuccess: (r) => { if (!r.ok) toast(r.error, { kind: 'error' }); } });
   return (
     <li className={m.agent}>
       <div className={m.agentHead}>
         <strong>{a.agentName || 'An assistant that is gone'}</strong>
         <span className={m.where}>{a.projectName}</span>
-        <Switch label="Embeddable" checked={a.enabled} disabled={a.gone || save.isPending} onCheckedChange={toggle} />
+        <Switch label="Embeddable" checked={a.enabled} disabled={enable.isPending} onCheckedChange={toggle} />
       </div>
       <ul className={m.marked} aria-label={`Datasets of ${a.agentName}`}>
         {a.datasets.map((d) => (
@@ -107,7 +109,7 @@ function AgentRow({ a, onEdit }: { a: MarkedAgent; onEdit: () => void }) {
         <Button size="sm" icon="pencil" onClick={onEdit}>Edit</Button>
         <Button size="sm" variant="danger" icon="trash" loading={remove.isPending} onClick={() => remove.mutate({ agentId: a.agentId }, { onSuccess: (r) => toast(r.ok ? 'Stopped embedding that assistant.' : r.error, { kind: r.ok ? 'success' : 'error' }) })}>Stop embedding</Button>
       </div>
-      {a.datasets.some((d) => d.state === 'changed') && <p className={s.warn}><Icon name="alert" size={12} /> A step that writes a lock column changed. Questions are refused until you press Edit and Save.</p>}
+      {a.datasets.some((d) => d.state === 'changed') && <p className={s.warn}><Icon name="alert" size={12} /> A step that writes a lock column changed. Questions are refused until you press Edit and Save, which approves the current steps.</p>}
     </li>
   );
 }

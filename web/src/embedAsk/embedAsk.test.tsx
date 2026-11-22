@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from './App';
 import { ask, historyOf, tokenFromPath, type Card } from './api';
-import { MiniChart } from './MiniChart';
+import { CardTable, MiniChart } from './MiniChart';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -107,6 +107,10 @@ describe('the page', () => {
 });
 
 describe('the chart', () => {
+  it('the table shows a server figure as it is, not rounded to 3 decimals', () => {
+    render(<CardTable card={card({ data: { labels: ['A'], series: [{ name: 'qty', values: [1234.56789] }] } })} />);
+    expect(screen.getByText(/1,?234\.56789/)).toBeTruthy();
+  });
   it('draws one bar per value, from the server\'s numbers, and a line for a line answer', () => {
     const { container, rerender } = render(<MiniChart card={card()} />);
     expect(container.querySelectorAll('rect').length).toBe(2);
