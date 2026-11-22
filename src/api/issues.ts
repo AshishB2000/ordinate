@@ -9,7 +9,6 @@ const Token = z.string().trim().min(8).max(500);
 
 export const issues = {
   'issues:list': rpc({ access: 'write', audit: 'denials', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
-  'issues:settings': rpc({ access: 'write', audit: 'denials', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'issues:setEnabled': rpc({ access: 'admin', audit: true, input: z.strictObject({ projectId: Uuid, enabled: z.boolean() }), project: byProjectId }),
   'issues:checkNow': rpc({ access: 'admin', audit: true, input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'issues:setStatus': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, status: z.enum(['open', 'resolved', 'ignored']) }), project: byProjectId }),

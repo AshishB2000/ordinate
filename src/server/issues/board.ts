@@ -30,8 +30,9 @@ async function visible(projectId: string, id?: string): Promise<store.Issue[]> {
   return openRows(projectId, await store.board(ctx().org.id, projectId, id));
 }
 
-export async function list(projectId: string): Promise<{ ok: true; available: boolean; issues: IssueView[]; trackers: { linear: boolean; jira: boolean } } | { ok: false; error: string }> {
-  if (!store.dbOrNull()) return { ok: true, available: false, issues: [], trackers: { linear: false, jira: false } };
+/** The board, with the check's own state (one call: this tab loads it with the rest of the Assistant's settings). */
+export async function list(projectId: string) {
+  if (!store.dbOrNull()) return { ok: true as const, available: false, issues: [] as IssueView[], trackers: { linear: false, jira: false }, settings: { enabled: false, lastRunAt: null, lastError: null } };
   const org = ctx().org.id;
   const issues = await visible(projectId);
   const ids = issues.map((i) => i.id);
@@ -45,12 +46,7 @@ export async function list(projectId: string): Promise<{ ok: true; available: bo
       examples: open.map((e) => ({ kind: e.kind, reason: e.reason, question: e.question, at: e.at })),
     });
   }
-  return { ok: true, available: true, issues: out, trackers: await trackers.connected() };
-}
-
-export async function settings(projectId: string) {
-  if (!store.dbOrNull()) return { ok: true as const, available: false, enabled: false, lastRunAt: null, lastError: null, trackers: { linear: false, jira: false } };
-  return { ok: true as const, available: true, ...(await store.getSettings(ctx().org.id, projectId)), trackers: await trackers.connected() };
+  return { ok: true as const, available: true, issues: out, trackers: await trackers.connected(), settings: await store.getSettings(org, projectId) };
 }
 
 export async function setEnabled(projectId: string, enabled: boolean) {

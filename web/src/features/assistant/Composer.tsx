@@ -132,7 +132,7 @@ export function Composer({ inputRef, projectId, status, context, pinned, onPin, 
         onKeyDown={onKey}
       />
       {researchHelp}
-      <p className={s.shareNotice} data-testid="issues-notice">Editors may see questions that didn’t get a good answer. They never see the answers.</p>
+      <p className={s.shareNotice} title="They never see the answers." data-testid="issues-notice">Editors may see questions that didn’t get a good answer.</p>
       <div className={s.composeFoot}>
         {wide ? (
           <>

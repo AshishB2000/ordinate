@@ -38,7 +38,7 @@ const draft: typeof import('../src/ai/proposalDraft') = require('../src/ai/propo
     await W.call('boss', 'issues:setEnabled', { projectId: P, enabled: true });
     await W.as('boss', () => weekly.checkOrg(Date.now() + 60_000));
 
-    const reads: Array<[string, unknown]> = [['issues:list', { projectId: P }], ['issues:settings', { projectId: P }]];
+    const reads: Array<[string, unknown]> = [['issues:list', { projectId: P }]];
     for (const who of ['east', 'west', 'nobody']) {
       const rs = await Promise.all([
         ...reads.map(([c, p]) => W.call(who, c, p)),
@@ -71,7 +71,7 @@ const draft: typeof import('../src/ai/proposalDraft') = require('../src/ai/propo
     // ── check now, and the failure ──────────────────────────────────────────────────────────────────────────────────────────
     const now = await W.call('boss', 'issues:checkNow', { projectId: P });
     ok('the project admin runs the check now; nothing is added twice', now.body?.ok === true && now.body.signals === 0 && now.body.created === 0, now.text);
-    ok('the settings: on, with the time of the last check, and no error', (await W.call('ed', 'issues:settings', { projectId: P })).body.lastRunAt !== null);
+    ok('the settings: on, with the time of the last check, and no error', (await W.call('ed', 'issues:list', { projectId: P })).body.settings.lastRunAt !== null);
     ok('turning it off stops the weekly pass', (await W.call('boss', 'issues:setEnabled', { projectId: P, enabled: false })).body?.ok === true);
     await W.pool.query(`UPDATE issue_settings SET last_run_at = now() - interval '9 days'`);
     await seed('eve@acme.test', [['Active customers once more?', define('active customer')]], { ageMs: 0 });

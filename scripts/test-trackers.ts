@@ -132,7 +132,7 @@ interface Seen { host: string; path: string; method: string; headers: Record<str
     ok('…and a retry then works', (await send('ed', 'linear')).body?.ok === true);
 
     // ── the secret canary ────────────────────────────────────────────────────────────────────────────────────────────────────
-    const replies = JSON.stringify([status.text, (await W.call('boss', 'tracker:status')).text, (await W.call('ed', 'issues:list', { projectId: P })).text, (await W.call('ed', 'issues:settings', { projectId: P })).text, okLinear.text, okJira.text, bad.text, failed.text]);
+    const replies = JSON.stringify([status.text, (await W.call('boss', 'tracker:status')).text, (await W.call('ed', 'issues:list', { projectId: P })).text, okLinear.text, okJira.text, bad.text, failed.text]);
     ok('CANARY: neither token is in any reply', !replies.includes('CANARY'), replies.slice(Math.max(0, replies.indexOf('CANARY') - 150), replies.indexOf('CANARY') + 80));
     const dump = JSON.stringify((await Promise.all(['issues', 'issue_signals', 'issue_tickets', 'issue_settings', 'tracker_integrations', 'audit_log'].map((t) => W.pool.query(`SELECT * FROM ${t}`).then((r) => r.rows).catch(() => [])))));
     ok('CANARY: neither token is in any table (the secrets table holds ciphertext only), nor the audit log', !dump.includes('CANARY'), dump.slice(Math.max(0, dump.indexOf('CANARY') - 200), dump.indexOf('CANARY') + 80));

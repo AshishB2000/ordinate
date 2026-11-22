@@ -14,7 +14,6 @@ import { seeds, FIG, ROW, DAY } from './issuesHarness';
 
 const analyze: any = require('../src/ai/analyze'); // any: the stub replaces its exports
 const weekly: typeof import('../src/server/issues/weekly') = require('../src/server/issues/weekly');
-const store: typeof import('../src/server/issues/db') = require('../src/server/issues/db');
 const nameMod: typeof import('../src/ai/issueName') = require('../src/ai/issueName');
 const note: typeof import('../src/ai/numberAuditNote') = require('../src/ai/numberAuditNote');
 const duck: Record<string, unknown> = require('../src/engine/duckdb');
@@ -48,8 +47,8 @@ const datasets: any = require('../src/data/datasets'); // any: the spy replaces 
     await seed('u7@acme.test', [['Payroll per employee?', { outside: { dataset: 'Payroll' } }]]);
     await seed('ghost@acme.test', [['How many active customers?', define('active customer')], ['Active customers please', define('active customer')], ['Show active customers', define('active customer')]], { hidden: true });
     await seed('r@acme.test', [['Why did churn rise?', { research: { runId: randomUUID() }, ...define('active customer') }]]);
-    const settings = (await W.call('ed', 'issues:settings', { projectId: P })).body;
-    ok('the check is OFF by default', settings.ok && settings.enabled === false && settings.lastRunAt === null, JSON.stringify(settings));
+    const settings = (await list()).settings;
+    ok('the check is OFF by default', settings.enabled === false && settings.lastRunAt === null, JSON.stringify(settings));
     let seen = 0;
     const spied: Array<[Record<string, unknown>, string, unknown]> = [];
     const spy = async <T>(fn: () => Promise<T>): Promise<{ out: T; calls: number }> => {
@@ -64,7 +63,7 @@ const datasets: any = require('../src/data/datasets'); // any: the spy replaces 
     ok('NEGATIVE CONTROL: the spy sees an engine path being called', (await spy(async () => datasets.getDataset(P, W.plain).catch(() => null))).calls > 0);
 
     ok('a viewer cannot switch it on, and nor can an editor', (await Promise.all(['east', 'ed'].map((who) => W.call(who, 'issues:setEnabled', { projectId: P, enabled: true })))).every((r) => r.status === 403));
-    ok('the project admin switches it on', (await W.call('boss', 'issues:setEnabled', { projectId: P, enabled: true })).body?.ok === true && (await W.call('ed', 'issues:settings', { projectId: P })).body.enabled === true);
+    ok('the project admin switches it on', (await W.call('boss', 'issues:setEnabled', { projectId: P, enabled: true })).body?.ok === true && (await list()).settings.enabled === true);
 
     // ── the first check ─────────────────────────────────────────────────────────────────────────────────────────────────────
     await thumb('t1@acme.test', 'Orders last week looks wrong?');

@@ -11,17 +11,14 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useCan } from '../projects/api';
 import { day } from '../data/format';
-import { useBoard, useIssueCall, useSettings } from './api';
+import { useBoard, useIssueCall, type Settings } from './api';
 import { IssueCard } from './IssueCard';
 import s from './Issues.module.css';
 import a from '../model/assistant/Assistant.module.css';
 
-function Bar({ projectId }: { projectId: string }) {
-  const q = useSettings(projectId);
+function Bar({ projectId, st }: { projectId: string; st: Settings }) {
   const call = useIssueCall(projectId);
   const admin = useCan(projectId)('admin');
-  if (!q.data || !q.data.ok) return null;
-  const st = q.data;
   const last = st.lastRunAt && !Number.isNaN(Date.parse(st.lastRunAt)) ? day.format(new Date(st.lastRunAt)) : '';
   const change = async (channel: 'issues:setEnabled' | 'issues:checkNow', input: Record<string, unknown>, done: string) => {
     try {
@@ -85,7 +82,7 @@ export function IssuesSection({ projectId }: { projectId: string }) {
           <p className={a.sub}>Where the Assistant struggled, from stored answers. You see the questions and why, never the answers.</p>
         </div>
       </div>
-      <Bar projectId={projectId} />
+      {board && <Bar projectId={projectId} st={board.settings} />}
       {body}
     </section>
   );

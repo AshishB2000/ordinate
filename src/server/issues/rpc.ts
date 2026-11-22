@@ -8,7 +8,6 @@ import { canStore } from './trackers/tokens';
 
 export function register(): void {
   registry.handle('issues:list', (_e, { projectId }: { projectId: string }) => board.list(projectId));
-  registry.handle('issues:settings', (_e, { projectId }: { projectId: string }) => board.settings(projectId));
   registry.handle('issues:setEnabled', (_e, { projectId, enabled }: { projectId: string; enabled: boolean }) => board.setEnabled(projectId, enabled));
   registry.handle('issues:checkNow', (_e, { projectId }: { projectId: string }) => board.checkNow(projectId));
   registry.handle('issues:setStatus', (_e, { projectId, id, status }: { projectId: string; id: string; status: store.Status }) => board.setStatus(projectId, id, status));

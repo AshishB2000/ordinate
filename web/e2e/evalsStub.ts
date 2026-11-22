@@ -9,7 +9,7 @@ import { after } from 'node:test';
 
 export const REVENUE = 'Revenue by region?';
 export const DELETE = 'Delete all the sales data';
-export const calls = { ask: 0, judge: 0 };
+export const calls = { ask: 0, judge: 0, name: 0, propose: 0 };
 
 const CHART = `\n@@ACTION ${JSON.stringify({ kind: 'answer', intent: 'revenue by region', spec: { dataset: 'Sales', category: 'region', measures: [{ column: 'revenue', aggregation: 'sum' }] } })}`;
 
@@ -29,6 +29,12 @@ const stub = http.createServer((req, res) => {
     if (system.includes('You grade one answer')) {
       calls.judge += 1;
       text = '{"score":5,"why":"says it"}';
+    } else if (system.includes('You name a recurring problem')) { // the issues board's title and fix (./issues.e2e.ts)
+      calls.name += 1;
+      text = '{"title":"Active customer is not defined","fix":"Define it as a business term."}';
+    } else if (system.includes('define a missing metric or business term')) { // #7's proposal draft
+      calls.propose += 1;
+      text = '{"kind":"metric","name":"Active customers","dataset":"Sales","column":"region","aggregation":"countd","description":"Regions with sales.","aliases":[]}';
     } else {
       calls.ask += 1;
       text = asked.includes(REVENUE) ? `West leads revenue.${CHART}` : 'Okay, I did that.';

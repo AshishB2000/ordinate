@@ -76,7 +76,7 @@ unnamed for the next run. The model never writes a count: the board shows the ap
   closed to the caller is not shown to them. Because the title and the fix were written from every question of a group, an issue
   with **any** signal on something closed to the caller is **hidden from them entirely** (fail closed; an admin opens everything).
   This goes one step past the plan, which only hid the example. See Open points.
-- The Assistant notice (Q1): "Editors may see questions that didn't get a good answer. They never see the answers."
+- The Assistant notice (Q1): "Editors may see questions that didn’t get a good answer." (its tooltip adds: They never see the answers.)
 - Signals older than 90 days are deleted by the job, and an issue left with none.
 
 ## Storage (`0048_issues_board.sql`, additive)
@@ -103,8 +103,7 @@ recorded in `last_error` and retried at the next wake. A crash repeats safely (p
 
 | Channel | Access | What |
 |---|---|---|
-| `issues:list` | write, project | the board: issues with counts, examples, fix, tickets, which trackers are connected |
-| `issues:settings` | write, project | on/off, last run, trackers connected |
+| `issues:list` | write, project | the board: issues with counts, examples, fix, tickets; the check's on/off and last run; which trackers are connected (one call, so the tab loads cheaply) |
 | `issues:setEnabled` | admin, project | switch the check |
 | `issues:checkNow` | admin, project | run the check now |
 | `issues:setStatus` | write, project | `open`, `resolved`, `ignored` |
