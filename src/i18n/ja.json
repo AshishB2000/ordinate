@@ -326,7 +326,7 @@
   "embedAskMessages.at_most_datasets_for_one_assistant": "1つのアシスタントにつきデータセットは最大{max}件です。",
   "embedAskMessages.caps_are_whole_numbers_up_to": "上限は整数で、1日あたり最大1,000,000件、1分あたり最大600件です。",
   "embedAskMessages.has_row_access_rules_or_is": "{dataset} には行アクセスルールがあるか、ルールのあるデータセットから作られています。埋め込みアシスタントでは使用できません。",
-  "embedAskMessages.is_in_a_team_folder_an": null,
+  "embedAskMessages.is_in_a_team_folder_an": "{dataset} はチームフォルダにあります。埋め込みアシスタントが使えるのは「プロジェクトの全員」内のデータセットのみです。",
   "embedAskMessages.its_prepare_steps_compute_across_rows": "{dataset}: 準備ステップが行をまたいで計算するかパラメータを読み取るため、顧客ロックを信頼できません。",
   "embedAskMessages.mark_at_least_one_dataset_with": "少なくとも1つのデータセットと、各リンクが固定する列を指定してください。",
   "embedAskMessages.needs_a_database_and_ordinate_master": "サーバーにデータベースと ORDINATE_MASTER_KEY が必要です。",

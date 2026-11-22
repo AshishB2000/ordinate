@@ -326,7 +326,7 @@
   "embedAskMessages.at_most_datasets_for_one_assistant": "Como máximo {max} conjuntos de datos por asistente.",
   "embedAskMessages.caps_are_whole_numbers_up_to": "Los límites son números enteros: hasta 1.000.000 al día y 600 por minuto.",
   "embedAskMessages.has_row_access_rules_or_is": "{dataset} tiene reglas de acceso por filas o se creó a partir de un conjunto de datos que las tiene. Un asistente integrado no puede usarlo.",
-  "embedAskMessages.is_in_a_team_folder_an": null,
+  "embedAskMessages.is_in_a_team_folder_an": "{dataset} está en una carpeta de equipo. Un asistente integrado solo puede usar conjuntos de datos de Todos en el proyecto.",
   "embedAskMessages.its_prepare_steps_compute_across_rows": "{dataset}: sus pasos de preparación calculan entre filas o leen un parámetro, así que no se puede confiar en un bloqueo por cliente.",
   "embedAskMessages.mark_at_least_one_dataset_with": "Marca al menos un conjunto de datos, con la columna que cada enlace debe bloquear.",
   "embedAskMessages.needs_a_database_and_ordinate_master": "Requiere una base de datos y ORDINATE_MASTER_KEY en el servidor.",
