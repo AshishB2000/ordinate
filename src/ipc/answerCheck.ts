@@ -4,6 +4,7 @@
 // database, or when a lookup fails, the whole project's vocabulary, the reference. scripts/test-askIndex.ts holds the
 // two Object.is-equal over a corpus of model answers.
 
+import { embedAsker } from '../server/context';
 import * as visuals from '../analysis/visuals';
 import { validateAnswerSpec } from '../ai/answerSpec';
 import type { AnswerSpec } from '../ai/answerSpec';
@@ -23,6 +24,12 @@ import { linkRefusal } from './answerLink';
  * (no database, or an index query that failed), cut to an agent's topic as the index's is.
  */
 export async function vocabulary(projectId: string, want: VocabularyWant): Promise<Vocabulary> {
+  const v = await vocabularyAll(projectId, want);
+  // An embedded Assistant's asker is offered no metric and no glossary term (docs/embedded-assistant): a measure of a metric refuses under a lock, and a term can carry a customer's value.
+  return embedAsker() ? { ...v, metrics: [], terms: [] } : v;
+}
+
+async function vocabularyAll(projectId: string, want: VocabularyWant): Promise<Vocabulary> {
   const narrow = await vocabularyFor(projectId, want);
   if (narrow) return narrow;
   const only = want.only;

@@ -12,6 +12,7 @@ import * as copilot from '../ai/copilot';
 import { askCopilot } from '../ai/analyze';
 import { allowedAction } from '../ai/suggestedAction';
 import { readAgent } from '../ai/agents';
+import { readTopic, topicForReaders } from '../analysis/topics';
 import { guidanceBlock } from '../ai/guidanceFacts';
 import * as datasets from '../data/datasets';
 import { hiddenColumnsFor, isRowPolicyError, rowLockFor } from '../data/rowAccess';
@@ -83,8 +84,26 @@ async function factsOf(projectId: string, metas: readonly datasets.DatasetMeta[]
   return { text, ledger: base.ledger };
 }
 
-/** One question, inside the embed asker's context. Never throws: a failure is a reply. */
+/**
+ * One question, inside the embed asker's context. Never throws: a failure is a reply. `signal`: the time limit. The model call takes
+ * no signal, so the ask is RACED against it: when it fires, the customer gets the failure sentence at once (the call finishes on its own).
+ */
 export async function embedAsk(question: string, history: unknown, signal?: AbortSignal): Promise<EmbedReply> {
+  if (!signal) return run(question, history, signal);
+  if (signal.aborted) return fail('failed', embedAskFailed());
+  let onAbort: () => void = () => undefined;
+  const timeout = new Promise<EmbedReply>((resolve) => {
+    onAbort = () => resolve(fail('failed', embedAskFailed()));
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([run(question, history, signal), timeout]);
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
+async function run(question: string, history: unknown, signal?: AbortSignal): Promise<EmbedReply> {
   const who = embedAsker();
   if (!who) return fail('unavailable', embedAskUnavailable());
   try {
@@ -94,7 +113,10 @@ export async function embedAsk(question: string, history: unknown, signal?: Abor
     if (!stored) return fail('unavailable', embedAskUnavailable()); // never a fall-back to the Project assistant
     const agent = stored.rec;
     if (!execConfig.assistantOn()) return fail('not_ready', embedAskNotReady());
-    const metas = await usableDatasets(who.projectId, Object.keys(who.datasets));
+    // The marking, narrowed by the agent's topic when it has one (a topic only narrows). A topic in the Trash narrows nothing: the marking is the limit.
+    const topic = agent.topicId ? await readTopic(who.projectId, agent.topicId) : null;
+    const inTopic = topic ? new Set((await topicForReaders(who.projectId, topic.rec)).topic.datasets.map((d) => d.id.toLowerCase())) : null;
+    const metas = await usableDatasets(who.projectId, Object.keys(who.datasets).filter((id) => !inTopic || inTopic.has(id)));
     if (!metas.length) return fail('no_data', embedAskNoData());
     const only = new Set(metas.map((m) => m.id));
     const facts = await factsOf(who.projectId, metas);

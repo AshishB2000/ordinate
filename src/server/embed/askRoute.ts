@@ -5,19 +5,25 @@
 // the asker (a token that does not lock every required column is refused), then the ask as that asker. From the MAC on,
 // every outcome writes one audit row: the customer's id, the agent, the outcome — never the question or the answer.
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type { FastifyInstance } from 'fastify';
 import { runInContext } from '../context';
 import { embedAsk, MAX_QUESTION } from '../../ipc/embedAsk';
 import { readHeader } from './token';
 import { verifyAskToken } from './askToken';
 import { readSettings, secretOf } from './settings';
-import { getEmbedAgent, recordAsk, type AskOutcome } from './assistants';
+import * as counters from '../counters';
+import { getCaps, getEmbedAgent, recordAsk, type AskOutcome } from './assistants';
 import { buildAsker } from './asker';
-import { embedAskFailed, embedAskUnavailable } from '../embedAskMessages';
+import { embedAskFailed, embedAskLimited, embedAskUnavailable } from '../embedAskMessages';
 
 export const EMBED_ASK_ROUTE = '/embed/ask';
-const ASK_TIMEOUT_MS = 120_000;
+let askTimeoutMs = 120_000;
+
+/** Test seam (scripts/test-embedAskRoute): the time limit, in ms; no argument restores it. */
+export function setAskTimeoutForTest(ms = 120_000): void {
+  askTimeoutMs = ms;
+}
 
 export function registerEmbedAskRoute(app: FastifyInstance): void {
   app.post<{ Body: unknown }>(EMBED_ASK_ROUTE, { bodyLimit: 64 * 1024 }, async (req, reply) => {
@@ -68,9 +74,27 @@ export function registerEmbedAskRoute(app: FastifyInstance): void {
       await record('denied', claims.agent);
       return refuse(403, embedAskUnavailable());
     }
+    // Q4: the caps, across pods. Per customer per minute (the customer's id is hashed: a key is stored) and per org per day; both or neither is charged.
+    try {
+      const caps = await getCaps(org);
+      const who = createHash('sha256').update(claims.agent + '\u0000' + claims.sub).digest('hex').slice(0, 24);
+      const taken = await counters.take(org, [
+        { key: 'embed-ask-customer:' + who, limit: caps.perMinute, windowMs: 60_000 },
+        { key: 'embed-ask-day', limit: caps.daily, windowMs: 24 * 60 * 60_000 },
+      ]);
+      if (!taken.ok) {
+        await record('limited', claims.agent);
+        reply.header('retry-after', taken.retryAfterSec);
+        return refuse(429, embedAskLimited());
+      }
+    } catch (err) {
+      req.log.error({ err: (err as Error).name }, 'embed ask: the caps could not be checked');
+      await record('error', claims.agent);
+      return refuse(503, embedAskFailed());
+    }
     const question = typeof body.question === 'string' ? body.question.slice(0, MAX_QUESTION * 2) : '';
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(new Error('embed ask time limit')), ASK_TIMEOUT_MS);
+    const timer = setTimeout(() => ac.abort(new Error('embed ask time limit')), askTimeoutMs);
     try {
       const res = await runInContext(asker.identity, id, () => embedAsk(question, body.history, ac.signal), undefined, ac.signal);
       await record(res.ok ? 'ok' : res.kind === 'blank' ? 'refused' : 'error', claims.agent);

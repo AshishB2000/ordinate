@@ -104,7 +104,10 @@ beside it, never on it, so an older release's `sanitizeAgent` cannot drop it.
 Saving a marking (phase 4) checks each dataset: it exists in the agent's project, the column is a declared
 text column, the dataset has no row rules and is not built from one, no cross-row prepare step
 (`ruleState`). The route checks all of it **again** on every ask, from the
-current record: a marking is a claim, the record is the truth.
+current record: a marking is a claim, the record is the truth. Each marked dataset also **pins the hash of the prepare
+steps that write its lock column** (`datasets = [{ id, column, writers }]`, `rowAccess.pinWriters`), as row rules pin theirs
+(D18): a step added to that column later (a find/replace that maps one customer's id onto another's) makes the lock refuse
+`pipeline`. A marking with no pin refuses.
 
 ## The ask (phase 2): a thin path, not `copilot:ask`
 
@@ -113,7 +116,7 @@ assistant when an agent is not usable. None of that is right for an outside cust
 (`src/ipc/embedAsk.ts`) is its own short function over an **explicit allow-list of readers**:
 
 1. The agent, read by id: missing, or not marked, is a refusal. **Never a fall-back** to the Project assistant.
-2. The set of datasets it may read is the marking, whatever the agent's topic says. A topic only narrows it.
+2. The set of datasets it may read is the marking, narrowed to the agent's topic's datasets when it has one (a topic in the Trash narrows nothing). Glossary terms and metrics are not in its vocabulary (`vocabulary()` returns none for an embed asker).
 3. **Facts**, built here: the schema (names, declared types, the editors' column notes and table notes) of each
    embeddable dataset, with columns hidden from the caller dropped. No sample values, no profile, no insights,
    no row, no count, no project name, no list of other datasets.
@@ -184,7 +187,7 @@ read that goes through `getDataset` outside a lock scope is refused for an embed
 2. the org has embedding on (`org_settings.embed_enabled`);
 3. the claims, the marking, the asker (every refusal audited from here);
 4. the caps (phase 4): per customer per minute, the org per day; over: 429 with `Retry-After`;
-5. `runInContext(identity, …)` and the ask; an audit row; the reply.
+5. `runInContext(identity, …)` and the ask, **raced** against a 120 s limit (the model call takes no signal: the customer gets the failure sentence when the timer wins); an audit row; the reply.
 
 Phase 3 adds `GET /embed/ask/<token>`: the small page (its own bundle, CSP `frame-ancestors` = the org's
 origins). Phase 4 adds the admin section and the snippets.

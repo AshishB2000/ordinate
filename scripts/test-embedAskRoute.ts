@@ -22,6 +22,8 @@ const analyze: any = require('../src/ai/analyze'); // any: the stub replaces its
 const execConfig: any = require('../src/app/execConfig'); // any: the stub replaces its exports
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const agents: typeof import('../src/ai/agents') = require('../src/ai/agents');
+const askRoute: typeof import('../src/server/embed/askRoute') = require('../src/server/embed/askRoute');
+const rowAccessMod: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
 const assistants: typeof import('../src/server/embed/assistants') = require('../src/server/embed/assistants');
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-embed-ask-'));
@@ -86,7 +88,7 @@ async function suite(adminUrl: string): Promise<void> {
     await boss.call('embed:save', { enabled: true, origins: [PORTAL] });
     const noMark = await post(t0);
     ok('embedding on, agent not marked: the same bare answer', noMark.status === 403 && noMark.text === r0.text && asked.length === 0);
-    await assistants.setEmbedAgent('acme', 'boss@acme.test', { agentId: agent.id, projectId: pid, datasets: [{ id: DS, column: 'customer_id' }] });
+    await assistants.setEmbedAgent('acme', 'boss@acme.test', { agentId: agent.id, projectId: pid, datasets: [{ id: DS, column: 'customer_id', writers: (await inBoss(() => rowAccessMod.pinWriters(pid, DS, 'customer_id')))! }] });
 
     const good = await post(t0, { question: 'How many shipments by city? SECRET_QUESTION_TEXT' });
     ok('a valid token is answered, with the customer\'s own chart', good.status === 200 && good.json?.ok === true && JSON.stringify(good.json.card?.data).includes('MINE_0'), good.text.slice(0, 300));
@@ -114,11 +116,39 @@ async function suite(adminUrl: string): Promise<void> {
     for (const bad of [undefined, 5, '', 'a.b', 'x'.repeat(9000)]) ok(`a malformed token ${typeof bad}: 403`, (await post(bad)).status === 403);
     const blank = await post(t0, { question: '   ' });
     ok('a blank question: refused with a sentence, not asked', blank.status === 400 && blank.json?.ok === false);
+    // Q4: the caps. 2 a minute per customer, then the next is a 429 with Retry-After and a `limited` audit row, charging nothing more.
+    await pool.query(`INSERT INTO embed_assistant_limits (org_id, per_minute_cap, daily_cap) VALUES ('acme', 2, 1000)`);
+    const tCap = hostSign(SECRET, claims({ sub: 'capped-customer' }));
+    const c1 = await post(tCap); const c2 = await post(tCap); const c3 = await post(tCap);
+    ok('caps: the first two questions of a customer are answered', c1.status === 200 && c2.status === 200, `${c1.status} ${c2.status}`);
+    ok('caps: the third in the minute is a 429 with Retry-After and a sentence, not asked', c3.status === 429 && Number(c3.r.headers.get('retry-after')) >= 1 && c3.json?.ok === false, `${c3.status} ${c3.text}`);
+    const askedBefore = asked.length;
+    const other = await post(hostSign(SECRET, claims({ sub: 'another-customer' })));
+    ok('caps: another customer is not held by the first one\'s cap', other.status === 200 && asked.length === askedBefore + 1);
+    ok('caps: the refusal wrote one `limited` audit row for that customer', (await pool.query(`SELECT count(*)::int AS n FROM embed_asks WHERE outcome = 'limited' AND customer = 'capped-customer'`)).rows[0].n === 1);
+    await pool.query(`UPDATE embed_assistant_limits SET per_minute_cap = 100, daily_cap = 3`);
+    const day = await post(hostSign(SECRET, claims({ sub: 'daily-a' })));
+    ok('caps: the org\'s daily cap holds across customers (more than 3 questions were already counted today)', day.status === 429, `${day.status}`);
+    await pool.query(`DELETE FROM embed_assistant_limits`);
+    await pool.query(`DELETE FROM shared_counters`);
+    ok('control: with the caps cleared the next question is answered', (await post(hostSign(SECRET, claims({ sub: 'daily-b' })))).status === 200);
+
+    // The time limit stops waiting for a model that never answers.
+    const hang = analyze.askCopilot;
+    analyze.askCopilot = () => new Promise(() => undefined);
+    askRoute.setAskTimeoutForTest(400);
+    const t0ms = Date.now();
+    const slow = await post(hostSign(SECRET, claims({ sub: 'slow-customer' })));
+    askRoute.setAskTimeoutForTest();
+    analyze.askCopilot = hang;
+    ok('timeout: a hanging model gets the failure sentence at the limit, not after it', slow.status === 200 && slow.json?.ok === false && /could not answer/.test(slow.json?.error ?? '') && Date.now() - t0ms < 5000, `${slow.status} ${slow.text} ${Date.now() - t0ms}ms`);
+    ok('timeout: …and the audit row says error', (await pool.query(`SELECT outcome FROM embed_asks WHERE customer = 'slow-customer'`)).rows[0]?.outcome === 'error');
+
     await boss.call('embed:rotate');
     ok('rotating the secret kills every token', (await post(t0)).status === 403);
 
     const audit = await rowsOfAudit();
-    ok('audit: one row per token whose MAC held, customer, agent and outcome only', audit.some((a) => a.outcome === 'ok' && a.customer === 'cust-secret-id-9' && a.agent_id === agent.id) && audit.every((a) => ['ok', 'denied', 'error', 'refused'].includes(a.outcome)), JSON.stringify(audit));
+    ok('audit: one row per token whose MAC held, customer, agent and outcome only', audit.some((a) => a.outcome === 'ok' && a.customer === 'cust-secret-id-9' && a.agent_id === agent.id) && audit.every((a) => ['ok', 'denied', 'error', 'refused', 'limited'].includes(a.outcome)), JSON.stringify(audit));
     const dump = JSON.stringify((await pool.query('SELECT * FROM embed_asks')).rows);
     ok('audit: no question, no answer, no value in it', !dump.includes('SECRET_QUESTION_TEXT') && !dump.includes('MINE_') && !dump.includes('CV_ONE'));
     const threads = await pool.query(`SELECT count(*)::int AS n FROM records WHERE kind LIKE '%thread%' OR path LIKE '%threads%'`).catch(() => ({ rows: [{ n: 0 }] }));

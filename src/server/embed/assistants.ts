@@ -11,7 +11,8 @@ export const DEFAULT_DAILY_CAP = 1000;
 export const DEFAULT_PER_MINUTE_CAP = 10;
 export const MAX_EMBED_DATASETS = 12;
 
-export interface EmbedDataset { readonly id: string; readonly column: string }
+/** `writers`: the hash of the steps that write `column`, pinned at marking (rowAccess.pinWriters). Without one the dataset refuses. */
+export interface EmbedDataset { readonly id: string; readonly column: string; readonly writers?: string }
 export interface EmbedAgent { readonly agentId: string; readonly projectId: string; readonly datasets: readonly EmbedDataset[] }
 export interface Caps { readonly daily: number; readonly perMinute: number }
 
@@ -25,10 +26,10 @@ const pool = (): Pool => {
 export function sanitizeDatasets(raw: unknown): EmbedDataset[] {
   const out: EmbedDataset[] = [];
   for (const d of Array.isArray(raw) ? raw : []) {
-    const e = d as { id?: unknown; column?: unknown } | null;
+    const e = d as { id?: unknown; column?: unknown; writers?: unknown } | null;
     if (!e || !isValidId(e.id) || typeof e.column !== 'string' || !e.column || e.column.length > 256) continue;
     const id = String(e.id).toLowerCase();
-    if (!out.some((x) => x.id === id)) out.push({ id, column: e.column });
+    if (!out.some((x) => x.id === id)) out.push({ id, column: e.column, ...(typeof e.writers === 'string' && e.writers ? { writers: e.writers } : {}) });
   }
   return out.slice(0, MAX_EMBED_DATASETS);
 }

@@ -72,7 +72,7 @@ ok('an Assistant token is refused by the dashboard parser', (() => { const r = v
 const marking = { agentId: AGENT, projectId: '2b4e28ba-2fa1-41d2-883f-0016d3cca427', datasets: [{ id: DS.toUpperCase(), column: 'customer_id' }] };
 const claims = (p: Record<string, readonly (string | number)[]>) => ({ agent: AGENT, sub: 'cust-123', exp: NOW + 600, params: p });
 const a = buildAsker(ORG, claims({ customer_id: [7, 'C1'] }), marking);
-ok('control: the asker locks the dataset (lowercase id) to the values as text', a.ok && JSON.stringify(a.identity.embed?.datasets[DS]) === JSON.stringify({ column: 'customer_id', values: ['7', 'C1'] }) && a.identity.user.role === 'viewer');
+ok('control: the asker locks the dataset (lowercase id) to the values as text', a.ok && JSON.stringify(a.identity.embed?.datasets[DS]) === JSON.stringify({ column: 'customer_id', values: ['7', 'C1'], writers: '' }) && a.identity.user.role === 'viewer');
 ok('the asker\'s email carries a hash, never the customer id', a.ok && !a.identity.user.email.includes('cust-123') && a.identity.user.email.startsWith('embed:'));
 const two = { ...marking, datasets: [...marking.datasets, { id: '7f1c1b5e-6a0e-4a8f-9c55-1f8e4c0d2a10', column: 'account' }] };
 ok('a token that lacks a required column: refused whole', (() => { const r = buildAsker(ORG, claims({ customer_id: ['C1'] }), two); return !r.ok && r.reason === 'lock_missing'; })());

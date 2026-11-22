@@ -281,7 +281,9 @@ async function embedLock(embed: EmbedAsker, projectId: string, datasetId: string
   if (eff.kind !== 'none') refuse('derived'); // rules of its own, or built from a dataset that has them
   const raw = await readRaw(projectId, datasetId);
   if (!raw) refuse('unreadable');
-  const state = ruleState(raw, { column: entry.column, rules: [], stepsHash: writersHash(sanitizeSteps(raw.steps), entry.column) });
+  // The writers' hash pinned when the agent was marked (D18): a step that writes the lock column since then refuses. No pin, no read.
+  if (!entry.writers) refuse('pipeline');
+  const state = ruleState(raw, { column: entry.column, rules: [], stepsHash: entry.writers });
   if (state === 'column') refuse('column');
   if (state !== 'ok') refuse('pipeline');
   let lock: Lock | null = null;
@@ -292,6 +294,15 @@ async function embedLock(embed: EmbedAsker, projectId: string, datasetId: string
   }
   if (!lock) refuse('none');
   return lock;
+}
+
+/**
+ * The value an admin's marking pins for `datasetId` and its lock `column` (docs/embedded-assistant): the hash of the prepare
+ * steps that can write that column right now. Null when the dataset has no readable record.
+ */
+export async function pinWriters(projectId: string, datasetId: string, column: string): Promise<string | null> {
+  const raw = isValidId(projectId) && isValidId(datasetId) ? await readRaw(projectId, datasetId) : null;
+  return raw ? writersHash(sanitizeSteps(raw.steps), column) : null;
 }
 
 /** Why the caller may not read `id`'s rows here, or null — the check only: nothing recorded, nothing thrown. `rowsOnly`: the row rules alone. */

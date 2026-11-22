@@ -37,7 +37,7 @@ export interface EmbedAsker {
   readonly projectId: string;
   /** The token's `sub`. Data: never logged. */
   readonly customer: string;
-  readonly datasets: Readonly<Record<string, { readonly column: string; readonly values: readonly string[] }>>;
+  readonly datasets: Readonly<Record<string, { readonly column: string; readonly values: readonly string[]; readonly writers: string }>>;
 }
 
 export interface Identity {

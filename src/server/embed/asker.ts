@@ -16,11 +16,11 @@ export function buildAsker(org: string, claims: AskClaims, marking: EmbedAgent):
   if (claims.agent.toLowerCase() !== marking.agentId.toLowerCase()) return { ok: false, reason: 'lock_missing' };
   const required = new Set(marking.datasets.map((d) => d.column));
   if (Object.keys(claims.params).some((c) => !required.has(c))) return { ok: false, reason: 'lock_extra' };
-  const datasets: Record<string, { column: string; values: string[] }> = Object.create(null) as Record<string, { column: string; values: string[] }>;
+  const datasets: Record<string, { column: string; values: string[]; writers: string }> = Object.create(null) as Record<string, { column: string; values: string[]; writers: string }>;
   for (const d of marking.datasets) {
     const values = Object.prototype.hasOwnProperty.call(claims.params, d.column) ? claims.params[d.column].map(asText) : [];
     if (!values.length) return { ok: false, reason: 'lock_missing' };
-    datasets[d.id.toLowerCase()] = { column: d.column, values };
+    datasets[d.id.toLowerCase()] = { column: d.column, values, writers: d.writers ?? '' };
   }
   return {
     ok: true,
