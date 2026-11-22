@@ -40,7 +40,7 @@ function Form({ saved, models }: { saved: Pick; models: AiAdmin['models'] }) {
         save.mutate(models.find((m) => keyOf(m) === choice) ? { provider: models.find((m) => keyOf(m) === choice)!.provider, model: models.find((m) => keyOf(m) === choice)!.model } : null);
       }}
     >
-      <Select label="Judge model" value={choice} options={options} hint="Scores only the words a test case should say. A model grading its own replies can be softer on them." onValueChange={(v) => { setError(''); setChoice(v); }} />
+      <Select label="Judged by" value={choice} options={options} hint="Scores only the words a test case should say. A model grading its own replies can be softer on them." onValueChange={(v) => { setError(''); setChoice(v); }} />
       {error && <p className={s.lead} role="alert">{error}</p>}
       <div className={s.aiFormActions}>
         <Button type="submit" variant="primary" icon="check" disabled={choice === keyOf(saved)} loading={save.isPending} aria-label="Save judge model">

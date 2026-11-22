@@ -51,6 +51,7 @@ export const SKIP: Readonly<Record<string, string>> = {
   '/assistant': 'the dock’s conversation full width: its writes sit on answers, which need a model the walk’s server has none of',
   '/requests/:projectId/:requestId': 'a dashboard request’s review: approvers only (an editor with Edit on its datasets), refused to a viewer by the server; walked by requests.e2e.ts',
   '/research/:projectId/:runId': 'a deep research report: private to the person who started the run, refused to everyone else by the server (test-researchAccess); walked by research.e2e.ts',
+  '/evals/:projectId/:runId': 'a suite run\'s results: editors and admins only (eval:runGet is write, a viewer gets 403 before the handler: test-evalAccess); walked by evals.e2e.ts',
 };
 
 /** The route patterns of routes.tsx's source that are neither walked nor skipped. */
