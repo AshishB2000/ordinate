@@ -1,7 +1,7 @@
 // E2E: knowledge documents (docs/knowledge-docs/00-design.md), the whole path, on the real server with Postgres, header
 // sign-in and the STUB model provider on loopback (./agentsStub.ts: no real network call is made).
 //
-//   - Data model → Assistant: the Documents section is an empty state that points short rules to Instructions.
+//   - Assistant → Agents & setup: the Documents section is an empty state that points short rules to Instructions.
 //   - The admin types a document, uploads a small .docx and a small PDF (each read in a worker thread, the text shown
 //     back exactly), and is refused a scanned PDF with its own sentence.
 //   - In "Try a question" they ask about refunds: the stub provider's prompt carries the matching passage, and "How
@@ -63,7 +63,7 @@ if (!dbUrl) {
     assert.equal((await rpc('ai:setModels', { models: [{ provider: 'anthropic', model: 'claude-sonnet-stub', label: 'Claude Sonnet Stub' }], defaultIndex: 0 })).ok, true);
 
     // ── Empty ──────────────────────────────────────────────────────────────
-    await page.goto(`/model/${pid}?tab=assistant`);
+    await page.goto(`/assistant/setup/${pid}`);
     const docs = page.getByRole('region', { name: 'Documents' });
     await docs.getByText('No documents yet').waitFor();
     assert.match((await docs.textContent()) ?? '', /Short rules, one line each, belong in Instructions\./);

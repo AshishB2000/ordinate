@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
 import { okOr, type Fail } from '../data/api';
-import type { Instruction } from '../model/assistant/api';
+import type { Instruction } from './setup/api';
 import type { AiModel, AiStatus, Provider } from './api';
 
 /** The one that is always there: today's Assistant, all the data the person can read. Not a record. */

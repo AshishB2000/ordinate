@@ -2,7 +2,7 @@
 // next above a list of datasets grouped by role, and the picked dataset's panel beside it. The pick and
 // the panel's tab are in the URL (?dataset=, ?panel=), so a link reopens them.
 
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useDatasets, type DatasetSummary } from '../../../api/datasets';
 import { Badge } from '../../../ui/Badge';
 import { buttonClass } from '../../../ui/Button';
@@ -11,6 +11,7 @@ import { SkeletonBlock, SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { useMe } from '../../auth/api';
 import { useCanEdit } from '../../projects/api';
+import { setupPath } from '../../assistant/setup/setupPath';
 import { todoPanel, useModelOverview, type ModelTable, type ReviewItem, type TodoItem } from '../api';
 import { StatusBadge } from '../status/StatusBadge';
 import { formatNumber } from '../../data/format';
@@ -96,6 +97,7 @@ export function DatasetsTab({ projectId, topic }: { projectId: string; topic?: N
   const canEdit = useCanEdit(projectId);
   const [params, setParams] = useSearchParams();
   const sug = useSuggestions(projectId, undefined, canEdit).data;
+  const navigate = useNavigate();
 
   const go = (datasetId: string, panel: string) =>
     setParams((p) => {
@@ -106,7 +108,7 @@ export function DatasetsTab({ projectId, topic }: { projectId: string; topic?: N
     }, { replace: true });
   const open = (item: TodoItem) =>
     item.kind === 'verified_broken'
-      ? setParams(new URLSearchParams({ tab: 'assistant' }), { replace: true }) // the verified list is on the Assistant tab
+      ? void navigate(setupPath(projectId)) // the verified list is on the Assistant's setup page
       : go(item.datasetId, todoPanel(item.kind));
   // A review chip opens the item where an admin acts on it: a dataset here, a metric or term on its tab.
   const openReview = (item: ReviewItem) => {

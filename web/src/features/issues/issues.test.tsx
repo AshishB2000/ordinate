@@ -48,7 +48,7 @@ const ISSUE = {
 };
 const SET = { enabled: true, lastRunAt: '2026-11-18T10:00:00Z', lastError: null, checking: false };
 const BOARD = (issues: unknown[] = [ISSUE], trackers = { linear: false, jira: false }, settings: object = {}) => body({ ok: true, available: true, issues, trackers, settings: { ...SET, ...settings } });
-const tab = (extra = '') => renderApp(`/model/${PID}?tab=assistant${extra}`);
+const tab = (extra = '') => renderApp(`/assistant/setup/${PID}${extra ? `?${extra.slice(1)}` : ''}`);
 
 describe('the notice in the Assistant', () => {
   it('the composer says editors may see questions that did not get a good answer, and never the answers', async () => {

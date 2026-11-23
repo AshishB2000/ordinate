@@ -16,7 +16,7 @@ import { useCanEdit, useRoles } from '../projects/api';
 import { MetricEditor } from '../analyses/metrics/MetricEditor';
 import { DatasetsTab } from './datasets/DatasetsTab';
 import { SourcesLoading, SourceTablesTab } from './sources/SourceTablesTab';
-import { AssistantTab } from './assistant/AssistantTab';
+import { setupPath } from '../assistant/setup/setupPath';
 import { ProposalsTab } from './proposals/ProposalsTab';
 import { MetricsTab } from './metrics/MetricsTab';
 import { GlossaryTab } from './terms/GlossaryTab';
@@ -29,7 +29,7 @@ import { TopicPicker } from './topics/TopicPicker';
 import { ExportMenu } from './ExportMenu';
 import { ImportDialog } from './ImportDialog';
 
-const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant', 'proposals'] as const;
+const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'proposals'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
@@ -50,6 +50,8 @@ function Section({ projectId }: { projectId: string }) {
   const topic = nav.data?.topics?.find((t) => t.id === pick); // a pick that names no topic (deleted, another project's) is All
   const [importing, setImporting] = useState(false);
   const asked = params.get('tab');
+  // The Assistant tab moved to the Assistant's own setup page; an old link (a ticket's, a bookmark) lands there.
+  const moved = asked === 'assistant';
   const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'datasets';
   const setTab = (v: string) =>
     setParams((p) => {
@@ -63,6 +65,7 @@ function Section({ projectId }: { projectId: string }) {
     void client.invalidateQueries({ queryKey: ['metric:list', projectId] });
     setTab('metrics');
   };
+  if (moved) return <Navigate to={setupPath(projectId, params.toString())} replace />;
   // Source tables are an editor's: a viewer's address lands on Datasets, once the roles are known (not before: an editor's link waits).
   if ((tab === 'sources' || tab === 'proposals') && !roles.isPending && !canEdit) return <Navigate to="?tab=datasets" replace />;
   return (
@@ -109,9 +112,6 @@ function Section({ projectId }: { projectId: string }) {
           <Tab value="relationships" icon="link">
             Relationships
           </Tab>
-          <Tab value="assistant" icon="sparkles">
-            Assistant
-          </Tab>
           {canEdit && (
             <Tab value="proposals" icon="file-text">
               Proposals
@@ -131,9 +131,6 @@ function Section({ projectId }: { projectId: string }) {
         <TabPanel value="relationships">
           <RelationshipsTab projectId={projectId} topic={topic} />
           <DefaultJoins projectId={projectId} />
-        </TabPanel>
-        <TabPanel value="assistant">
-          <AssistantTab projectId={projectId} />
         </TabPanel>
         <TabPanel value="proposals">{canEdit ? <ProposalsTab projectId={projectId} /> : null}</TabPanel>
       </Tabs>

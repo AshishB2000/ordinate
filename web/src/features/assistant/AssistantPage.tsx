@@ -11,11 +11,12 @@
 // by the day each was last touched (History.tsx groupThreads). Below 900px the
 // column gives way to the dock's own dropdown in the header. The open
 // conversation is in the URL (`?thread=`), so a reload or a way back to it
-// opens it again; an id that is not one is ignored.
+// opens it again; an id that is not one is ignored. "Agents & setup" opens the project's
+// setup (setup/SetupPage.tsx): its agents, instructions, documents and verified questions.
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
-import { Button, IconButton } from '../../ui/Button';
+import { Link, useSearchParams } from 'react-router';
+import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { Icon } from '../../ui/icons/Icon';
 import { SkeletonRows } from '../../ui/Skeleton';
@@ -28,6 +29,7 @@ import { ConversationBody, ConversationDialogs } from './Conversation';
 import { DockMenu, ModelPicker, ThreadMenu, useBackToDock } from './DockParts';
 import { UUID } from './dockRoute';
 import { rememberPageThread } from './dockState';
+import { setupPath } from './setup/setupPath';
 import { AgentTag, groupThreads, History, MoreThreads } from './History';
 import { useConversation, type Conversation } from './useConversation';
 import { useSlackLanding } from './useSlackLanding';
@@ -124,6 +126,12 @@ export default function AssistantPage() {
           <Button size="sm" icon="plus" aria-label="New conversation" disabled={!c.pid || !!c.pending} onClick={() => void c.startNew()}>
             <span className={w.newLabel}>New conversation</span>
           </Button>
+          {c.pid && (
+            <Link className={buttonClass('secondary', 'sm')} to={setupPath(c.pid)} aria-label="Agents & setup" title="The project's agents, instructions, documents and verified questions">
+              <Icon name="settings" />
+              <span className={w.newLabel}>Agents &amp; setup</span>
+            </Link>
+          )}
           <span className={w.narrowOnly}>
             <History projectId={c.pid} threadId={c.shownThread} open={c.historyOpen} onOpenChange={c.setHistoryOpen} onOpen={c.switchThread} onAct={c.setAct} showAgents={c.agents.length > 0} />
           </span>

@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { SlackTab } from './SlackTab';
 import { SlackGroup } from '../../settings/SlackGroup';
-import { SlackChannels } from '../../model/assistant/SlackChannels';
+import { SlackChannels } from '../../assistant/setup/SlackChannels';
 import { mount, serve } from '../../subscriptions/testServer';
 import { useSlackLanding } from '../../assistant/useSlackLanding';
 import { takePendingQuestion } from '../../assistant/dockState';

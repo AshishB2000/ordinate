@@ -74,6 +74,8 @@ describe('the Assistant’s page', () => {
     expect(await within(page).findByText(/^(Good (morning|afternoon|evening)|Good to see you), Pat$/)).toBeTruthy();
     expect(await within(page).findByText('Ledger · 2 datasets · 1 dashboard. Ask a question, or say what to build.')).toBeTruthy();
     expect(within(page).getByTestId('assistant-title').textContent).toBe('New conversation');
+    // The project's setup (agents, instructions, documents) is one click away, on its own page.
+    expect((await within(page).findByRole('link', { name: 'Agents & setup' })).getAttribute('href')).toBe(`/assistant/setup/${PID}`);
     const box = within(page).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
     await waitFor(() => expect(box.disabled).toBe(false));
     expect(box.placeholder).toBe('Ask about your data, or say what to build…');

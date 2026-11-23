@@ -19,7 +19,7 @@ import { PART_TEXT, useEvalCall, useSuites, type SuiteRow } from './api';
 import { RunCard } from './RunCard';
 import { SuiteCases } from './SuiteCases';
 import s from './Evals.module.css';
-import a from '../model/assistant/Assistant.module.css';
+import a from '../assistant/setup/Assistant.module.css';
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 

@@ -246,8 +246,8 @@ describe('Organization settings (Admin)', () => {
     const group = await screen.findByRole('region', { name: 'Screenshot analysis rules' });
     expect(within(group).getByText(/added to every screenshot analysis the Assistant writes/)).toBeTruthy();
     expect((within(group).getByRole('textbox', { name: 'Screenshot analysis rules' }) as HTMLTextAreaElement).value).toBe('Flag any risks.');
-    expect(within(group).getByText(/is set per project:/).textContent).toBe('What the Assistant should know when it answers questions is set per project: Data model → Assistant');
-    expect(within(group).getByRole('link', { name: 'Data model → Assistant' }).getAttribute('href')).toBe('/model?tab=assistant');
+    expect(within(group).getByText(/is set per project:/).textContent).toBe('What the Assistant should know when it answers questions is set per project: Assistant → Agents & setup');
+    expect(within(group).getByRole('link', { name: 'Assistant → Agents & setup' }).getAttribute('href')).toBe('/assistant/setup');
     expect(screen.queryByRole('region', { name: 'Assistant rules' })).toBeNull();
   });
 

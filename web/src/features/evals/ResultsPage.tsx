@@ -90,7 +90,7 @@ export default function ResultsPage() {
   const { projectId, runId } = useParams();
   const q = useRun(projectId, runId);
   const call = useEvalCall(projectId ?? '');
-  const back = { to: `/model/${projectId}?tab=assistant`, label: 'Data model' };
+  const back = { to: `/assistant/setup/${projectId}`, label: 'Agents & setup' };
   if (!projectId || !runId) return <ErrorState title="No results here" message="This link is missing its run." />;
   if (q.isPending) return <PageSkeleton />;
   const data = q.data;

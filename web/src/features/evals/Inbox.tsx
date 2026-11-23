@@ -13,7 +13,7 @@ import { REASONS } from '../assistant/Thumbs';
 import { AddToTestsDialog } from './AddToTests';
 import { useEvalCall, useInbox, type InboxItem } from './api';
 import s from './Evals.module.css';
-import a from '../model/assistant/Assistant.module.css';
+import a from '../assistant/setup/Assistant.module.css';
 
 const REASON = new Map<string, string>(REASONS.map((r) => [r.id, r.label]));
 

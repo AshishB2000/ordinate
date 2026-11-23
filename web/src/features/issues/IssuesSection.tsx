@@ -15,7 +15,7 @@ import { day } from '../data/format';
 import { useBoard, useIssueCall, type Settings } from './api';
 import { IssueCard } from './IssueCard';
 import s from './Issues.module.css';
-import a from '../model/assistant/Assistant.module.css';
+import a from '../assistant/setup/Assistant.module.css';
 
 function Bar({ projectId, st }: { projectId: string; st: Settings }) {
   const call = useIssueCall(projectId);

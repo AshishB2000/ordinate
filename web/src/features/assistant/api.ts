@@ -6,7 +6,7 @@
 import { useEffect } from 'react';
 import { useInfiniteQuery, useQuery, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
-import { useVerified } from '../model/assistant/api';
+import { useVerified } from './setup/api';
 import type { Card, CardReply } from './AnswerCard';
 import type { SqlTurn } from './AnswerSql';
 

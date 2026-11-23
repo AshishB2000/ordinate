@@ -43,10 +43,10 @@ const section = () => screen.findByRole('region', { name: 'Verified questions' }
 const rows = async () => within(await screen.findByRole('list', { name: 'Verified questions' }, LAZY)).getAllByRole('listitem');
 const sent = (calls: { channel: string; payload: unknown }[], channel: string) => calls.filter((c) => c.channel === channel).map((c) => c.payload);
 
-describe('The Data model: verified questions', () => {
+describe('Agents & setup: verified questions', () => {
   it('two rows, one broken: the count, "1 no longer runs", what each draws, who and when, and why the broken one stopped', async () => {
     serve();
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     const [works, broken] = await rows();
     expect(within(s).getByText('1 no longer runs')).toBeTruthy();
@@ -63,7 +63,7 @@ describe('The Data model: verified questions', () => {
     const saved = { ok: true, question: { ...WORKS, note: 'Gross', tag: 'tag-next' } };
     let n = 0;
     const calls = serve({ 'verified:save': () => (n++ ? { status: 409, body: { code: 'record_changed', message: 'stale' } } : { body: saved }) });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const [works] = await rows();
     fireEvent.click(within(works).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: 'Edit verified question' });
@@ -83,7 +83,7 @@ describe('The Data model: verified questions', () => {
 
   it('a refusal shows the server\'s sentence beside its box, and keeps what was typed', async () => {
     serve({ 'verified:save': { body: { ok: false, error: '“Sales” is already a verified question or one of its phrasings.', field: 'phrasings' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     fireEvent.click(within((await rows())[0]).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: 'Edit verified question' });
     const box = within(dialog).getByRole('textbox', { name: 'Other ways people ask it' }) as HTMLTextAreaElement;
@@ -96,7 +96,7 @@ describe('The Data model: verified questions', () => {
 
   it('Delete asks first: Keep it sends nothing; Delete sends verified:delete', async () => {
     const calls = serve({ 'verified:delete': { body: { ok: true } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const [, broken] = await rows();
     expect(within(broken).queryByRole('button', { name: 'Edit' })).toBeNull(); // a spec that no longer runs cannot be saved again
     fireEvent.click(within(broken).getByRole('button', { name: 'Delete' }));
@@ -112,7 +112,7 @@ describe('The Data model: verified questions', () => {
 
   it('NEGATIVE CONTROL: a viewer reads the rows and gets no Edit or Delete', async () => {
     const calls = serve({}, 'viewer');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:roles')).toBe(true));
     expect(await rows()).toHaveLength(2);
@@ -122,7 +122,7 @@ describe('The Data model: verified questions', () => {
   it('a hidden row (no spec) reads its question and the server\'s "values hidden" words, and offers no Edit', async () => {
     const { spec: _s, ...hidden } = row(V1, 'West customers', { filters: ['customer · values hidden by row access rules'] });
     serve({}, 'editor', [hidden]);
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const [only] = await rows();
     expect(within(only).getByText('West customers')).toBeTruthy();
     expect(only.textContent).toContain('customer · values hidden by row access rules');
@@ -131,14 +131,14 @@ describe('The Data model: verified questions', () => {
 
   it('none yet: the empty state says what a verified question is', async () => {
     serve({}, 'editor', []);
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect(await screen.findByRole('heading', { name: 'No verified questions yet' }, LAZY)).toBeTruthy();
     expect((await section()).textContent).toContain('A verified question is answered the team’s way every time, by the app, without a model.');
   });
 
   it('an old server without verified:list shows its error state, the instructions still draw, and Retry asks again', async () => {
     const calls = serve({ 'verified:list': { status: 404, body: { error: 'not_found', message: 'Unknown channel' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const alert = await within(await section()).findByRole('alert', {}, LAZY);
     expect(alert.textContent).toContain('The verified questions could not be loaded');
     expect(await screen.findByRole('heading', { name: 'No instructions yet' })).toBeTruthy();

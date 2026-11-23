@@ -356,7 +356,7 @@ function Assistant({ rules, autoRefresh, alerts, explain }: { rules: string; aut
       <Group title="Screenshot analysis rules" desc="Fixed instructions added to every screenshot analysis the Assistant writes for this organization. The required output format wins if they conflict.">
         <div className={s.rules}>
           <p className={s.rulesNote}>
-            What the Assistant should know when it answers questions is set per project: <Link className={s.inlineLink} to="/model?tab=assistant">Data model → Assistant</Link>
+            What the Assistant should know when it answers questions is set per project: <Link className={s.inlineLink} to="/assistant/setup">Assistant → Agents &amp; setup</Link>
           </p>
           <Textarea
             aria-label="Screenshot analysis rules"

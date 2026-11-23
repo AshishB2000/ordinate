@@ -119,7 +119,7 @@ if (!dbUrl) {
 
     // ── An agent takes a channel ────────────────────────────────────────
     const agent = (await rpc('agent:save', { projectId: pid, agent: { name: 'Sales agent', topicId: null, model: null, build: false, teamIds: [] } })).agent.id as string;
-    await page.goto(`/model/${pid}?tab=assistant&agent=${agent}`);
+    await page.goto(`/assistant/setup/${pid}?agent=${agent}`);
     await settled(page);
     const channels = page.getByRole('group', { name: 'Slack channels' });
     await channels.getByRole('checkbox', { name: '#sales' }).waitFor();

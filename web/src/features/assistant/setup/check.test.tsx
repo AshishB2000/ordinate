@@ -80,10 +80,10 @@ const section = () => screen.findByRole('region', { name: 'Verified questions' }
 const rowOf = async (question: string) => (await within(await section()).findByText(question)).closest('li') as HTMLElement;
 const sent = (calls: { channel: string; payload: unknown }[], channel: string) => calls.filter((c) => c.channel === channel).map((c) => c.payload);
 
-describe('The Data model: Check the Assistant', () => {
+describe('Agents & setup: Check the Assistant', () => {
   it('a done run reads its score on the button, from the server\'s counts', async () => {
     serve({}, 'editor', run());
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect(await within(await section()).findByRole('button', { name: 'Check the Assistant · 12 of 14' })).toBeTruthy();
   }, 30_000); // the first test pays for the lazy route chunk's transform
 
@@ -96,7 +96,7 @@ describe('The Data model: Check the Assistant', () => {
       'verified:check': () => { started = true; return { body: { ok: true, runId: R } }; },
       'verified:checkResult': () => ({ body: { ok: true, run: started ? run({ state: 'running', asked: 0, total: 4, matched: 0, finishedAt: undefined }) : null } }),
     });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     fireEvent.click(await within(await section()).findByRole('button', { name: 'Check the Assistant' }));
     const dialog = await screen.findByRole('dialog', { name: 'Check the Assistant on 4 verified questions?' });
     expect(dialog.textContent).toContain('It asks the model once per question (at most 50).');
@@ -112,7 +112,7 @@ describe('The Data model: Check the Assistant', () => {
   it('a running run reads its progress, and is read again on its tab\'s job pushes only', async () => {
     let asked = 3;
     const calls = serve({ 'verified:checkResult': () => ({ body: { ok: true, run: run({ state: 'running', asked, matched: 2, finishedAt: undefined }) } }) });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const button = await within(await section()).findByRole('button', { name: 'Checking… 3 of 14' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
     const reads = () => sent(calls, 'verified:checkResult').length;
@@ -131,7 +131,7 @@ describe('The Data model: Check the Assistant', () => {
       total: 3, asked: 3, matched: 1,
       results: [{ id: V1, outcome: 'match' }, { id: V2, outcome: 'differs' }, { id: V3, outcome: 'refused', reason: 'The Assistant did not answer with a chart.' }],
     }));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect((await rowOf('Revenue by region')).textContent).toContain('✓ The Assistant gets this');
     expect((await rowOf('Profit by category')).textContent).toContain('✗ The Assistant answers it differently');
     const refused = await rowOf('Top 5 states by revenue');
@@ -142,7 +142,7 @@ describe('The Data model: Check the Assistant', () => {
 
   it('with no model the button is disabled, and says why', async () => {
     serve({ 'ai:status': { body: NO_MODEL } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await waitFor(() => expect((within(s).getByRole('button', { name: 'Check the Assistant' }) as HTMLButtonElement).disabled).toBe(true));
     expect(within(s).getByRole('button', { name: 'Check the Assistant' }).getAttribute('title')).toBe('Connect a model to check the Assistant.');
@@ -150,7 +150,7 @@ describe('The Data model: Check the Assistant', () => {
 
   it('a stopped run says it stopped before the end, and how far it got', async () => {
     serve({}, 'editor', run({ state: 'stopped', asked: 5, matched: 4 }));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     expect(await within(s).findByText('The last check stopped before the end, after 5 of 14 questions.')).toBeTruthy();
     expect(within(s).getByRole('button', { name: 'Check the Assistant' })).toBeTruthy();
@@ -158,7 +158,7 @@ describe('The Data model: Check the Assistant', () => {
 
   it('NEGATIVE CONTROL: a viewer reads each row\'s result and gets no button', async () => {
     const calls = serve({}, 'viewer', run({ total: 1, asked: 1, matched: 1, results: [{ id: V1, outcome: 'match' }] }));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect((await rowOf('Revenue by region')).textContent).toContain('✓ The Assistant gets this');
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:roles')).toBe(true));
     expect(within(await section()).queryByRole('button', { name: /Check the Assistant/ })).toBeNull();
@@ -166,7 +166,7 @@ describe('The Data model: Check the Assistant', () => {
 
   it('an older server without verified:check shows its error with Try again, which asks again', async () => {
     const calls = serve({ 'verified:check': { status: 404, body: { error: 'not_found', message: 'Unknown channel' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     fireEvent.click(await within(await section()).findByRole('button', { name: 'Check the Assistant' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Check' }));
     const alert = await within(await section()).findByRole('alert');

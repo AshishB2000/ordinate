@@ -28,6 +28,11 @@ looks at less. It is never smarter and it never grants access.
 
 **Data model → Assistant**, an Agents section above the existing instructions and verified questions:
 
+> **Moved (2026-11).** The whole tab is now its own page, **Assistant → Agents & setup**
+> (`/assistant/setup/:projectId`, `web/src/features/assistant/setup/`), linked from the Assistant page's header. It is
+> how the Assistant behaves, not what the data means. `/model/:projectId?tab=assistant` redirects there, keeping
+> `agent` and `issue`.
+
 ```
 Agents                                              [ + New agent ]
 ● Project assistant    Everyone        All data         default

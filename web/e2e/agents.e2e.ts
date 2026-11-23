@@ -2,7 +2,7 @@
 // sign-in and a STUB model provider on loopback (./agentsStub.ts: an Anthropic Messages API look-alike in this process —
 // no real network call is made).
 //
-//   - The org admin opens Data model → Assistant: the Agents section is the Project assistant alone, with the way in.
+//   - The org admin opens Assistant → Agents & setup: the Agents section is the Project assistant alone, with the way in.
 //     They create a Finance agent there, in the UI — a topic, a team, answers only — and give it an instruction.
 //   - Fay, in the Finance team and a project viewer, opens the Assistant: the Finance assistant is preselected and its
 //     topic is what answers are based on. She asks about revenue, which is outside it: the app's card names Orders,
@@ -80,7 +80,7 @@ if (!dbUrl) {
     for (const who of [FAY, VIC]) assert.equal((await rpc(ADMIN, 'project:share', { projectId: pid, member: { userId: users.find((u) => u.email === who)!.id }, role: 'viewer' })).ok, true);
 
     // ── The admin: the Agents section, then a new agent, in the UI ─────────
-    await page.goto(`/model/${pid}?tab=assistant`);
+    await page.goto(`/assistant/setup/${pid}`);
     const agents = page.getByRole('region', { name: 'Agents' });
     const empty = agents.getByTestId('agents-empty');
     await empty.waitFor();
@@ -165,7 +165,7 @@ if (!dbUrl) {
       await screensInPlace(fay, 'agents-history');
 
       // On the agent's page she reads; she changes nothing.
-      await fay.goto(`/model/${pid}?tab=assistant&agent=${agentId}`);
+      await fay.goto(`/assistant/setup/${pid}?agent=${agentId}`);
       const view = fay.getByTestId('agent-page');
       await view.getByRole('heading', { level: 2, name: 'Finance assistant' }).waitFor();
       await settled(fay);
@@ -210,7 +210,7 @@ if (!dbUrl) {
     }
 
     // ── The admin deletes it: the Trash ─────────────────────────────────────
-    await page.goto(`/model/${pid}?tab=assistant&agent=${agentId}`);
+    await page.goto(`/assistant/setup/${pid}?agent=${agentId}`);
     await form.getByRole('heading', { level: 2, name: 'Finance assistant' }).waitFor();
     await form.getByRole('button', { name: 'Delete' }).click();
     const confirm = page.getByRole('dialog', { name: 'Delete “Finance assistant”?' });

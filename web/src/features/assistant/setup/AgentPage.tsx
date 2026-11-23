@@ -21,7 +21,7 @@ import { ConflictBanner } from '../../editConflicts/ConflictBanner';
 import { useEditGuard } from '../../editConflicts/useEditGuard';
 import { useShareTargets } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
-import { useNavigation } from '../navigation';
+import { useNavigation } from '../../model/navigation';
 import { suitesKey } from '../../evals/api';
 import { TestsSection } from '../../evals/TestsSection';
 import { InstructionsEditor } from './InstructionsList';
