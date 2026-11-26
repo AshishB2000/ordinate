@@ -133,7 +133,7 @@ describe('Add to tests', () => {
 });
 
 // ── the Tests section and the inbox ────────────────────────────────────────────────────────────────────────────────────────
-const tab = () => renderApp(`/model/${PID}?tab=assistant`);
+const tab = () => renderApp(`/assistant/setup/${PID}`);
 const tests = async () => (await screen.findByRole('heading', { level: 2, name: 'Tests' }, LAZY)).closest('section') as HTMLElement;
 
 describe('Model → Assistant → Tests', () => {
@@ -254,7 +254,7 @@ describe('Model → Assistant → Tests', () => {
         { id: 'b3333333-3333-4333-8333-333333333333', name: 'Finance suite', agentId: AID, caseCount: 2, createdAt: '', liveQueries: 0, last: null, stale: [], runningId: null },
       ] }),
     }));
-    renderApp(`/model/${PID}?tab=assistant&agent=${AID}`);
+    renderApp(`/assistant/setup/${PID}?agent=${AID}`);
     const s = await tests();
     expect(await within(s).findByText('Finance suite')).toBeTruthy();
     expect(within(s).queryByText('Project suite')).toBeNull();

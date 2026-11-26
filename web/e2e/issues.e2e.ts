@@ -88,7 +88,7 @@ if (!dbUrl) {
     assert.equal(await page.getByTestId('issues-notice').innerText(), 'Editors may see questions that didn’t get a good answer.');
 
     // ── Off by default; on; Check now ───────────────────────────────────────────────────────────────────────────────────────
-    await page.goto(`/model/${pid}?tab=assistant`);
+    await page.goto(`/assistant/setup/${pid}`);
     const section = page.getByRole('region', { name: 'Issues' });
     await section.getByText(/The board is closed/).waitFor(); // closed until asked: the tab stays light
     await section.getByRole('button', { name: 'Show issues' }).click();
@@ -114,7 +114,7 @@ if (!dbUrl) {
     await screensInPlace(page, 'issues-board');
 
     // ── Propose a definition (#7), resolve, reopen (a fresh page load: the RPC budget counts a load) ───────────────────────────────────────────────────────────────────────────
-    await page.goto(`/model/${pid}?tab=assistant`);
+    await page.goto(`/assistant/setup/${pid}`);
     await page.getByRole('region', { name: 'Issues' }).getByRole('button', { name: 'Hide issues' }).waitFor(); // remembered: open again
     const again = page.getByRole('region', { name: 'Issues' }).getByTestId('issue');
     await again.waitFor();

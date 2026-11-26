@@ -19,7 +19,7 @@ import { HowAnswered } from './HowAnswered';
 import { AgentPicker } from '../../assistant/AgentPicker';
 import { usableAgents, useAgents } from '../../assistant/agents';
 import { useVerified } from './api';
-import type { TermSummary } from '../terms/api';
+import type { TermSummary } from '../../model/terms/api';
 import a from './Assistant.module.css';
 import t from './TestChat.module.css';
 

@@ -102,7 +102,7 @@ if (!dbUrl) {
     await add.waitFor({ state: 'detached' });
 
     // ── The Tests section: the inbox question with words, and a typed refusal ───────────────────────────────────────────────
-    await page.goto(`/model/${pid}?tab=assistant`);
+    await page.goto(`/assistant/setup/${pid}`);
     const section = page.getByRole('region', { name: 'Tests' });
     const row = section.getByTestId('suite-row');
     await row.getByText('1 test case').waitFor();

@@ -52,7 +52,7 @@ const sent = (calls: { channel: string; payload: unknown }[], channel: string) =
 describe('Documents on the Assistant tab', () => {
   it('lists each document with its kind, size, file name and who edited it, and says who can read them', async () => {
     serve('editor');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     const rows = await within(s).findAllByTestId('document-row');
     expect(rows).toHaveLength(2);
@@ -68,7 +68,7 @@ describe('Documents on the Assistant tab', () => {
 
   it('no documents: an empty state that says what they are for and points short rules to Instructions', async () => {
     serve('editor', { 'knowledge:list': list([]) });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     expect(await within(s).findByText('No documents yet')).toBeTruthy();
     expect(s.textContent).toContain('how you count revenue');
@@ -81,7 +81,7 @@ describe('Documents on the Assistant tab', () => {
     serve('editor');
     const scrolled = vi.fn();
     Element.prototype.scrollIntoView = scrolled;
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findAllByTestId('document-row');
     fireEvent.click(within(s).getByRole('button', { name: 'Instructions' }));
@@ -91,7 +91,7 @@ describe('Documents on the Assistant tab', () => {
 
   it('a viewer reads the list and a document read-only, with no way to add, upload or remove', async () => {
     serve('viewer', { 'knowledge:get': { body: { ok: true, doc: full(TWO[0], '# Revenue\n\nNet of refunds.') } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findAllByTestId('document-row');
     expect(within(s).queryByRole('button', { name: 'Add document' })).toBeNull();
@@ -107,14 +107,14 @@ describe('Documents on the Assistant tab', () => {
 
   it('documents off without a database: its own state, no way to add', async () => {
     serve('editor', { 'knowledge:list': { body: { ok: false, needsDatabase: true, error: 'Documents need a database. Set DATABASE_URL to use them.' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     expect(await within(s).findByText('Documents need a database')).toBeTruthy();
   });
 
   it('a list that cannot be read shows its error with a retry', async () => {
     serve('editor', { 'knowledge:list': { body: { ok: false, error: 'The documents could not be read.' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     expect(await within(s).findByText('The documents could not be loaded')).toBeTruthy();
     expect(within(s).getByRole('button', { name: /try again|retry/i })).toBeTruthy();
@@ -123,7 +123,7 @@ describe('Documents on the Assistant tab', () => {
   it('Add document: title and text, one create, the list read again; a refusal keeps the text at its field', async () => {
     const created = full(doc(D1, 'How we count revenue'), 'Net of refunds.');
     const calls = serve('editor', { 'knowledge:save': { body: { ok: false, error: 'The document has no text.' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.click(await within(s).findByRole('button', { name: 'Add document' }));
     const dlg = await screen.findByRole('dialog');
@@ -143,7 +143,7 @@ describe('Documents on the Assistant tab', () => {
 
   it('a text over 300,000 characters says so at the field and cannot be saved', async () => {
     serve('editor');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.click(await within(s).findByRole('button', { name: 'Add document' }));
     const dlg = await screen.findByRole('dialog');
@@ -159,7 +159,7 @@ describe('Documents on the Assistant tab', () => {
       'knowledge:get': () => ({ body: { ok: true, doc: full(TWO[1], 'Extracted text.', tag) } }),
       'knowledge:save': { status: 409, body: { error: 'record_changed', code: 'record_changed', message: 'This document was changed in another tab or by someone else. Reload it and make your change again.', tag: 'tag-2' } },
     });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.click(await within(s).findByRole('button', { name: 'Edit Fiscal calendar' }));
     const dlg = await screen.findByRole('dialog');
@@ -176,7 +176,7 @@ describe('Documents on the Assistant tab', () => {
 
   it('Remove asks first, names what goes, then deletes one document', async () => {
     const calls = serve('editor', { 'knowledge:delete': { body: { ok: true } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.click(await within(s).findByRole('button', { name: 'Remove Revenue policy' }));
     const dlg = await screen.findByRole('dialog');
@@ -199,7 +199,7 @@ describe('Documents on an agent\'s page', () => {
       'project:shareTargets': body({ users: [], teams: [] }),
       'ai:status': body({ ready: true, models: [], mine: null, copilotEnabled: true, keyStore: null }),
     });
-    renderApp(`/model/${P}?tab=assistant&agent=${AG}`);
+    renderApp(`/assistant/setup/${P}?agent=${AG}`);
     const s = await section();
     expect((await within(s).findAllByTestId('document-row'))[0].textContent).toContain('Finance glossary');
     expect(s.textContent).toContain('The project’s 2 documents apply to this assistant too.');
@@ -229,7 +229,7 @@ describe('Uploading a file', () => {
   it('says it is reading while the server reads, then lists the new document', async () => {
     const calls = serve('editor', { 'knowledge:upload': { body: { ok: true, doc: full(TWO[1], 'x') } } });
     const release = stage('calendar.pdf', true);
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findAllByTestId('document-row');
     pick(s, 'calendar.pdf');
@@ -243,7 +243,7 @@ describe('Uploading a file', () => {
   it('a refused file shows the server\'s own sentence beside its name, and can be dismissed', async () => {
     serve('editor', { 'knowledge:upload': { body: { ok: false, error: 'No text could be read from this file. A scanned PDF holds pictures, not text.' } } });
     stage('scan.pdf');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findAllByTestId('document-row');
     pick(s, 'scan.pdf');
@@ -258,7 +258,7 @@ describe('Uploading a file', () => {
   it('a too-long document is refused with its sentence like any other', async () => {
     serve('editor', { 'knowledge:upload': { body: { ok: false, error: 'This document is longer than 300,000 characters. Split it into smaller documents.' } } });
     stage('big.docx');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findAllByTestId('document-row');
     pick(s, 'big.docx');

@@ -11,7 +11,7 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input, Textarea } from '../../ui/Field';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
-import { specWords } from '../model/assistant/specWords';
+import { specWords } from '../assistant/setup/specWords';
 import { useCases, useEvalCall, type CaseRow } from './api';
 import s from './Evals.module.css';
 

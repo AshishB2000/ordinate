@@ -47,10 +47,10 @@ const agentsSection = async () => {
 };
 const sent = (calls: { channel: string; payload: unknown }[], channel: string) => calls.filter((c) => c.channel === channel).map((c) => c.payload);
 
-describe('The Data model: Agents', () => {
+describe('The Assistant: agents', () => {
   it('no agents: the Project assistant, default, and the way in for an admin', async () => {
     serve('admin', []);
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await agentsSection();
     const rows = await within(s).findAllByTestId('agent-row');
     expect(rows).toHaveLength(1);
@@ -65,7 +65,7 @@ describe('The Data model: Agents', () => {
 
   it('a viewer: the same list, no way to make one', async () => {
     serve('viewer', []);
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await agentsSection();
     await within(s).findByTestId('agents-empty');
     expect(within(s).queryByRole('button', { name: 'New agent' })).toBeNull();
@@ -74,7 +74,7 @@ describe('The Data model: Agents', () => {
 
   it('with an agent: its teams, its topic, "answers only", and its row opens its page', async () => {
     serve('admin', [FINANCE]);
-    const router = renderApp(`/model/${P}?tab=assistant`);
+    const router = renderApp(`/assistant/setup/${P}`);
     const s = await agentsSection();
     const row = await within(s).findByRole('button', { name: 'Open Finance assistant' });
     expect(row.textContent).toContain('Invoices, costs and payroll');
@@ -90,11 +90,12 @@ describe('The Data model: Agents', () => {
 
   it('an admin\'s page: the settings, saved with the tag the list gave', async () => {
     const calls = serve('admin', [FINANCE], { 'agent:save': { body: { ok: true, agent: { id: FIN, name: 'Finance assistant' }, tag: 'tag-2' } } });
-    renderApp(`/model/${P}?tab=assistant&agent=${FIN}`);
+    renderApp(`/assistant/setup/${P}?agent=${FIN}`);
     const page = await screen.findByTestId('agent-page', {}, LAZY);
     expect(within(page).getByRole('heading', { level: 2, name: 'Finance assistant' })).toBeTruthy();
     expect(within(page).getByRole('button', { name: 'Delete' })).toBeTruthy();
-    expect((within(page).getByRole('combobox', { name: 'Topic' }) as HTMLElement).textContent).toBe('Finance');
+    // The topics load with the agent's page (the Data model around it used to have them already).
+    await waitFor(() => expect((within(page).getByRole('combobox', { name: 'Topic' }) as HTMLElement).textContent).toBe('Finance'));
     expect((within(page).getByRole('combobox', { name: 'Model' }) as HTMLElement).textContent).toBe('Each person’s own');
     const save = within(page).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true); // nothing changed yet
@@ -108,7 +109,7 @@ describe('The Data model: Agents', () => {
 
   it('an editor\'s page: the settings to read, and an instruction to add', async () => {
     const calls = serve('editor', [FINANCE], { 'agent:instructions': { body: { ok: true, instructions: FINANCE.instructions } } });
-    renderApp(`/model/${P}?tab=assistant&agent=${FIN}`);
+    renderApp(`/assistant/setup/${P}?agent=${FIN}`);
     const page = await screen.findByTestId('agent-page', {}, LAZY);
     expect(within(page).queryByRole('button', { name: 'Delete' })).toBeNull();
     expect(within(page).queryByRole('combobox', { name: 'Topic' })).toBeNull();
@@ -125,7 +126,7 @@ describe('The Data model: Agents', () => {
 
   it('a viewer\'s page: nothing to change, its instructions to read', async () => {
     serve('viewer', [FINANCE]);
-    renderApp(`/model/${P}?tab=assistant&agent=${FIN}`);
+    renderApp(`/assistant/setup/${P}?agent=${FIN}`);
     const page = await screen.findByTestId('agent-page', {}, LAZY);
     expect(within(page).queryByRole('button', { name: 'Delete' })).toBeNull();
     expect(within(page).queryByRole('button', { name: 'Instruction' })).toBeNull();
@@ -137,7 +138,7 @@ describe('The Data model: Agents', () => {
 
   it('an agent that is gone: says so, with the way back', async () => {
     serve('admin', []);
-    renderApp(`/model/${P}?tab=assistant&agent=${FIN}`);
+    renderApp(`/assistant/setup/${P}?agent=${FIN}`);
     await screen.findByRole('heading', { name: 'This assistant no longer exists' }, LAZY);
     fireEvent.click(screen.getAllByRole('button', { name: 'All assistants' })[0]);
     await screen.findByRole('heading', { level: 2, name: 'Agents' });

@@ -56,10 +56,10 @@ const history = (turns: unknown[]) => ({ 'copilot:threads': { body: { ok: true, 
 const section = () => screen.findByRole('region', { name: 'Try a question' }, LAZY);
 const names = (calls: { channel: string }[]) => calls.map((c) => c.channel).filter((c) => c.startsWith('copilot:'));
 
-describe('The Data model: the test chat', () => {
+describe('Agents & setup: the test chat', () => {
   it('an editor sees it empty, and opening the tab writes nothing', async () => {
     const calls = serve();
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     expect(await within(s).findByText(/Ask the way your team does/)).toBeTruthy();
     await waitFor(() => expect((within(s).getByRole('textbox', { name: 'Question to try' }) as HTMLTextAreaElement).disabled).toBe(false));
@@ -75,7 +75,7 @@ describe('The Data model: the test chat', () => {
       'copilot:renameThread': () => { made = true; return { body: { ok: true } }; },
       'copilot:ask': { body: { ok: true, answer: 'x', threadId: T, turns: [user('u1', 'revenue by region'), bot('a1', 'West leads.', { guidance: { verifiedId: V1, instructions: 0, examples: [] } })] } },
     });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.change(await within(s).findByRole('textbox', { name: 'Question to try' }), { target: { value: 'revenue by region' } });
     fireEvent.click(within(s).getByRole('button', { name: 'Ask' }));
@@ -91,7 +91,7 @@ describe('The Data model: the test chat', () => {
       ...history([user('u1', 'revenue by region'), bot('a1', 'West leads.')]),
       'copilot:ask': { body: { ok: true, answer: 'x', threadId: T, turns: [] } },
     });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findByText('West leads.');
     fireEvent.change(within(s).getByRole('textbox', { name: 'Question to try' }), { target: { value: 'again' } });
@@ -103,7 +103,7 @@ describe('The Data model: the test chat', () => {
 
   it('a verified turn says so, with the question; the spec is in words and its JSON is folded', async () => {
     serve(history([user('u1', 'revenue by region'), bot('a1', 'West leads.', { guidance: { verifiedId: V1, instructions: 0, examples: [] } })]));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const how = await screen.findByTestId('how-answered', {}, LAZY);
     expect(within(how).getByText('A verified question — no model call.')).toBeTruthy();
     expect(within(how).getByText('Revenue by region')).toBeTruthy();
@@ -115,7 +115,7 @@ describe('The Data model: the test chat', () => {
 
   it('a verified turn a model narrated says so, not "no model call"', async () => {
     serve(history([user('u1', 'revenue by region'), bot('a1', 'West leads.', { guidance: { verifiedId: V1, instructions: 0, examples: [], narrated: true } })]));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const how = await screen.findByTestId('how-answered', {}, LAZY);
     expect(within(how).getByText('A verified question — the app drew it; a model only wrote the words.')).toBeTruthy();
     expect(how.textContent).not.toContain('no model call');
@@ -123,13 +123,13 @@ describe('The Data model: the test chat', () => {
 
   it('a removed verified question reads "since removed"', async () => {
     serve(history([user('u1', 'x'), bot('a1', 'y', { guidance: { verifiedId: '9c6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', instructions: 0, examples: [] } })]));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect((await screen.findByTestId('how-answered', {}, LAZY)).textContent).toContain('a verified question since removed');
   }, 30_000);
 
   it('a model turn says how many instructions and which examples it had', async () => {
     serve(history([user('u1', 'sales by state'), bot('a1', 'Fine.', { guidance: { instructions: 3, examples: [E] } })]));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const how = await screen.findByTestId('how-answered', {}, LAZY);
     expect(within(how).getByText('The model, with 3 instructions and 1 verified example.')).toBeTruthy();
     expect(within(how).getByText('Sales by state')).toBeTruthy();
@@ -137,7 +137,7 @@ describe('The Data model: the test chat', () => {
 
   it('a turn with no guidance (a chip, a follow-up, an older turn) says nothing about how, and still has its spec', async () => {
     serve(history([user('u1', 'Split'), bot('a1', 'Fine.')]));
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await within(s).findByText('Fine.');
     expect(within(s).queryByText(/no model call|The model, with/)).toBeNull();
@@ -147,7 +147,7 @@ describe('The Data model: the test chat', () => {
 
   it('NEGATIVE CONTROL: a viewer sees no test chat and makes no copilot: call', async () => {
     const calls = serve({}, 'viewer');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     await screen.findByRole('region', { name: 'Verified questions' }, LAZY);
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:roles')).toBe(true));
     expect(screen.queryByRole('region', { name: 'Try a question' })).toBeNull();
@@ -156,7 +156,7 @@ describe('The Data model: the test chat', () => {
 
   it('a question the app cannot answer without a model keeps its text and says to connect one', async () => {
     serve({ 'copilot:newThread': { body: { ok: true, thread: { id: T } } }, 'copilot:renameThread': { body: { ok: true } }, 'copilot:ask': { body: { ok: false, notReady: true } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     const box = (await within(s).findByRole('textbox', { name: 'Question to try' })) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: 'profit by state' } });
@@ -167,7 +167,7 @@ describe('The Data model: the test chat', () => {
 
   it('with no model and no working verified question the box is off and says why', async () => {
     serve({ 'ai:status': { body: NO_MODEL } }, 'editor', []);
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     expect(await within(s).findByText('Connect a model to try questions.')).toBeTruthy();
     expect((within(s).getByRole('textbox', { name: 'Question to try' }) as HTMLTextAreaElement).disabled).toBe(true);

@@ -103,5 +103,5 @@ export async function createTicket(p: store.Provider, t: Ticket): Promise<{ ok: 
 /** Where a ticket links back to: this issue's page in the Assistant tab; null when the server does not know its public address. */
 export function linkBack(projectId: string, issueId: string): string | null {
   const origin = serverOrigin();
-  return origin ? `${origin}/model/${projectId}?tab=assistant&issue=${issueId}` : null;
+  return origin ? `${origin}/assistant/setup/${projectId}?issue=${issueId}` : null;
 }

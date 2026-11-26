@@ -143,13 +143,13 @@ describe('The Data model: datasets', () => {
 });
 
 describe('The Data model: verified questions in the strip', () => {
-  it('reads how many verified questions no longer run, and its click opens the Assistant tab', async () => {
+  it('reads how many verified questions no longer run, and its click opens the Assistant\'s setup page', async () => {
     serve({ 'model:overview': { body: overview({ todo: [TODO[0], { datasetId: '', kind: 'verified_broken', count: 1 }, TODO[1]], more: 0 }) } });
     const router = renderApp(`/model/${P}`);
     const s = await strip();
     expect(within(s).getAllByRole('button').map((b) => b.textContent)).toEqual(['Orders: 12 keys repeat', '1 verified question no longer runs', 'Set a key on Regions']);
     fireEvent.click(within(s).getByRole('button', { name: '1 verified question no longer runs' }));
-    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('tab')).toBe('assistant'));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/assistant/setup/${P}`));
   });
 });
 

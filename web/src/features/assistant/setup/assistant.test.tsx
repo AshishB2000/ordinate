@@ -38,12 +38,16 @@ const section = async () => {
 const rows = async () => within(await screen.findByRole('list', { name: 'Instructions' }, LAZY)).getAllByRole('listitem');
 const sent = (calls: { channel: string; payload: unknown }[], channel: string) => calls.filter((c) => c.channel === channel).map((c) => c.payload);
 
-describe('The Data model: Assistant', () => {
-  it('?tab=assistant opens the tab: the heading, the framing line and two rows with who and when', async () => {
+describe('The Assistant: agents & setup', () => {
+  it('the Data model\'s old ?tab=assistant address lands here, keeping its query: the heading, the framing line and two rows with who and when', async () => {
     serve();
-    renderApp(`/model/${P}?tab=assistant`);
+    const router = renderApp(`/model/${P}?tab=assistant&agent=new`);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/assistant/setup/${P}`), LAZY);
+    expect(router.state.location.search).toBe('?agent=new');
+    await router.navigate(`/assistant/setup/${P}`);
     const s = await section();
-    expect(screen.getByRole('tab', { name: 'Assistant' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('heading', { level: 1, name: 'Agents & setup' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Assistant' })).toBeNull(); // no longer a Data model tab
     expect(within(s).getByText('Everyone in this project, and their Assistant, reads these.')).toBeTruthy();
     const list = await rows();
     expect(list).toHaveLength(2);
@@ -53,7 +57,7 @@ describe('The Data model: Assistant', () => {
 
   it('a figure row says figures belong in metrics; a plain row does not', async () => {
     serve();
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const [plain, figure] = await rows();
     expect(within(figure).getByText('Figures belong in metrics.')).toBeTruthy();
     expect(within(plain).queryByText('Figures belong in metrics.')).toBeNull();
@@ -61,7 +65,7 @@ describe('The Data model: Assistant', () => {
 
   it('an editor\'s + Instruction, given text and Enter, sends one add and reads the list again', async () => {
     const calls = serve({ 'catalog:setInstructions': { body: { ok: true, instructions: TWO } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.click(await within(s).findByRole('button', { name: 'Instruction' }));
     const box = within(s).getByRole('textbox', { name: 'New instruction' });
@@ -75,7 +79,7 @@ describe('The Data model: Assistant', () => {
 
   it('a refusal shows the server\'s sentence at the field and keeps what was typed', async () => {
     serve({ 'catalog:setInstructions': { body: { ok: false, error: FENCE } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     fireEvent.click(await within(s).findByRole('button', { name: 'Instruction' }));
     const box = within(s).getByRole('textbox', { name: 'New instruction' }) as HTMLInputElement;
@@ -88,7 +92,7 @@ describe('The Data model: Assistant', () => {
 
   it('Edit saves in place on Enter, and Escape keeps the old text', async () => {
     const calls = serve({ 'catalog:setInstructions': { body: { ok: true, instructions: TWO } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const [first] = await rows();
     fireEvent.click(await within(first).findByRole('button', { name: 'Edit' }));
     const box = within(first).getByRole('textbox', { name: 'Edit instruction' }) as HTMLInputElement;
@@ -104,7 +108,7 @@ describe('The Data model: Assistant', () => {
 
   it('Remove asks first: Keep it sends no write and keeps the row; Remove in the confirm deletes it', async () => {
     const calls = serve({ 'catalog:setInstructions': { body: { ok: true, instructions: [TWO[0]] } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const [, second] = await rows();
     fireEvent.click(await within(second).findByRole('button', { name: 'Remove' }));
     const ask = await screen.findByRole('dialog', { name: 'Remove this instruction?' });
@@ -121,7 +125,7 @@ describe('The Data model: Assistant', () => {
 
   it('NEGATIVE CONTROL: a viewer reads the rows and gets no button', async () => {
     const calls = serve({}, 'viewer');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const s = await section();
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:roles')).toBe(true));
     expect(await rows()).toHaveLength(2);
@@ -130,7 +134,7 @@ describe('The Data model: Assistant', () => {
 
   it('an empty project says what instructions are for; an editor gets + Instruction, a viewer is told who can', async () => {
     serve({ 'catalog:instructions': { body: { ok: true, instructions: [] } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect(await screen.findByRole('heading', { name: 'No instructions yet' }, LAZY)).toBeTruthy();
     const s = await section();
     expect(s.textContent).toContain('like “Revenue means net_amount unless they say gross”, and every Assistant answer follows them.');
@@ -138,14 +142,14 @@ describe('The Data model: Assistant', () => {
     expect(within(s).getByRole('textbox', { name: 'New instruction' })).toBeTruthy();
     cleanup();
     serve({ 'catalog:instructions': { body: { ok: true, instructions: [] } } }, 'viewer');
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     expect(await screen.findByText(/An editor of this project can add instructions\./, {}, LAZY)).toBeTruthy();
     expect(within(await section()).queryAllByRole('button')).toEqual([]);
   });
 
   it('an old server without catalog:instructions shows the error state, and Retry asks again', async () => {
     const calls = serve({ 'catalog:instructions': { status: 404, body: { error: 'not_found', message: 'Unknown channel' } } });
-    renderApp(`/model/${P}?tab=assistant`);
+    renderApp(`/assistant/setup/${P}`);
     const alert = await screen.findByRole('alert', {}, LAZY);
     expect(alert.textContent).toContain('The instructions could not be loaded');
     expect(calls.filter((c) => c.channel === 'catalog:instructions')).toHaveLength(1);
