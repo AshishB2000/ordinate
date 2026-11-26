@@ -280,4 +280,7 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=metrics`, editor: { role: 'button', name: 'New metric' } },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=glossary`, editor: { role: 'button', name: 'New term' } },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=relationships`, editor: { role: 'button', name: 'New relationship' } },
+  // The Assistant's setup (was the Data model's Assistant tab): instructions, documents and verified questions read-only for a viewer.
+  { pattern: '/assistant/setup', url: (s) => `/assistant/setup?project=${s.pid}`, editor: { role: 'button', name: 'Instruction' } },
+  { pattern: '/assistant/setup/:projectId', url: (s) => `/assistant/setup/${s.pid}`, editor: { role: 'button', name: 'Instruction' } },
 ];
